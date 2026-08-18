@@ -1,0 +1,97 @@
+// ================================================================
+// Тонкая обёртка над Telegram Bot API. Используется и вебхуком
+// (app/api/telegram/webhook), и cron-эндпоинтом рассылки напоминаний
+// (app/api/telegram/send-due-reminders), и рассылкой из админки.
+// ================================================================
+
+const TELEGRAM_API_BASE = "https://api.telegram.org";
+
+export class TelegramApiError extends Error {
+  constructor(
+    message: string,
+    public readonly errorCode?: number
+  ) {
+    super(message);
+    this.name = "TelegramApiError";
+  }
+}
+
+function botToken(): string {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error("TELEGRAM_BOT_TOKEN не задан в переменных окружения");
+  return token;
+}
+
+export type InlineKeyboardButton = {
+  text: string;
+  callback_data: string;
+};
+
+export type InlineKeyboardMarkup = {
+  inline_keyboard: InlineKeyboardButton[][];
+};
+
+async function callTelegramApi<T = unknown>(method: string, body: Record<string, unknown>): Promise<T> {
+  const response = await fetch(`${TELEGRAM_API_BASE}/bot${botToken()}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const json = (await response.json()) as {
+    ok: boolean;
+    result?: T;
+    description?: string;
+    error_code?: number;
+  };
+
+  if (!json.ok) {
+    throw new TelegramApiError(json.description ?? `Telegram API ${method}: HTTP ${response.status}`, json.error_code);
+  }
+
+  return json.result as T;
+}
+
+export async function sendMessage(
+  chatId: number,
+  text: string,
+  replyMarkup?: InlineKeyboardMarkup
+): Promise<{ message_id: number }> {
+  return callTelegramApi("sendMessage", {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    reply_markup: replyMarkup,
+  });
+}
+
+export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+  await callTelegramApi("answerCallbackQuery", { callback_query_id: callbackQueryId, text });
+}
+
+export async function editMessageText(
+  chatId: number,
+  messageId: number,
+  text: string,
+  replyMarkup?: InlineKeyboardMarkup
+): Promise<void> {
+  await callTelegramApi("editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: "HTML",
+    reply_markup: replyMarkup,
+  });
+}
+
+export async function editMessageReplyMarkup(
+  chatId: number,
+  messageId: number,
+  replyMarkup?: InlineKeyboardMarkup
+): Promise<void> {
+  await callTelegramApi("editMessageReplyMarkup", {
+    chat_id: chatId,
+    message_id: messageId,
+    reply_markup: replyMarkup ?? { inline_keyboard: [] },
+  });
+}

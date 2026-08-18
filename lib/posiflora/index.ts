@@ -1,0 +1,20 @@
+// Барьер модуля: снаружи (lib/customer-sync.ts, app/api/orders/route.ts)
+// импортируют по-прежнему из "@/lib/posiflora" — то, что раньше было
+// одним файлом-моком, теперь папка с реальной логикой, но публичный
+// контракт не изменился ни на один символ.
+
+export {
+  findOrCreatePosifloraClient,
+  getPosifloraClientBalance,
+  type FindOrCreatePosifloraClientInput,
+  type PosifloraClient,
+} from "./customers";
+
+export {
+  createPosifloraOrder,
+  type PosifloraOrderInput,
+  type PosifloraOrderItemInput,
+  type PosifloraOrderResult,
+} from "./orders";
+
+export { syncPosifloraCatalog, type CatalogSyncSummary } from "./catalog";
