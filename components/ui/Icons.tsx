@@ -472,3 +472,14 @@ export function StoryRingIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function ChartBarIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <line x1="4" y1="20" x2="20" y2="20" />
+      <rect x="6" y="12" width="3.2" height="8" rx="0.6" />
+      <rect x="10.4" y="7" width="3.2" height="13" rx="0.6" />
+      <rect x="14.8" y="4" width="3.2" height="16" rx="0.6" />
+    </svg>
+  );
+}

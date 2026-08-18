@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ProductGallery } from "@/components/product/ProductGallery";
 import { ProductPurchasePanel } from "@/components/product/ProductPurchasePanel";
 import { ProductCard } from "@/components/catalog/ProductCard";
+import { ProductViewTracker } from "@/components/analytics/ProductViewTracker";
 import { ArrowRightIcon } from "@/components/ui/Icons";
 import { getCategories } from "@/lib/categories";
 import { getProductBySlug, getProductSlugs, getRelatedProducts } from "@/lib/products";
@@ -38,6 +39,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+      <ProductViewTracker productName={product.name} />
+
       {/* Хлебные крошки */}
       <nav className="mb-6 flex flex-wrap items-center gap-2 font-body text-sm text-ink/50">
         <Link href="/catalog" className="transition hover:text-gold-600">

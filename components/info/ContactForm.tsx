@@ -7,6 +7,7 @@ import { inputClass } from "@/components/ui/input-styles";
 import { ArrowRightIcon, CheckIcon } from "@/components/ui/Icons";
 import { formatRussianPhoneInput } from "@/lib/phone-mask";
 import { isValidPhone } from "@/lib/checkout";
+import { trackEvent } from "@/lib/analytics/track";
 
 type Errors = Partial<Record<"name" | "phone", string>>;
 
@@ -46,6 +47,7 @@ export function ContactForm() {
         throw new Error(result?.error ?? "Не удалось отправить заявку. Попробуйте ещё раз.");
       }
 
+      trackEvent("button_click", "Отправить заявку (обратный звонок)");
       setStatus("sent");
     } catch (error) {
       console.error("Ошибка отправки заявки на обратный звонок:", error);

@@ -12,6 +12,7 @@ import {
   CloseIcon,
 } from "@/components/ui/Icons";
 import { useCart } from "@/components/cart/CartProvider";
+import { trackEvent } from "@/lib/analytics/track";
 
 const NAV_LINKS = [
   { href: "/catalog", label: "Букеты" },
@@ -118,7 +119,10 @@ export function HeaderView({ isLoggedIn, bonusBalance }: HeaderViewProps) {
           {/* Корзина */}
           <button
             type="button"
-            onClick={openDrawer}
+            onClick={() => {
+              trackEvent("button_click", "Открыть корзину (шапка)");
+              openDrawer();
+            }}
             className="relative inline-flex h-10 w-10 items-center justify-center rounded-full text-ink transition hover:bg-lavender-50"
             aria-label="Открыть корзину"
           >

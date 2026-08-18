@@ -11,6 +11,7 @@ import { OrderSummaryPanel } from "@/components/checkout/OrderSummaryPanel";
 import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
 import { ArrowRightIcon, CheckIcon } from "@/components/ui/Icons";
 import { toE164RussianPhone } from "@/lib/phone-mask";
+import { trackEvent } from "@/lib/analytics/track";
 import {
   DELIVERY_PRICE,
   FREE_DELIVERY_THRESHOLD,
@@ -186,6 +187,7 @@ export function CheckoutView() {
     if (!consentGiven) return;
     if (!validate()) return;
 
+    trackEvent("button_click", "Перейти к оплате");
     setStatus("submitting");
     setSubmitError(null);
 

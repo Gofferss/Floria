@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useCart } from "@/components/cart/CartProvider";
 import { CartIcon } from "@/components/ui/Icons";
+import { trackEvent } from "@/lib/analytics/track";
 import type { Product } from "@/lib/products";
 
 const currency = new Intl.NumberFormat("ru-RU", {
@@ -25,6 +26,7 @@ export function ProductPurchasePanel({ product }: { product: Product }) {
   const unitPrice = product.basePrice + selectedSize.priceModifier;
 
   function handleAddToCart() {
+    trackEvent("add_to_cart", product.name);
     addItem(
       {
         id: `${product.slug}__${selectedSize.id}`,

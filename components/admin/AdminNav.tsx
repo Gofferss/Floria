@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { href: "/admin/occasions", label: "Поводы" },
   { href: "/admin/stories", label: "Сторис" },
   { href: "/admin/promo-codes", label: "Промокоды" },
+  { href: "/admin/analytics", label: "Метрики" },
   { href: "/admin/broadcast", label: "Рассылка" },
 ];
 

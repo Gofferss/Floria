@@ -9,6 +9,7 @@ import {
   GiftIcon,
   TagIcon,
   StoryRingIcon,
+  ChartBarIcon,
 } from "@/components/ui/Icons";
 
 export const metadata: Metadata = {
@@ -51,6 +52,12 @@ const SECTIONS = [
     icon: TagIcon,
     title: "Промокоды",
     description: "Скидки по коду: условия, лимиты, срок действия.",
+  },
+  {
+    href: "/admin/analytics",
+    icon: ChartBarIcon,
+    title: "Метрики",
+    description: "Просмотры букетов, клики по кнопкам, динамика по дням.",
   },
   {
     href: "/admin/broadcast",

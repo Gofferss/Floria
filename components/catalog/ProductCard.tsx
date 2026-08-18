@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
 import { CartIcon } from "@/components/ui/Icons";
 import { useCart } from "@/components/cart/CartProvider";
+import { trackEvent } from "@/lib/analytics/track";
 import type { Product } from "@/lib/products";
 
 const currency = new Intl.NumberFormat("ru-RU", {
@@ -20,6 +21,7 @@ export function ProductCard({ product }: { product: Product }) {
   function handleQuickAdd(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    trackEvent("add_to_cart", product.name);
     addItem({
       id: `${product.slug}__${defaultSize.id}`,
       productSlug: product.slug,

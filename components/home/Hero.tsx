@@ -1,10 +1,10 @@
 import { existsSync } from "fs";
 import { join } from "path";
 import Image from "next/image";
-import Link from "next/link";
 import { ArrowRightIcon } from "@/components/ui/Icons";
 import { HeroBackdrop, type PhotoAccent } from "@/components/home/HeroBackdrop";
 import { HeroBouquetPhoto } from "@/components/home/HeroBouquetPhoto";
+import { TrackedLink } from "@/components/analytics/TrackedLink";
 
 const BOUQUET_PHOTO = "/hero-bouquet-summer.png";
 
@@ -76,19 +76,21 @@ export function Hero() {
               на этой странице золото уже занято текстом и рамками карточек,
               фиолетовый даёт кнопке visually отдельную роль основного CTA. */}
           <div className="mt-5 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4">
-            <Link
+            <TrackedLink
               href="/catalog"
+              eventTarget="Подобрать букет (hero)"
               className="group inline-flex items-center gap-2 rounded-full bg-lavender-600 px-6 py-3 font-display text-xs font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-lavender-700 sm:px-8 sm:py-4 sm:text-sm"
             >
               Подобрать букет
               <ArrowRightIcon className="h-3.5 w-3.5 transition group-hover:translate-x-0.5 sm:h-4 sm:w-4" />
-            </Link>
-            <Link
+            </TrackedLink>
+            <TrackedLink
               href="/catalog"
+              eventTarget="Смотреть каталог (hero)"
               className="font-display text-xs font-medium text-ink/70 underline decoration-lavender-300 decoration-2 underline-offset-4 transition hover:text-ink sm:text-sm"
             >
               Смотреть каталог
-            </Link>
+            </TrackedLink>
           </div>
         </div>
 
