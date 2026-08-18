@@ -24,4 +24,7 @@ export const CONTACTS = {
 
   /** Виджет Яндекс.Карт с организацией студии */
   yandexMapSrc: "https://yandex.ru/map-widget/v1/?z=12&ol=biz&oid=212296589658",
+
+  /** Прямая ссылка на форму отзыва в карточке организации на Яндекс.Картах */
+  yandexReviewUrl: "https://yandex.ru/maps/org/212296589658/reviews/?add-review=true",
 } as const;

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { BloomMark } from "@/components/ui/BloomMark";
 import { ArrowRightIcon, PackageIcon } from "@/components/ui/Icons";
 
 type OrderStatus =
@@ -57,8 +57,8 @@ export function OrderHistoryList({ orders }: { orders: AccountOrder[] }) {
   if (orders.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 rounded-3xl border border-dashed border-lavender-200 px-6 py-16 text-center">
-        <div className="relative h-20 w-20 text-lavender-300">
-          <BotanicalPattern className="h-full w-full" />
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-lavender-100 to-gold-50 text-lavender-400">
+          <BloomMark className="h-9 w-9" />
         </div>
         <div>
           <p className="font-display text-base font-semibold text-ink">

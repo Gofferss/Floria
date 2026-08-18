@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { AmbientGlow } from "@/components/ui/AmbientGlow";
+import { PhotoPlaceholder } from "@/components/ui/PhotoPlaceholder";
 import { PhotoCarousel } from "@/components/blog/PhotoCarousel";
 import { formatPublishedDate, getPostBySlug, getPublishedSlugs } from "@/lib/blog";
 
@@ -42,7 +43,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   return (
     <article>
       <header className="relative overflow-hidden bg-gradient-to-b from-lavender-100 to-lavender-50">
-        <BotanicalPattern className="pointer-events-none absolute inset-0 h-full w-full text-lavender-500/50" />
+        <AmbientGlow />
 
         <div className="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:py-16">
           <nav className="mb-6 flex flex-wrap items-center gap-2 font-body text-sm text-ink/50">
@@ -79,7 +80,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               className="object-cover"
             />
           ) : (
-            <BotanicalPattern className="absolute inset-0 h-full w-full text-white/70" />
+            <PhotoPlaceholder className="absolute inset-0 h-full w-full" />
           )}
         </div>
       </div>

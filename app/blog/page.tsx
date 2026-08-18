@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { BlogCard } from "@/components/blog/BlogCard";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { BloomMark } from "@/components/ui/BloomMark";
 import { getPublishedPosts } from "@/lib/blog";
 
 export const metadata: Metadata = {
@@ -33,8 +33,8 @@ export default async function BlogPage() {
 
       {posts.length === 0 ? (
         <div className="flex flex-col items-center gap-4 rounded-3xl border border-dashed border-lavender-200 px-6 py-20 text-center">
-          <div className="relative h-20 w-20 text-lavender-300">
-            <BotanicalPattern className="h-full w-full" />
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-lavender-100 to-gold-50 text-lavender-400">
+            <BloomMark className="h-9 w-9" />
           </div>
           <div>
             <p className="font-display text-lg font-semibold text-ink">

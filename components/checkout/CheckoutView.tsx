@@ -8,7 +8,7 @@ import { RecipientFields } from "@/components/checkout/RecipientFields";
 import { DeliveryFields } from "@/components/checkout/DeliveryFields";
 import { CardMessageField } from "@/components/checkout/CardMessageField";
 import { OrderSummaryPanel } from "@/components/checkout/OrderSummaryPanel";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { BloomMark } from "@/components/ui/BloomMark";
 import { ArrowRightIcon, CheckIcon } from "@/components/ui/Icons";
 import { toE164RussianPhone } from "@/lib/phone-mask";
 import { trackEvent } from "@/lib/analytics/track";
@@ -265,8 +265,8 @@ export function CheckoutView() {
   if (items.length === 0) {
     return (
       <div className="mx-auto flex max-w-xl flex-col items-center px-4 py-20 text-center sm:px-6">
-        <div className="relative h-24 w-24 text-lavender-300">
-          <BotanicalPattern className="h-full w-full" />
+        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-lavender-100 to-gold-50 text-lavender-400">
+          <BloomMark className="h-11 w-11" />
         </div>
         <h1 className="mt-6 font-display text-2xl font-bold text-ink">Корзина пуста</h1>
         <p className="mt-3 font-body text-base text-ink/60">

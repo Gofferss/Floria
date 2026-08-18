@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { PhotoPlaceholder } from "@/components/ui/PhotoPlaceholder";
 import { ArrowRightIcon } from "@/components/ui/Icons";
 import { formatPublishedDate, type BlogPost } from "@/lib/blog";
 
@@ -22,7 +22,7 @@ export function BlogCard({ post }: { post: BlogPost }) {
         ) : (
           // Пока обложка не загружена (Storage-бакет готов, но админки
           // ещё нет) — тот же паттерн-заглушка, что и у каталога.
-          <BotanicalPattern className="absolute inset-0 h-full w-full text-white/70" />
+          <PhotoPlaceholder className="absolute inset-0 h-full w-full" />
         )}
       </div>
 

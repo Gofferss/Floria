@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FilterPanel } from "@/components/catalog/FilterPanel";
 import { ProductCard } from "@/components/catalog/ProductCard";
+import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import { CloseIcon } from "@/components/ui/Icons";
 import type { Category } from "@/lib/categories";
 import type { OccasionOption } from "@/lib/occasions";
@@ -144,7 +145,9 @@ export function CatalogView({
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+    <div className="relative overflow-hidden">
+      <AmbientGlow className="opacity-70" />
+      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <span className="font-display text-xs font-semibold uppercase tracking-widest text-gold-600">
@@ -263,6 +266,7 @@ export function CatalogView({
           Показать {filteredProducts.length}
         </button>
       </aside>
+      </div>
     </div>
   );
 }

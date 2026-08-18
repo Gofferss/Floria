@@ -1,4 +1,4 @@
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { AmbientGlow } from "@/components/ui/AmbientGlow";
 
 type PageHeaderProps = {
   eyebrow: string;
@@ -10,7 +10,7 @@ type PageHeaderProps = {
 export function PageHeader({ eyebrow, title, description }: PageHeaderProps) {
   return (
     <header className="relative overflow-hidden bg-gradient-to-b from-lavender-100 to-lavender-50">
-      <BotanicalPattern className="pointer-events-none absolute inset-0 h-full w-full text-lavender-500/50" />
+      <AmbientGlow />
 
       <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
         <span className="font-display text-xs font-semibold uppercase tracking-widest text-gold-600">

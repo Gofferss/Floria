@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PhoneLoginForm } from "@/components/auth/PhoneLoginForm";
 import { StaffLoginToggle } from "@/components/auth/StaffLoginToggle";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { AmbientGlow } from "@/components/ui/AmbientGlow";
 
 export const metadata: Metadata = {
   title: "Вход — Floria",
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function LoginPage() {
   return (
     <div className="relative overflow-hidden bg-gradient-to-b from-lavender-100 via-lavender-50 to-white">
-      <BotanicalPattern className="pointer-events-none absolute inset-0 h-full w-full text-lavender-500/40" />
+      <AmbientGlow />
 
       <div className="relative mx-auto flex min-h-[75vh] max-w-md flex-col justify-center px-4 py-20 sm:px-6 sm:py-24">
         <div className="mb-8 text-center">

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/info/PageHeader";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import { InteractiveBouquet } from "@/components/about/InteractiveBouquet";
 import {
   ArrowRightIcon,
@@ -129,7 +129,7 @@ export default function AboutPage() {
 
         {/* Приглашение в студию */}
         <section className="relative mt-16 overflow-hidden rounded-3xl bg-lavender-100 p-7 sm:p-10 lg:mt-24">
-          <BotanicalPattern className="pointer-events-none absolute inset-0 h-full w-full text-lavender-500/50" />
+          <AmbientGlow />
 
           <div className="relative flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
             <div>

@@ -9,7 +9,7 @@ import { BonusCard } from "@/components/account/BonusCard";
 import { ProfileCompletionBanner } from "@/components/account/ProfileCompletionBanner";
 import { OrderHistoryList, type AccountOrder } from "@/components/account/OrderHistoryList";
 import { EditableName } from "@/components/account/EditableName";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import { PhoneIcon } from "@/components/ui/Icons";
 
 export const metadata: Metadata = {
@@ -118,7 +118,7 @@ export default async function AccountPage() {
       {/* Тёплая шапка кабинета — та же тональность, что на /login, чтобы
           вход и кабинет читались как одно путешествие, а не два разных сайта */}
       <header className="relative overflow-hidden bg-gradient-to-b from-lavender-100 to-lavender-50">
-        <BotanicalPattern className="pointer-events-none absolute inset-0 h-full w-full text-lavender-500/40" />
+        <AmbientGlow />
 
         <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
           <div className="flex items-start justify-between gap-4">

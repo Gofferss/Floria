@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCart } from "@/components/cart/CartProvider";
 import { CloseIcon, ArrowRightIcon } from "@/components/ui/Icons";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { BloomMark } from "@/components/ui/BloomMark";
+import { PhotoPlaceholder } from "@/components/ui/PhotoPlaceholder";
 
 const currency = new Intl.NumberFormat("ru-RU", {
   style: "currency",
@@ -51,8 +52,8 @@ export function CartDrawer() {
 
         {items.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-            <div className="relative h-24 w-24 text-lavender-300">
-              <BotanicalPattern className="h-full w-full" />
+            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-lavender-100 to-gold-50 text-lavender-400">
+              <BloomMark className="h-11 w-11" />
             </div>
             <p className="font-display text-base font-semibold text-ink">
               Корзина пока пуста
@@ -81,7 +82,7 @@ export function CartDrawer() {
                     {item.image ? (
                       <img src={item.image} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <BotanicalPattern className="absolute inset-0 h-full w-full text-white/70" />
+                      <PhotoPlaceholder className="absolute inset-0 h-full w-full" />
                     )}
                   </div>
 

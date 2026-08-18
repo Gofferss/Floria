@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { PhotoPlaceholder } from "@/components/ui/PhotoPlaceholder";
 import { CartIcon } from "@/components/ui/Icons";
 import { useCart } from "@/components/cart/CartProvider";
 import { trackEvent } from "@/lib/analytics/track";
@@ -47,7 +47,7 @@ export function ProductCard({ product }: { product: Product }) {
             className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
           />
         ) : (
-          <BotanicalPattern className="absolute inset-0 h-full w-full text-white/70" />
+          <PhotoPlaceholder className="absolute inset-0 h-full w-full" />
         )}
 
         <div className="absolute left-3 top-3 flex flex-col items-start gap-1.5">

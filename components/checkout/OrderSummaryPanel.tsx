@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { PhotoPlaceholder } from "@/components/ui/PhotoPlaceholder";
 import { ArrowRightIcon } from "@/components/ui/Icons";
 import type { CheckoutItem } from "@/lib/checkout";
 
@@ -65,7 +65,7 @@ export function OrderSummaryPanel({
               {item.image ? (
                 <img src={item.image} alt="" className="h-full w-full object-cover" />
               ) : (
-                <BotanicalPattern className="absolute inset-0 h-full w-full text-white/70" />
+                <PhotoPlaceholder className="absolute inset-0 h-full w-full" />
               )}
             </div>
             <div className="flex flex-1 items-start justify-between gap-2">

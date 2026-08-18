@@ -6,6 +6,7 @@ import {
   MailIcon,
   PhoneIcon,
   PinIcon,
+  StarIcon,
   TelegramIcon,
 } from "@/components/ui/Icons";
 import { CONTACTS } from "@/lib/contacts";
@@ -85,7 +86,18 @@ export default function ContactsPage() {
 
             {/* Яндекс.Карта */}
             <div className="mt-8">
-              <h2 className="font-display text-lg font-semibold text-ink">Как нас найти</h2>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="font-display text-lg font-semibold text-ink">Как нас найти</h2>
+                <a
+                  href={CONTACTS.yandexReviewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-gold-400/50 bg-gold-50 px-4 py-2 font-display text-xs font-semibold text-gold-700 transition hover:border-gold-500 hover:bg-gold-100"
+                >
+                  <StarIcon className="h-3.5 w-3.5" />
+                  Оставить отзыв на Яндекс.Картах
+                </a>
+              </div>
               <div className="mt-4 overflow-hidden rounded-3xl border border-lavender-100 bg-lavender-50">
                 <iframe
                   src={CONTACTS.yandexMapSrc}

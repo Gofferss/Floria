@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { PhotoPlaceholder } from "@/components/ui/PhotoPlaceholder";
 
 type ProductGalleryProps = {
   images: string[];
@@ -20,7 +20,7 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
           // настройки remotePatterns, обычный img проще для контента админки
           <img src={activeImage} alt={productName} className="h-full w-full object-cover" />
         ) : (
-          <BotanicalPattern className="absolute inset-0 h-full w-full text-white/80" />
+          <PhotoPlaceholder className="absolute inset-0 h-full w-full" />
         )}
       </div>
 

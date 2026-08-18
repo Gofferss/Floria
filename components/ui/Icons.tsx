@@ -417,6 +417,19 @@ export function SparkleIcon({ className }: IconProps) {
   );
 }
 
+export function StarIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 2.5l2.9 6.2 6.8.8-5 4.7 1.3 6.8L12 17.8 5.9 21l1.4-6.8-5-4.7 6.7-.8L12 2.5z" />
+    </svg>
+  );
+}
+
 export function GiftIcon({ className }: IconProps) {
   return (
     <svg

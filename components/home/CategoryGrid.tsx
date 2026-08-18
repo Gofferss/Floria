@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getCategories } from "@/lib/categories";
-import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { PhotoPlaceholder } from "@/components/ui/PhotoPlaceholder";
 
 export async function CategoryGrid() {
   const categories = await getCategories();
@@ -34,7 +34,7 @@ export async function CategoryGrid() {
                 // настройки remotePatterns, обычный img проще для контента админки
                 <img src={category.image} alt={category.title} className="h-full w-full object-cover" />
               ) : (
-                <BotanicalPattern className="absolute inset-0 h-full w-full text-lavender-300" />
+                <PhotoPlaceholder className="absolute inset-0 h-full w-full" />
               )}
             </div>
 
