@@ -121,7 +121,7 @@ export function Footer() {
               href="/consent"
               className="font-body text-xs text-lavender-100/50 transition hover:text-gold-400"
             >
-              Согласие на обработку ПДн
+              Согласие на обработку персональных данных
             </Link>
             <Link
               href="/offer"

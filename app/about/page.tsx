@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/info/PageHeader";
 import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
+import { InteractiveBouquet } from "@/components/about/InteractiveBouquet";
 import {
   ArrowRightIcon,
   ClockIcon,
@@ -91,14 +92,7 @@ export default function AboutPage() {
             </div>
           </div>
 
-          {/* Декоративная композиция — заменить на фото студии */}
-          <div className="relative mx-auto aspect-square w-full max-w-md lg:max-w-none">
-            <div
-              className="absolute inset-0 bg-gradient-to-br from-lavender-200 via-lavender-100 to-white"
-              style={{ borderRadius: "42% 58% 63% 37% / 41% 44% 56% 59%" }}
-            />
-            <BotanicalPattern className="absolute inset-0 h-full w-full text-gold-500/60" />
-          </div>
+          <InteractiveBouquet />
         </section>
 
         {/* Преимущества */}
