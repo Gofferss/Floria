@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { toE164RussianPhone } from "@/lib/phone-mask";
-import { notifyN8n } from "@/lib/n8n";
+import { notifyN8n, notifyStaffTelegram } from "@/lib/n8n";
 
 // Тот же node-рантайм, что и у /api/orders — консистентность важнее, чем
 // экономия на edge для такого редкого и лёгкого запроса.
@@ -40,12 +40,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Некорректный номер телефона" }, { status: 400 });
   }
 
-  notifyN8n({
-    event: "contact.created",
-    name: payload.name.trim(),
-    phone,
-    message: payload.message?.trim() ?? "",
-  });
+  const name = payload.name.trim();
+  const message = payload.message?.trim() ?? "";
+
+  notifyN8n({ event: "contact.created", name, phone, message });
+  notifyStaffTelegram(
+    `📞 <b>Заявка на обратный звонок</b>\n\nИмя: ${name}\nТелефон: ${phone}\nСообщение: ${message || "—"}`
+  );
 
   return NextResponse.json({ success: true });
 }

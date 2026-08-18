@@ -1,10 +1,39 @@
 // ================================================================
-// Единая точка выхода в n8n — оттуда уже разлетается в Telegram
-// (сотрудникам, не клиентам — филиация по чату/боту настраивается в
-// самом workflow n8n, не здесь) и на почту. И заказы, и заявки на
-// обратный звонок идут через один и тот же вебхук с разным полем
-// event — в n8n это один Webhook-триггер + Switch-нода по event.
+// Уведомления о заказах/заявках сотрудникам.
+//
+// Telegram шлётся ПРЯМО с сайта (notifyStaffTelegram), не через n8n —
+// на практике исходящие соединения от контейнера n8n до api.telegram.org
+// на этом сервере оказались нестабильными (~1 из 3 попыток теряется даже
+// с повторами), а сам сайт всё это время слал сообщения боту-напоминальщику
+// без единого сбоя. notifyN8n остаётся для остального (в первую очередь —
+// почта, когда появятся SMTP-данные) и на будущее, если Telegram-часть
+// когда-нибудь перенесут обратно в n8n.
 // ================================================================
+
+import { sendMessage } from "@/lib/telegram/bot";
+
+function staffChatIds(): number[] {
+  const raw = process.env.STAFF_TELEGRAM_CHAT_IDS ?? "";
+  return raw
+    .split(",")
+    .map((id) => Number(id.trim()))
+    .filter((id) => Number.isFinite(id));
+}
+
+/** Fire-and-forget, как и notifyN8n — сбой уведомления не должен ломать оформление заказа/заявки. */
+export function notifyStaffTelegram(text: string): void {
+  const chatIds = staffChatIds();
+  if (chatIds.length === 0) {
+    console.warn("STAFF_TELEGRAM_CHAT_IDS не задан — уведомление сотрудникам в Telegram пропущено");
+    return;
+  }
+
+  for (const chatId of chatIds) {
+    sendMessage(chatId, text).catch((error) => {
+      console.error(`Не удалось отправить уведомление в Telegram (chat ${chatId}):`, error);
+    });
+  }
+}
 
 export type N8nEvent =
   | {

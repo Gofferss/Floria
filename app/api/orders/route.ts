@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { createPosifloraOrder } from "@/lib/posiflora";
 import { resolveOrCreateCustomerByPhone } from "@/lib/customer-sync";
 import { toE164RussianPhone } from "@/lib/phone-mask";
-import { notifyN8n } from "@/lib/n8n";
+import { notifyN8n, notifyStaffTelegram } from "@/lib/n8n";
 import {
   DELIVERY_PRICE,
   FREE_DELIVERY_THRESHOLD,
@@ -255,19 +255,33 @@ export async function POST(request: Request) {
     );
   }
 
-  // --- Алерт в Telegram/почту через n8n (fire-and-forget) ---
+  // --- Алерт сотрудникам (fire-and-forget) ---
+  const recipientName = payload.isRecipientSelf ? payload.customerName : payload.recipientName;
+  const deliveryTimeLabel = timeSlot?.label ?? payload.deliveryTimeSlot;
+  const address = `${payload.deliveryAddress}${payload.deliveryApartment ? `, кв. ${payload.deliveryApartment}` : ""}`;
+  const itemsCount = payload.items.reduce((sum, item) => sum + item.quantity, 0);
+
   notifyN8n({
     event: "order.created",
     orderNumber: order.order_number,
     customerName: payload.customerName,
     customerPhone: payload.customerPhone,
-    recipientName: payload.isRecipientSelf ? payload.customerName : payload.recipientName,
+    recipientName,
     deliveryDate: payload.deliveryDate,
-    deliveryTimeLabel: timeSlot?.label ?? payload.deliveryTimeSlot,
-    address: `${payload.deliveryAddress}${payload.deliveryApartment ? `, кв. ${payload.deliveryApartment}` : ""}`,
+    deliveryTimeLabel,
+    address,
     totalAmount,
-    itemsCount: payload.items.reduce((sum, item) => sum + item.quantity, 0),
+    itemsCount,
   });
+  notifyStaffTelegram(
+    `🌸 <b>Новый заказ ${order.order_number}</b>\n\n` +
+      `Клиент: ${payload.customerName}, ${payload.customerPhone}\n` +
+      `Получатель: ${recipientName}\n` +
+      `Доставка: ${payload.deliveryDate}, ${deliveryTimeLabel}\n` +
+      `Адрес: ${address}\n` +
+      `Товаров: ${itemsCount} шт\n` +
+      `Сумма: ${totalAmount} ₽`
+  );
 
   return NextResponse.json({
     orderId: order.id,
