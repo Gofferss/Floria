@@ -49,6 +49,11 @@ export function CheckoutView() {
   const [cardText, setCardText] = useState("");
   const [consentGiven, setConsentGiven] = useState(false);
   const [bonusInput, setBonusInput] = useState("");
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
+  const [promoDiscount, setPromoDiscount] = useState(0);
+  const [promoStatus, setPromoStatus] = useState<"idle" | "checking" | "applied" | "error">("idle");
+  const [promoError, setPromoError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<"form" | "submitting" | "success">("form");
   const [orderNumber, setOrderNumber] = useState("");
@@ -88,9 +93,64 @@ export function CheckoutView() {
   }, [customerPhone]);
 
   const deliveryPrice = subtotal === 0 || subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_PRICE;
-  const maxBonus = Math.min(availableBonus, subtotal + deliveryPrice);
+  // Бонусы ограничены суммой ПОСЛЕ скидки по промокоду — тот же порядок,
+  // что и на сервере (см. /api/orders), иначе тут показали бы клиенту
+  // лимит бонусов больше, чем сервер реально позволит списать.
+  const amountAfterDiscount = Math.max(subtotal + deliveryPrice - promoDiscount, 0);
+  const maxBonus = Math.min(availableBonus, amountAfterDiscount);
   const bonusApplied = Math.min(Math.max(Number(bonusInput) || 0, 0), maxBonus);
-  const total = Math.max(subtotal + deliveryPrice - bonusApplied, 0);
+  const total = Math.max(amountAfterDiscount - bonusApplied, 0);
+
+  async function handleApplyPromo() {
+    if (!promoInput.trim() || promoStatus === "checking") return;
+
+    if (!isValidPhone(customerPhone)) {
+      setPromoStatus("error");
+      setPromoError("Сначала укажите ваш телефон");
+      return;
+    }
+
+    setPromoStatus("checking");
+    setPromoError(null);
+
+    try {
+      const response = await fetch("/api/promo/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: promoInput, customerPhone, itemsTotal: subtotal }),
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(result?.error ?? "Не удалось проверить промокод");
+      }
+
+      setAppliedPromoCode(promoInput.trim().toUpperCase());
+      setPromoDiscount(Number(result?.discountAmount) || 0);
+      setPromoStatus("applied");
+    } catch (error) {
+      setAppliedPromoCode(null);
+      setPromoDiscount(0);
+      setPromoStatus("error");
+      setPromoError(error instanceof Error ? error.message : "Не удалось проверить промокод");
+    }
+  }
+
+  function handleRemovePromo() {
+    setAppliedPromoCode(null);
+    setPromoDiscount(0);
+    setPromoStatus("idle");
+    setPromoError(null);
+    setPromoInput("");
+  }
+
+  // Промокод проверен под конкретный телефон (лимит "на клиента" считается
+  // по нему) — если телефон поменяли после применения, старая проверка
+  // больше не гарантированно верна, просим применить код заново.
+  useEffect(() => {
+    if (appliedPromoCode) handleRemovePromo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerPhone]);
 
   const checkoutItems = useMemo(
     () =>
@@ -142,6 +202,7 @@ export function CheckoutView() {
       courierComment,
       cardText,
       bonusUsed: bonusApplied,
+      promoCode: appliedPromoCode,
       items: checkoutItems,
       itemsTotal: subtotal,
       deliveryPrice,
@@ -282,6 +343,14 @@ export function CheckoutView() {
             items={checkoutItems}
             itemsTotal={subtotal}
             deliveryPrice={deliveryPrice}
+            promoInput={promoInput}
+            onPromoInputChange={setPromoInput}
+            onApplyPromo={handleApplyPromo}
+            onRemovePromo={handleRemovePromo}
+            appliedPromoCode={appliedPromoCode}
+            promoDiscount={promoDiscount}
+            promoStatus={promoStatus}
+            promoError={promoError}
             bonusInput={bonusInput}
             onBonusInputChange={setBonusInput}
             bonusApplied={bonusApplied}

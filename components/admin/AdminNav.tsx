@@ -7,6 +7,8 @@ const NAV_LINKS = [
   { href: "/admin/catalog", label: "Каталог" },
   { href: "/admin/categories", label: "Категории" },
   { href: "/admin/occasions", label: "Поводы" },
+  { href: "/admin/stories", label: "Сторис" },
+  { href: "/admin/promo-codes", label: "Промокоды" },
   { href: "/admin/broadcast", label: "Рассылка" },
 ];
 

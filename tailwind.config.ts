@@ -63,6 +63,13 @@ const config: Config = {
           "33%": { transform: "translate(4%, -6%) scale(1.08)" },
           "66%": { transform: "translate(-3%, 4%) scale(0.95)" },
         },
+        // Полоска прогресса в сторис (components/home/StoryViewer.tsx) —
+        // длительность задаётся инлайн-стилем animationDuration под
+        // duration_seconds конкретного слайда, здесь только сам keyframe.
+        "story-progress": {
+          "0%": { width: "0%" },
+          "100%": { width: "100%" },
+        },
       },
       animation: {
         "fade-up": "fade-up 0.7s ease-out both",
@@ -72,6 +79,7 @@ const config: Config = {
         "float-fast": "float 5s ease-in-out infinite",
         blob: "blob 16s ease-in-out infinite",
         "blob-reverse": "blob 22s ease-in-out infinite reverse",
+        "story-progress": "story-progress linear forwards",
       },
       typography: {
         // Дефолтная тема .prose — серо-синяя, "ничья". Переопределяем на

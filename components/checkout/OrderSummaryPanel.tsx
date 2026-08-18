@@ -13,6 +13,14 @@ type OrderSummaryPanelProps = {
   items: CheckoutItem[];
   itemsTotal: number;
   deliveryPrice: number;
+  promoInput: string;
+  onPromoInputChange: (value: string) => void;
+  onApplyPromo: () => void;
+  onRemovePromo: () => void;
+  appliedPromoCode: string | null;
+  promoDiscount: number;
+  promoStatus: "idle" | "checking" | "applied" | "error";
+  promoError: string | null;
   bonusInput: string;
   onBonusInputChange: (value: string) => void;
   bonusApplied: number;
@@ -28,6 +36,14 @@ export function OrderSummaryPanel({
   items,
   itemsTotal,
   deliveryPrice,
+  promoInput,
+  onPromoInputChange,
+  onApplyPromo,
+  onRemovePromo,
+  appliedPromoCode,
+  promoDiscount,
+  promoStatus,
+  promoError,
   bonusInput,
   onBonusInputChange,
   bonusApplied,
@@ -69,6 +85,48 @@ export function OrderSummaryPanel({
         ))}
       </ul>
 
+      {/* Промокод */}
+      <div className="mt-5 border-t border-lavender-100 pt-5">
+        <label htmlFor="promoInput" className="font-display text-sm font-medium text-ink">
+          Промокод
+        </label>
+        {appliedPromoCode ? (
+          <div className="mt-2 flex items-center justify-between rounded-xl border border-gold-400/40 bg-gold-500/5 px-4 py-2.5">
+            <span className="font-body text-sm font-medium text-ink">{appliedPromoCode}</span>
+            <button
+              type="button"
+              onClick={onRemovePromo}
+              className="font-body text-xs text-ink/50 underline underline-offset-2 hover:text-ink"
+            >
+              Убрать
+            </button>
+          </div>
+        ) : (
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              id="promoInput"
+              type="text"
+              value={promoInput}
+              onChange={(e) => onPromoInputChange(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), onApplyPromo())}
+              placeholder="Например, LETO2026"
+              className="w-full rounded-xl border border-lavender-200 bg-lavender-50 px-4 py-2.5 font-body text-sm uppercase text-ink outline-none transition placeholder:normal-case focus:border-gold-400 focus:bg-white focus:ring-2 focus:ring-gold-400/20"
+            />
+            <button
+              type="button"
+              onClick={onApplyPromo}
+              disabled={!promoInput.trim() || promoStatus === "checking"}
+              className="shrink-0 rounded-xl border border-lavender-200 px-3 py-2.5 font-body text-xs font-medium text-ink/70 transition hover:border-gold-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {promoStatus === "checking" ? "Проверяем..." : "Применить"}
+            </button>
+          </div>
+        )}
+        {promoStatus === "error" && promoError && (
+          <p className="mt-1.5 font-body text-xs text-red-600">{promoError}</p>
+        )}
+      </div>
+
       {/* Бонусы */}
       <div className="mt-5 border-t border-lavender-100 pt-5">
         <label htmlFor="bonusInput" className="font-display text-sm font-medium text-ink">
@@ -109,6 +167,12 @@ export function OrderSummaryPanel({
           <span>Доставка</span>
           <span>{deliveryPrice === 0 ? "Бесплатно" : currency.format(deliveryPrice)}</span>
         </div>
+        {promoDiscount > 0 && (
+          <div className="flex justify-between text-gold-600">
+            <span>Промокод</span>
+            <span>−{currency.format(promoDiscount)}</span>
+          </div>
+        )}
         {bonusApplied > 0 && (
           <div className="flex justify-between text-gold-600">
             <span>Бонусы</span>

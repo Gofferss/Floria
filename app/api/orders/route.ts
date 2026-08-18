@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { createPosifloraOrder } from "@/lib/posiflora";
 import { getProductBySlug } from "@/lib/products";
+import { validatePromoCode, recordPromoCodeRedemption } from "@/lib/promo-codes";
 import { resolveOrCreateCustomerByPhone } from "@/lib/customer-sync";
 import { toE164RussianPhone } from "@/lib/phone-mask";
 import { notifyN8n, notifyStaffTelegram } from "@/lib/n8n";
@@ -134,6 +135,20 @@ export async function POST(request: Request) {
   const itemsTotal = resolvedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const deliveryPrice = itemsTotal >= FREE_DELIVERY_THRESHOLD || itemsTotal === 0 ? 0 : DELIVERY_PRICE;
 
+  // Промокод перепроверяем заново на сервере — ровно по той же причине,
+  // что и цены товаров выше: клиент мог заранее проверить код на другую
+  // сумму или подставить скидку, которую сервер не подтверждал.
+  let promoCodeId: string | null = null;
+  let discountAmount = 0;
+  if (payload.promoCode?.trim()) {
+    const promoResult = await validatePromoCode(payload.promoCode, payload.customerPhone, itemsTotal);
+    if (!promoResult.valid) {
+      return NextResponse.json({ error: promoResult.error }, { status: 400 });
+    }
+    promoCodeId = promoResult.promoCodeId;
+    discountAmount = promoResult.discountAmount;
+  }
+
   // Резолвим клиента по телефону — источник правды для лимита списания
   // бонусов. Раньше лимит был захардкожен константой (AVAILABLE_BONUS_DEMO
   // = 480) и любой посетитель мог списать до 480 бонусов вне зависимости
@@ -151,9 +166,13 @@ export async function POST(request: Request) {
     console.error("Не удалось определить клиента для заказа:", error);
   }
 
-  const maxBonus = Math.min(currentBonusBalance, itemsTotal + deliveryPrice);
+  // Бонусы ограничены суммой, которая осталась ПОСЛЕ скидки по промокоду —
+  // иначе промокод и бонусы вместе могли бы увести итог в ноль сверх
+  // того, что реально должно быть списано.
+  const amountAfterDiscount = Math.max(itemsTotal + deliveryPrice - discountAmount, 0);
+  const maxBonus = Math.min(currentBonusBalance, amountAfterDiscount);
   const bonusUsed = Math.min(Math.max(Math.round(payload.bonusUsed ?? 0), 0), maxBonus);
-  const totalAmount = Math.max(itemsTotal + deliveryPrice - bonusUsed, 0);
+  const totalAmount = Math.max(amountAfterDiscount - bonusUsed, 0);
 
   const timeSlot = TIME_SLOTS.find((slot) => slot.id === payload.deliveryTimeSlot);
   const orderNumber = generateOrderNumber();
@@ -213,6 +232,7 @@ export async function POST(request: Request) {
 
       items_total: itemsTotal,
       delivery_price: deliveryPrice,
+      discount_total: discountAmount,
       bonus_used: bonusUsed,
       bonus_earned: posifloraResult.bonusEarned,
       total_amount: totalAmount,
@@ -247,6 +267,11 @@ export async function POST(request: Request) {
     if (bonusUpdateError) {
       console.error("Не удалось обновить баланс бонусов после заказа:", bonusUpdateError);
     }
+  }
+
+  // --- Supabase: фиксируем использование промокода (best-effort, как и баланс бонусов выше) ---
+  if (promoCodeId) {
+    await recordPromoCodeRedemption(promoCodeId, order.id, payload.customerPhone, discountAmount);
   }
 
   // --- Supabase: состав заказа ---
@@ -306,6 +331,7 @@ export async function POST(request: Request) {
       `Доставка: ${escapeTelegramHtml(payload.deliveryDate)}, ${escapeTelegramHtml(deliveryTimeLabel)}\n` +
       `Адрес: ${escapeTelegramHtml(address)}\n` +
       `Товаров: ${itemsCount} шт\n` +
+      (discountAmount > 0 ? `Скидка по промокоду: −${discountAmount} ₽\n` : "") +
       `Сумма: ${totalAmount} ₽`
   );
 
@@ -313,5 +339,6 @@ export async function POST(request: Request) {
     orderId: order.id,
     orderNumber: order.order_number,
     totalAmount,
+    discountAmount,
   });
 }

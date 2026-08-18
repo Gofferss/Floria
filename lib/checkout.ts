@@ -33,6 +33,8 @@ export type CheckoutPayload = {
   courierComment: string;
   cardText: string;
   bonusUsed: number;
+  /** Промокод как ввёл клиент — сервер перепроверяет его сам, не доверяя скидке с клиента. */
+  promoCode: string | null;
   items: CheckoutItem[];
   itemsTotal: number;
   deliveryPrice: number;
