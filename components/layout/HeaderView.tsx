@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -34,10 +35,19 @@ type HeaderViewProps = {
 };
 
 export function HeaderView({ isLoggedIn, bonusBalance }: HeaderViewProps) {
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const { itemCount, openDrawer } = useCart();
   const bonusLabel = isLoggedIn && bonusBalance !== null ? `Бонусы: ${bonusFormatter.format(bonusBalance)}` : null;
+
+  function handleSearchSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const query = searchQuery.trim();
+    router.push(query ? `/catalog?q=${encodeURIComponent(query)}` : "/catalog");
+    setSearchOpen(false);
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-lavender-100 bg-white/90 backdrop-blur">
@@ -78,15 +88,22 @@ export function HeaderView({ isLoggedIn, bonusBalance }: HeaderViewProps) {
           {/* Поиск — десктоп, всегда виден. Ширина растёт постепенно
               (160px → 180px → 320px), а не сразу занимает 320px на lg,
               где и так тесно логотипу, навигации и иконкам одновременно. */}
-          <label className="relative hidden w-full max-w-[160px] md:block lg:max-w-[180px] xl:max-w-xs">
-            <span className="sr-only">Поиск по каталогу</span>
-            <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
-            <input
-              type="search"
-              placeholder="Найти букет..."
-              className="w-full rounded-full border border-lavender-200 bg-lavender-50 py-2.5 pl-10 pr-4 font-body text-sm text-ink placeholder:text-ink/40 outline-none transition focus:border-gold-400 focus:bg-white focus:ring-2 focus:ring-gold-400/20"
-            />
-          </label>
+          <form
+            onSubmit={handleSearchSubmit}
+            className="relative hidden w-full max-w-[160px] md:block lg:max-w-[180px] xl:max-w-xs"
+          >
+            <label className="relative block">
+              <span className="sr-only">Поиск по каталогу</span>
+              <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Найти букет..."
+                className="w-full rounded-full border border-lavender-200 bg-lavender-50 py-2.5 pl-10 pr-4 font-body text-sm text-ink placeholder:text-ink/40 outline-none transition focus:border-gold-400 focus:bg-white focus:ring-2 focus:ring-gold-400/20"
+              />
+            </label>
+          </form>
 
           {/* Поиск — мобильный триггер */}
           <button
@@ -156,16 +173,20 @@ export function HeaderView({ isLoggedIn, bonusBalance }: HeaderViewProps) {
       {/* Поисковая строка — раскрывается на мобильных */}
       {searchOpen && (
         <div className="md:hidden border-t border-lavender-100 px-4 py-3">
-          <label className="relative block">
-            <span className="sr-only">Поиск по каталогу</span>
-            <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
-            <input
-              type="search"
-              autoFocus
-              placeholder="Найти букет..."
-              className="w-full rounded-full border border-lavender-200 bg-lavender-50 py-2.5 pl-10 pr-4 font-body text-sm text-ink placeholder:text-ink/40 outline-none focus:border-gold-400 focus:bg-white"
-            />
-          </label>
+          <form onSubmit={handleSearchSubmit}>
+            <label className="relative block">
+              <span className="sr-only">Поиск по каталогу</span>
+              <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
+              <input
+                type="search"
+                autoFocus
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Найти букет..."
+                className="w-full rounded-full border border-lavender-200 bg-lavender-50 py-2.5 pl-10 pr-4 font-body text-sm text-ink placeholder:text-ink/40 outline-none focus:border-gold-400 focus:bg-white"
+              />
+            </label>
+          </form>
         </div>
       )}
 

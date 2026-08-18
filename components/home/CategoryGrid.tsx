@@ -1,8 +1,11 @@
-import Image from "next/image";
 import Link from "next/link";
-import { categories } from "@/lib/mock-data";
+import { getCategories } from "@/lib/categories";
+import { BotanicalPattern } from "@/components/ui/BotanicalPattern";
 
-export function CategoryGrid() {
+export async function CategoryGrid() {
+  const categories = await getCategories();
+  if (categories.length === 0) return null;
+
   return (
     <section className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
       <div className="mb-6 sm:mb-10 lg:mb-14">
@@ -25,14 +28,14 @@ export function CategoryGrid() {
             className="group flex min-h-[124px] items-stretch overflow-hidden rounded-2xl border border-gold-400/60 bg-white transition hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-lg sm:min-h-[152px] lg:min-h-[172px]"
           >
             {/* Фото — слева на всех размерах, чтобы карточка оставалась компактной по высоте на мобильном */}
-            <div className="relative w-[38%] shrink-0 sm:w-[42%]">
-              <Image
-                src={category.image}
-                alt={category.title}
-                fill
-                sizes="(min-width: 1024px) 280px, (min-width: 640px) 240px, 40vw"
-                className="object-cover"
-              />
+            <div className="relative w-[38%] shrink-0 overflow-hidden sm:w-[42%]">
+              {category.image ? (
+                // Внешние URL из Supabase Storage — next/image потребовал бы
+                // настройки remotePatterns, обычный img проще для контента админки
+                <img src={category.image} alt={category.title} className="h-full w-full object-cover" />
+              ) : (
+                <BotanicalPattern className="absolute inset-0 h-full w-full text-lavender-300" />
+              )}
             </div>
 
             {/* Текст — справа, по центру по вертикали и горизонтали, как на макете */}

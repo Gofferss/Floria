@@ -4,22 +4,27 @@ import { useEffect, useMemo, useState } from "react";
 import { FilterPanel } from "@/components/catalog/FilterPanel";
 import { ProductCard } from "@/components/catalog/ProductCard";
 import { CloseIcon } from "@/components/ui/Icons";
-import type { CategoryCard } from "@/lib/mock-data";
+import type { Category } from "@/lib/categories";
+import type { OccasionOption } from "@/lib/occasions";
 import type { Product, Occasion, AvailabilityMode } from "@/lib/products";
 
 type CatalogViewProps = {
   products: Product[];
-  categories: CategoryCard[];
+  categories: Category[];
+  occasions: OccasionOption[];
   /** Границы цен считаются на сервере — из клиента к БД не ходим */
   priceBounds: { min: number; max: number };
   initialCategorySlug?: string;
+  initialQuery?: string;
 };
 
 export function CatalogView({
   products,
   categories,
+  occasions,
   priceBounds,
   initialCategorySlug,
+  initialQuery,
 }: CatalogViewProps) {
 
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(
@@ -27,14 +32,21 @@ export function CatalogView({
   );
   const [selectedOccasions, setSelectedOccasions] = useState<Set<Occasion>>(new Set());
   const [selectedAvailability, setSelectedAvailability] = useState<Set<AvailabilityMode>>(new Set());
+  const [searchQuery, setSearchQuery] = useState(initialQuery ?? "");
 
   // /catalog и /catalog?category=... — один и тот же роут, поэтому переход
   // между пунктами меню "Букеты"/"Свадьба" не размонтирует CatalogView и не
   // перезапускает useState-инициализатор выше — без этого эффекта фильтр
-  // молча оставался тем, каким был при первом заходе на страницу.
+  // молча оставался тем, каким был при первом заходе на страницу. Та же
+  // причина — для поиска из шапки (?q=...).
   useEffect(() => {
     setSelectedCategories(new Set(initialCategorySlug ? [initialCategorySlug] : []));
   }, [initialCategorySlug]);
+
+  useEffect(() => {
+    setSearchQuery(initialQuery ?? "");
+  }, [initialQuery]);
+
   const [priceFrom, setPriceFrom] = useState("");
   const [priceTo, setPriceTo] = useState("");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -67,6 +79,7 @@ export function CatalogView({
     setSelectedCategories(new Set());
     setSelectedOccasions(new Set());
     setSelectedAvailability(new Set());
+    setSearchQuery("");
     setPriceFrom("");
     setPriceTo("");
   }
@@ -74,6 +87,7 @@ export function CatalogView({
   const filteredProducts = useMemo(() => {
     const from = priceFrom ? Number(priceFrom) : null;
     const to = priceTo ? Number(priceTo) : null;
+    const query = searchQuery.trim().toLowerCase();
 
     return products.filter((product) => {
       if (selectedCategories.size > 0 && !selectedCategories.has(product.categorySlug)) {
@@ -90,12 +104,31 @@ export function CatalogView({
       }
       if (from !== null && product.basePrice < from) return false;
       if (to !== null && product.basePrice > to) return false;
+      if (query) {
+        // Ищем по названию и составу — по названию мало кто вспомнит
+        // точно, а вот "розы" или "тюльпаны" в составе введут почти все.
+        const matchesName = product.name.toLowerCase().includes(query);
+        const matchesComposition = product.composition.some((line) =>
+          line.toLowerCase().includes(query)
+        );
+        const matchesDescription = product.description.toLowerCase().includes(query);
+        if (!matchesName && !matchesComposition && !matchesDescription) return false;
+      }
       return true;
     });
-  }, [products, selectedCategories, selectedOccasions, selectedAvailability, priceFrom, priceTo]);
+  }, [
+    products,
+    selectedCategories,
+    selectedOccasions,
+    selectedAvailability,
+    searchQuery,
+    priceFrom,
+    priceTo,
+  ]);
 
   const filterProps = {
     categories,
+    occasions,
     selectedCategories,
     onToggleCategory: toggleCategory,
     selectedOccasions,
@@ -120,6 +153,18 @@ export function CatalogView({
           <h1 className="mt-2 font-display text-3xl font-bold text-ink sm:text-4xl">
             Букеты и подарки
           </h1>
+          {searchQuery.trim() && (
+            <p className="mt-2 font-body text-sm text-ink/50">
+              Результаты по запросу «{searchQuery.trim()}» —{" "}
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="text-gold-600 underline underline-offset-4"
+              >
+                очистить
+              </button>
+            </p>
+          )}
         </div>
 
         <button

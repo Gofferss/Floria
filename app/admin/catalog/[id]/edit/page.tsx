@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireStaffUser } from "@/lib/auth/server";
 import { getCatalogCategories, getProductForEdit } from "@/lib/actions/catalog";
+import { getOccasions } from "@/lib/occasions";
 import { ProductForm } from "@/components/admin/catalog/ProductForm";
 import { ArrowRightIcon } from "@/components/ui/Icons";
 
@@ -17,9 +18,10 @@ type EditProductPageProps = {
 export default async function EditProductPage({ params }: EditProductPageProps) {
   await requireStaffUser();
 
-  const [product, categories] = await Promise.all([
+  const [product, categories, occasions] = await Promise.all([
     getProductForEdit(params.id),
     getCatalogCategories(),
+    getOccasions(),
   ]);
   if (!product) notFound();
 
@@ -37,7 +39,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
         <h1 className="mt-3 font-display text-2xl font-bold text-ink sm:text-3xl">{product.name}</h1>
       </div>
 
-      <ProductForm categories={categories} product={product} />
+      <ProductForm categories={categories} occasions={occasions} product={product} />
     </div>
   );
 }

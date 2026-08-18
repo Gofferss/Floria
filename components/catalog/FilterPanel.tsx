@@ -1,9 +1,11 @@
-import type { CategoryCard } from "@/lib/mock-data";
+import type { Category } from "@/lib/categories";
+import type { OccasionOption } from "@/lib/occasions";
 import type { AvailabilityMode, Occasion } from "@/lib/products";
-import { AVAILABILITY_MODES, AVAILABILITY_MODE_LABELS, OCCASIONS } from "@/lib/products";
+import { AVAILABILITY_MODES, AVAILABILITY_MODE_LABELS } from "@/lib/products";
 
 type FilterPanelProps = {
-  categories: CategoryCard[];
+  categories: Category[];
+  occasions: OccasionOption[];
   selectedCategories: Set<string>;
   onToggleCategory: (slug: string) => void;
   selectedOccasions: Set<Occasion>;
@@ -20,6 +22,7 @@ type FilterPanelProps = {
 
 export function FilterPanel({
   categories,
+  occasions,
   selectedCategories,
   onToggleCategory,
   selectedOccasions,
@@ -113,28 +116,30 @@ export function FilterPanel({
       </fieldset>
 
       {/* Повод */}
-      <fieldset>
-        <legend className="font-display text-sm font-semibold text-ink">Повод</legend>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {OCCASIONS.map((occasion) => {
-            const active = selectedOccasions.has(occasion);
-            return (
-              <button
-                key={occasion}
-                type="button"
-                onClick={() => onToggleOccasion(occasion)}
-                className={`rounded-full border px-3.5 py-1.5 font-body text-sm transition ${
-                  active
-                    ? "border-gold-500 bg-gold-500 text-white"
-                    : "border-lavender-200 bg-white text-ink/70 hover:border-gold-300"
-                }`}
-              >
-                {occasion}
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+      {occasions.length > 0 && (
+        <fieldset>
+          <legend className="font-display text-sm font-semibold text-ink">Повод</legend>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {occasions.map((occasion) => {
+              const active = selectedOccasions.has(occasion.name);
+              return (
+                <button
+                  key={occasion.id}
+                  type="button"
+                  onClick={() => onToggleOccasion(occasion.name)}
+                  className={`rounded-full border px-3.5 py-1.5 font-body text-sm transition ${
+                    active
+                      ? "border-gold-500 bg-gold-500 text-white"
+                      : "border-lavender-200 bg-white text-ink/70 hover:border-gold-300"
+                  }`}
+                >
+                  {occasion.name}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
     </div>
   );
 }

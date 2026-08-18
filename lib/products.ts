@@ -13,15 +13,11 @@ import { supabase } from "@/lib/supabase";
 // но не из компонентов с "use client" — те получают товары пропсами.
 // ================================================================
 
-export const OCCASIONS = [
-  "День рождения",
-  "8 марта",
-  "Свадьба",
-  "Годовщина",
-  "Без повода",
-] as const;
-
-export type Occasion = (typeof OCCASIONS)[number];
+// Раньше был фиксированный список (OCCASIONS), теперь поводы редактируются
+// в /admin/occasions (см. lib/occasions.ts, таблица occasions) — здесь
+// остаётся просто строка, сверка со списком активных поводов происходит
+// там, где он используется (форма товара, фильтр каталога), а не при чтении.
+export type Occasion = string;
 
 export type ProductSize = {
   id: string;
@@ -116,8 +112,7 @@ function parseStringArray(value: unknown): string[] {
 }
 
 function parseOccasions(attributes: Record<string, unknown>): Occasion[] {
-  const allowed = new Set<string>(OCCASIONS);
-  return parseStringArray(attributes.occasions).filter((o): o is Occasion => allowed.has(o));
+  return parseStringArray(attributes.occasions);
 }
 
 function parseAvailabilityMode(value: string | null): AvailabilityMode {

@@ -5,7 +5,7 @@ import { ProductGallery } from "@/components/product/ProductGallery";
 import { ProductPurchasePanel } from "@/components/product/ProductPurchasePanel";
 import { ProductCard } from "@/components/catalog/ProductCard";
 import { ArrowRightIcon } from "@/components/ui/Icons";
-import { categories } from "@/lib/mock-data";
+import { getCategories } from "@/lib/categories";
 import { getProductBySlug, getProductSlugs, getRelatedProducts } from "@/lib/products";
 
 type ProductPageProps = {
@@ -33,8 +33,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const product = await getProductBySlug(params.slug);
   if (!product) notFound();
 
+  const [categories, relatedProducts] = await Promise.all([getCategories(), getRelatedProducts(product)]);
   const category = categories.find((c) => c.slug === product.categorySlug);
-  const relatedProducts = await getRelatedProducts(product);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
@@ -59,7 +59,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
       </nav>
 
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-16">
-        <ProductGallery productName={product.name} />
+        <ProductGallery images={product.images} productName={product.name} />
 
         <div>
           {category && (

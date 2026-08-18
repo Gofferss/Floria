@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { getStaffUser } from "@/lib/auth/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { OCCASIONS, type AvailabilityMode, type Occasion, type ProductSize } from "@/lib/products";
+import type { AvailabilityMode, Occasion, ProductSize } from "@/lib/products";
 
 // ================================================================
 // Server Actions для ручного редактирования каталога в /admin/catalog.
@@ -80,7 +80,10 @@ function validateProductInput(input: ProductInput): string | null {
 function buildAttributes(input: ProductInput) {
   return {
     sizes: input.sizes,
-    occasions: input.occasions.filter((o): o is Occasion => (OCCASIONS as readonly string[]).includes(o)),
+    // Список активных поводов теперь в таблице occasions (см.
+    // lib/occasions.ts), а не в хардкоженном наборе — здесь просто
+    // сохраняем то, что отметили в форме, без сверки со списком.
+    occasions: input.occasions.map((o) => o.trim()).filter(Boolean),
     composition: input.composition.map((c) => c.trim()).filter(Boolean),
   };
 }

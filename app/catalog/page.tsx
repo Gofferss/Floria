@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CatalogView } from "@/components/catalog/CatalogView";
-import { categories } from "@/lib/mock-data";
+import { getCategories } from "@/lib/categories";
+import { getOccasions } from "@/lib/occasions";
 import { getPriceBounds, getProducts } from "@/lib/products";
 
 export const metadata: Metadata = {
@@ -13,18 +14,25 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 type CatalogPageProps = {
-  searchParams: { category?: string };
+  searchParams: { category?: string; q?: string };
 };
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
-  const [products, priceBounds] = await Promise.all([getProducts(), getPriceBounds()]);
+  const [products, priceBounds, categories, occasions] = await Promise.all([
+    getProducts(),
+    getPriceBounds(),
+    getCategories(),
+    getOccasions(),
+  ]);
 
   return (
     <CatalogView
       products={products}
       categories={categories}
+      occasions={occasions}
       priceBounds={priceBounds}
       initialCategorySlug={searchParams.category}
+      initialQuery={searchParams.q}
     />
   );
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { EditIcon, PackageIcon, TelegramIcon, ArrowRightIcon } from "@/components/ui/Icons";
+import { EditIcon, PackageIcon, TelegramIcon, ArrowRightIcon, BouquetIcon, GiftIcon } from "@/components/ui/Icons";
 
 export const metadata: Metadata = {
   title: "Админка — Floria",
@@ -18,6 +18,18 @@ const SECTIONS = [
     icon: PackageIcon,
     title: "Каталог",
     description: "Букеты: в наличии, под заказ, редактирование карточек.",
+  },
+  {
+    href: "/admin/categories",
+    icon: BouquetIcon,
+    title: "Категории",
+    description: "Карточки на главной и фильтр каталога.",
+  },
+  {
+    href: "/admin/occasions",
+    icon: GiftIcon,
+    title: "Поводы",
+    description: "Список поводов для фильтра и формы товара.",
   },
   {
     href: "/admin/broadcast",
