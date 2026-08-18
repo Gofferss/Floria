@@ -70,6 +70,15 @@ const config: Config = {
           "0%": { width: "0%" },
           "100%": { width: "100%" },
         },
+        // Кольцо-таймер вокруг активного кружка в ленте историй
+        // (components/home/StoriesRailClient.tsx) — тот же принцип "полоски
+        // прогресса", но по окружности через stroke-dashoffset. 170 —
+        // длина окружности для r=27 (2*π*27 ≈ 169.6), подобрана под
+        // фиксированный размер кружка в этом компоненте.
+        "story-ring": {
+          "0%": { strokeDashoffset: "170" },
+          "100%": { strokeDashoffset: "0" },
+        },
       },
       animation: {
         "fade-up": "fade-up 0.7s ease-out both",
@@ -80,6 +89,7 @@ const config: Config = {
         blob: "blob 16s ease-in-out infinite",
         "blob-reverse": "blob 22s ease-in-out infinite reverse",
         "story-progress": "story-progress linear forwards",
+        "story-ring": "story-ring linear forwards",
       },
       typography: {
         // Дефолтная тема .prose — серо-синяя, "ничья". Переопределяем на
