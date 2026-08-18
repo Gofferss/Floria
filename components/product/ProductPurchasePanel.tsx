@@ -32,6 +32,7 @@ export function ProductPurchasePanel({ product }: { product: Product }) {
         name: product.name,
         size: selectedSize.label,
         price: unitPrice,
+        image: product.images[0],
       },
       quantity
     );

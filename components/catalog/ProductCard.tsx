@@ -26,6 +26,7 @@ export function ProductCard({ product }: { product: Product }) {
       name: product.name,
       size: defaultSize.label,
       price: product.basePrice + defaultSize.priceModifier,
+      image: coverImage,
     });
   }
 

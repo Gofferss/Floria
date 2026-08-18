@@ -46,7 +46,11 @@ export function OrderSummaryPanel({
         {items.map((item) => (
           <li key={`${item.productSlug}-${item.size}`} className="flex gap-3">
             <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-lavender-200 to-lavender-50">
-              <BotanicalPattern className="absolute inset-0 h-full w-full text-white/70" />
+              {item.image ? (
+                <img src={item.image} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <BotanicalPattern className="absolute inset-0 h-full w-full text-white/70" />
+              )}
             </div>
             <div className="flex flex-1 items-start justify-between gap-2">
               <div>

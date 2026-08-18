@@ -16,6 +16,8 @@ export type CartItem = {
   size: string; // подпись размера, для отображения
   price: number; // цена за единицу с учётом размера
   quantity: number;
+  /** Обложка товара — необязательна, старые записи в localStorage её не содержат */
+  image?: string;
 };
 
 type CartContextValue = {

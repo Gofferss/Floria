@@ -15,6 +15,7 @@ export type CheckoutItem = {
   size: string;
   price: number;
   quantity: number;
+  image?: string;
 };
 
 // Форма полей 1:1 повторяет таблицу `orders` из Шага 1 — это тело будущего

@@ -100,6 +100,7 @@ export function CheckoutView() {
         size: item.size,
         price: item.price,
         quantity: item.quantity,
+        image: item.image,
       })),
     [items]
   );

@@ -78,7 +78,11 @@ export function CartDrawer() {
                   className="flex gap-4 border-b border-lavender-100 py-4 first:pt-0 last:border-b-0"
                 >
                   <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-lavender-200 to-lavender-50">
-                    <BotanicalPattern className="absolute inset-0 h-full w-full text-white/70" />
+                    {item.image ? (
+                      <img src={item.image} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <BotanicalPattern className="absolute inset-0 h-full w-full text-white/70" />
+                    )}
                   </div>
 
                   <div className="flex flex-1 flex-col">
