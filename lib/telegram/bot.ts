@@ -30,11 +30,25 @@ export type InlineKeyboardMarkup = {
   inline_keyboard: InlineKeyboardButton[][];
 };
 
-async function callTelegramApi<T = unknown>(method: string, body: Record<string, unknown>): Promise<T> {
+// Сеть до api.telegram.org с этого сервера временами подвисает (см.
+// комментарий в lib/n8n.ts про соединения из контейнера n8n) — без
+// таймаута fetch может зависнуть на неопределённое время вместо быстрой
+// ошибки, а именно это и выглядит для пользователя как "бот не отвечает
+// по 3 минуты". 8с — с запасом больше обычного времени ответа Telegram
+// (обычно <1с), но не настолько долго, чтобы веб-хук сам не успел
+// ответить Telegram до его собственного таймаута. Один повтор — только
+// на сетевую ошибку/таймаут (fetch бросает исключение), не на ответ
+// Telegram "не ок" (за тем же запросом может стоять реальная ошибка,
+// повторять которую бессмысленно и рискованно для sendMessage — двойное
+// сообщение хуже, чем однократная ошибка, но лучше, чем 3 минуты тишины).
+const TELEGRAM_TIMEOUT_MS = 8000;
+
+async function callTelegramApiOnce<T>(method: string, body: Record<string, unknown>): Promise<T> {
   const response = await fetch(`${TELEGRAM_API_BASE}/bot${botToken()}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
   });
 
   const json = (await response.json()) as {
@@ -49,6 +63,17 @@ async function callTelegramApi<T = unknown>(method: string, body: Record<string,
   }
 
   return json.result as T;
+}
+
+async function callTelegramApi<T = unknown>(method: string, body: Record<string, unknown>): Promise<T> {
+  try {
+    return await callTelegramApiOnce<T>(method, body);
+  } catch (error) {
+    if (error instanceof TelegramApiError) throw error;
+    // Сетевая ошибка/таймаут (не ответ Telegram) — один быстрый повтор.
+    console.warn(`[telegram] ${method} network error, retrying once:`, error);
+    return await callTelegramApiOnce<T>(method, body);
+  }
 }
 
 /**

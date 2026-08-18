@@ -134,6 +134,25 @@ export async function findOrCreatePosifloraClient(
 }
 
 /**
+ * Только поиск, без создания — для бота: "узнать баланс" по чужому
+ * непроверенному номеру не должно заводить в Posiflora карточку клиента.
+ * Ищет и среди тех, кто оформлял на сайте, и среди тех, кого сотрудники
+ * завели прямо в Posiflora при покупке в шоуруме (это разные множества —
+ * наша таблица customers синхронизируется только в одну сторону, с сайта
+ * в Posiflora, поэтому для "живого" вопроса баланса опрашиваем Posiflora
+ * напрямую, а не локальный кэш).
+ */
+export async function findPosifloraClientByPhone(
+  phone: string
+): Promise<{ posifloraClientId: string; bonusBalance: number } | null> {
+  const { countryCode, localNumber } = splitPhoneForPosiflora(phone);
+  const found = await findByPhone(countryCode, localNumber);
+  if (!found) return null;
+  const mapped = mapCustomerResource(found);
+  return { posifloraClientId: mapped.id, bonusBalance: mapped.currentPoints };
+}
+
+/**
  * Задача 3 — актуальный баланс бонусов. У Posiflora нет отдельного
  * "get balance" эндпоинта: currentPoints — обычное поле карточки
  * клиента (GET /v1/customers/{id}), баланс не отделён от остальных

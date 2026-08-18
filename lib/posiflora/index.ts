@@ -6,6 +6,7 @@
 export {
   findOrCreatePosifloraClient,
   getPosifloraClientBalance,
+  findPosifloraClientByPhone,
   type FindOrCreatePosifloraClientInput,
   type PosifloraClient,
 } from "./customers";

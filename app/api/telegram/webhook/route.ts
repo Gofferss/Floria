@@ -9,6 +9,8 @@ import {
 } from "@/lib/telegram/bot";
 import { parseReminderDate, formatDayMonth } from "@/lib/telegram/date-parse";
 import { CONTACTS } from "@/lib/contacts";
+import { toE164RussianPhone } from "@/lib/phone-mask";
+import { findPosifloraClientByPhone } from "@/lib/posiflora";
 import {
   ensureBotUser,
   addReminder,
@@ -49,16 +51,19 @@ function isValidSecret(received: string | null, expected: string): boolean {
 
 const MAIN_MENU: InlineKeyboardMarkup = {
   inline_keyboard: [
+    [{ text: "🎁 Узнать бонусный баланс", callback_data: "bonus_balance" }],
     [{ text: "➕ Добавить напоминание", callback_data: "add" }],
     [{ text: "📋 Мои напоминания", callback_data: "list" }],
-    [{ text: "🌷 Каталог букетов", url: CONTACTS.telegram }],
+    [{ text: "🌐 Наш сайт", url: CONTACTS.siteUrl }],
+    [{ text: "📱 Каталог в Telegram", url: CONTACTS.telegram }],
   ],
 };
 
 const WELCOME_TEXT =
-  "Привет! 🌸 Я бот-напоминальщик студии цветов Floria.\n\n" +
-  "Помогу не забыть о важных датах — дне рождения, годовщине — и заранее " +
-  "напомню, что пора оформить букет.\n\nЧто хотите сделать?";
+  "Здравствуйте! 🌸 Я — помощник студии цветов Floria в Симферополе.\n\n" +
+  "Подскажу баланс бонусов, заранее напомню о дне рождения или годовщине, " +
+  "чтобы вы точно успели с букетом, и помогу быстрее оформить заказ.\n\n" +
+  "С чего начнём?";
 
 const ADD_PROMPT =
   "Напишите, что и когда напомнить, одним сообщением.\n\n" +
@@ -66,6 +71,22 @@ const ADD_PROMPT =
 
 const PARSE_ERROR_TEXT =
   "Не нашёл дату в сообщении 🤔 Укажите её числом (17.08) или словами (17 августа), например: «День рождения жены 17.08».";
+
+const BONUS_PHONE_PROMPT =
+  "Введите номер телефона, на который оформлялись заказы (или который " +
+  "зарегистрирован в студии) — пришлю баланс бонусов.\n\n" +
+  "Например: +7 978 123-45-67";
+
+const BONUS_INVALID_PHONE_TEXT =
+  "Не похоже на номер телефона 🤔 Введите 10 цифр после +7, например: +7 978 123-45-67";
+
+const BONUS_ERROR_TEXT = "Не получилось проверить баланс — сервис временно недоступен. Попробуйте чуть позже 🙏";
+
+function formatPhoneForDisplay(e164: string): string {
+  // +79781234567 → +7 978 123-45-67
+  const d = e164.slice(2);
+  return `+7 ${d.slice(0, 3)} ${d.slice(3, 6)}-${d.slice(6, 8)}-${d.slice(8, 10)}`;
+}
 
 type TelegramUpdate = {
   message?: {
@@ -168,8 +189,58 @@ async function handleMessage(message: NonNullable<TelegramUpdate["message"]>): P
     return;
   }
 
+  if (session.state === "awaiting_phone") {
+    await handleBonusBalanceLookup(chatId, text);
+    return;
+  }
+
   // idle + произвольный текст — просто показываем меню, не пытаемся угадать намерение.
   await sendMessage(chatId, "Выберите действие:", MAIN_MENU);
+}
+
+/**
+ * Проверка баланса по номеру — спрашивает Posiflora напрямую (не наш
+ * кэш customers), потому что бонусная карта могла завестись и в
+ * шоуруме, без единого захода на сайт. Ошибка Posiflora не должна
+ * выглядеть как "такого номера нет" — это разные ответы пользователю.
+ */
+async function handleBonusBalanceLookup(chatId: number, rawText: string): Promise<void> {
+  const phone = toE164RussianPhone(rawText);
+  if (!phone) {
+    // Сессию не сбрасываем — тот же приём, что у awaiting_add/awaiting_edit
+    // при ошибке разбора: следующее сообщение можно сразу слать поправленным.
+    await sendMessage(chatId, BONUS_INVALID_PHONE_TEXT);
+    return;
+  }
+
+  await clearSession(chatId);
+  const displayPhone = formatPhoneForDisplay(phone);
+
+  let client: { posifloraClientId: string; bonusBalance: number } | null;
+  try {
+    client = await findPosifloraClientByPhone(phone);
+  } catch (error) {
+    console.error("[handleBonusBalanceLookup]", error);
+    await sendMessage(chatId, BONUS_ERROR_TEXT, MAIN_MENU);
+    return;
+  }
+
+  if (!client) {
+    await sendMessage(
+      chatId,
+      `Не нашли номер ${displayPhone} в нашей базе 🤔\n\n` +
+        "Зарегистрируйтесь на сайте — это займёт меньше минуты, и бонусы начнут копиться с первого заказа.",
+      { inline_keyboard: [[{ text: "Зарегистрироваться", url: `${CONTACTS.siteUrl}/login` }]] }
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `🎁 Баланс бонусов по номеру ${displayPhone}: <b>${client.bonusBalance} ₽</b>\n\n` +
+      "Можно списать их при оформлении букета на сайте — просто укажите этот же номер при заказе.",
+    { inline_keyboard: [[{ text: "🌷 Выбрать букет", url: `${CONTACTS.siteUrl}/catalog` }]] }
+  );
 }
 
 async function handleCallbackQuery(
@@ -190,6 +261,13 @@ async function handleCallbackQuery(
     await setSession(chatId, "awaiting_add");
     await answerCallbackQuery(callbackQuery.id);
     await sendMessage(chatId, ADD_PROMPT);
+    return;
+  }
+
+  if (data === "bonus_balance") {
+    await setSession(chatId, "awaiting_phone");
+    await answerCallbackQuery(callbackQuery.id);
+    await sendMessage(chatId, BONUS_PHONE_PROMPT);
     return;
   }
 
