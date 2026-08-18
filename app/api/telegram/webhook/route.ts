@@ -8,6 +8,7 @@ import {
   type InlineKeyboardMarkup,
 } from "@/lib/telegram/bot";
 import { parseReminderDate, formatDayMonth } from "@/lib/telegram/date-parse";
+import { CONTACTS } from "@/lib/contacts";
 import {
   ensureBotUser,
   addReminder,
@@ -50,6 +51,7 @@ const MAIN_MENU: InlineKeyboardMarkup = {
   inline_keyboard: [
     [{ text: "➕ Добавить напоминание", callback_data: "add" }],
     [{ text: "📋 Мои напоминания", callback_data: "list" }],
+    [{ text: "🌷 Каталог букетов", url: CONTACTS.telegram }],
   ],
 };
 
