@@ -64,6 +64,26 @@ export async function sendMessage(
   });
 }
 
+/**
+ * photoUrl — публичный URL (например, из Supabase Storage), Telegram сам
+ * скачивает файл по ссылке, отдельно загружать байты не нужно. caption
+ * ограничен Telegram'ом 1024 символами — длиннее API вернёт ошибку.
+ */
+export async function sendPhoto(
+  chatId: number,
+  photoUrl: string,
+  caption?: string,
+  replyMarkup?: InlineKeyboardMarkup
+): Promise<{ message_id: number }> {
+  return callTelegramApi("sendPhoto", {
+    chat_id: chatId,
+    photo: photoUrl,
+    caption,
+    parse_mode: "HTML",
+    reply_markup: replyMarkup,
+  });
+}
+
 export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
   await callTelegramApi("answerCallbackQuery", { callback_query_id: callbackQueryId, text });
 }

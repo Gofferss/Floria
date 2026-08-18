@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/auth/server";
+import { createSupabaseServerClient, getStaffUser } from "@/lib/auth/server";
 import { getPosifloraClientBalance } from "@/lib/posiflora";
 import { syncCustomerWithPosiflora } from "@/lib/customer-sync";
 import { LogoutButton } from "@/components/auth/LogoutButton";
@@ -90,7 +91,7 @@ export default async function AccountPage() {
   // параллельно, а не один за другим: живой запрос в Posiflora (и
   // возможное самовосстановление связи) и так добавляет странице
   // сетевую задержку, которой раньше не было.
-  const [ordersResult, bonusBalance] = await Promise.all([
+  const [ordersResult, bonusBalance, staff] = await Promise.all([
     customer
       ? supabase
           .from("orders")
@@ -101,6 +102,7 @@ export default async function AccountPage() {
       : Promise.resolve({ data: null }),
 
     resolveAccountBonusBalance(customer),
+    getStaffUser(),
   ]);
 
   const orders = (ordersResult.data ?? []) as AccountOrder[];
@@ -137,7 +139,17 @@ export default async function AccountPage() {
               </div>
             </div>
 
-            <LogoutButton className="hidden shrink-0 font-body text-sm text-ink/50 underline decoration-lavender-300 underline-offset-4 transition hover:text-ink sm:inline-block" />
+            <div className="hidden shrink-0 items-center gap-4 sm:flex">
+              {staff && (
+                <Link
+                  href="/admin"
+                  className="rounded-full bg-gold-500 px-4 py-2 font-display text-xs font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-gold-600"
+                >
+                  Админ-панель
+                </Link>
+              )}
+              <LogoutButton className="font-body text-sm text-ink/50 underline decoration-lavender-300 underline-offset-4 transition hover:text-ink" />
+            </div>
           </div>
         </div>
       </header>
@@ -178,6 +190,14 @@ export default async function AccountPage() {
 
             </div>
 
+            {staff && (
+              <Link
+                href="/admin"
+                className="flex items-center justify-center rounded-full bg-gold-500 px-4 py-3 font-display text-sm font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-gold-600 sm:hidden"
+              >
+                Админ-панель
+              </Link>
+            )}
             <LogoutButton className="text-center font-body text-sm text-ink/50 underline decoration-lavender-300 underline-offset-4 transition hover:text-ink sm:hidden" />
           </div>
         </div>
