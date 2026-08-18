@@ -1,13 +1,38 @@
+import { existsSync } from "fs";
+import { join } from "path";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRightIcon } from "@/components/ui/Icons";
-import { HeroBackdrop } from "@/components/home/HeroBackdrop";
-import { HeroBouquet } from "@/components/home/HeroBouquet";
+import { HeroBackdrop, type PhotoAccent } from "@/components/home/HeroBackdrop";
+import { HeroBouquetPhoto } from "@/components/home/HeroBouquetPhoto";
+
+const BOUQUET_PHOTO = "/hero-bouquet-summer.png";
+
+const PHOTO_ACCENTS: PhotoAccent[] = [
+  { src: "/flower-rose.png", alt: "", top: "6%", left: "7%", size: "w-24 sm:w-32 lg:w-40", depth: 18, delay: "0s", rotate: -6, anim: "motion-safe:animate-float-slow" },
+  { src: "/flower-tulip.png", alt: "", top: "68%", left: "3%", size: "w-16 sm:w-20 lg:w-24", depth: 24, delay: "1.4s", rotate: 10, anim: "motion-safe:animate-float-fast" },
+  { src: "/flower-potted.png", alt: "", top: "6%", left: "80%", size: "w-24 sm:w-28 lg:w-32", depth: 20, delay: "0.7s", rotate: 5, anim: "motion-safe:animate-float-slow" },
+];
+
+/**
+ * Проверяем на сервере, что файл реально лежит в /public, а не полагаемся
+ * на onError в браузере: тот срабатывает по нативному событию "error",
+ * которое у уже отрендеренной серверной HTML-разметки почти всегда
+ * происходит РАНЬШЕ, чем React успевает гидрироваться и повесить
+ * обработчик — в деве это стабильно ловится как гонка, битая картинка
+ * успевает мелькнуть. Так деталей просто нет в разметке, пока файла нет.
+ */
+function fileExists(publicPath: string): boolean {
+  return existsSync(join(process.cwd(), "public", publicPath));
+}
 
 export function Hero() {
+  const bouquetExists = fileExists(BOUQUET_PHOTO);
+  const availableAccents = PHOTO_ACCENTS.filter((accent) => fileExists(accent.src));
+
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-lavender-100 via-lavender-50 to-white">
-      <HeroBackdrop />
+      <HeroBackdrop accents={availableAccents} />
 
       {/* Боковые паттерны с левитацией. Показываем только от xl (1280px) —
           при max-w-7xl (тоже 1280px) именно с этой ширины у секции
@@ -67,7 +92,7 @@ export function Hero() {
           </div>
         </div>
 
-        <HeroBouquet />
+        {bouquetExists && <HeroBouquetPhoto src={BOUQUET_PHOTO} />}
       </div>
     </section>
   );
