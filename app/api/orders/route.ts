@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { createPosifloraOrder } from "@/lib/posiflora";
+import { getProductBySlug } from "@/lib/products";
 import { resolveOrCreateCustomerByPhone } from "@/lib/customer-sync";
 import { toE164RussianPhone } from "@/lib/phone-mask";
 import { notifyN8n, notifyStaffTelegram } from "@/lib/n8n";
+import { escapeTelegramHtml } from "@/lib/telegram/bot";
 import {
   DELIVERY_PRICE,
   FREE_DELIVERY_THRESHOLD,
@@ -102,9 +104,34 @@ export async function POST(request: Request) {
   }
   const payload = validation.data;
 
+  // Название и цену каждой позиции пересчитываем на сервере по каталогу,
+  // а не берём из тела запроса — иначе через devtools можно отправить
+  // {price: 1} за настоящий товар и оформить заказ почти бесплатно.
+  // Раньше здесь пересчитывалась только СУММА (payload.items.reduce),
+  // но цену за штуку клиент по-прежнему присылал сам и она шла прямиком
+  // в БД и в Posiflora без проверки.
+  type ResolvedItem = { name: string; size: string; price: number; quantity: number };
+  const resolvedItems: ResolvedItem[] = [];
+  for (const item of payload.items) {
+    const product = item.productSlug ? await getProductBySlug(item.productSlug) : null;
+    if (!product) {
+      return NextResponse.json(
+        { error: `Товар «${item.name}» больше недоступен — обновите корзину` },
+        { status: 400 }
+      );
+    }
+    const size = product.sizes.find((s) => s.label === item.size) ?? product.sizes[0];
+    resolvedItems.push({
+      name: product.name,
+      size: size.label,
+      price: product.basePrice + size.priceModifier,
+      quantity: item.quantity,
+    });
+  }
+
   // Суммы пересчитываем на сервере — не доверяем итогам, посчитанным на
   // клиенте (клиент мог отправить что угодно).
-  const itemsTotal = payload.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const itemsTotal = resolvedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const deliveryPrice = itemsTotal >= FREE_DELIVERY_THRESHOLD || itemsTotal === 0 ? 0 : DELIVERY_PRICE;
 
   // Резолвим клиента по телефону — источник правды для лимита списания
@@ -141,11 +168,7 @@ export async function POST(request: Request) {
       posifloraClientId,
       customerName: payload.customerName,
       customerPhone: payload.customerPhone,
-      items: payload.items.map((item) => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-      })),
+      items: resolvedItems,
       bonusUsed,
       currentBonusBalance,
     });
@@ -230,7 +253,7 @@ export async function POST(request: Request) {
   // product_id не заполняем — каталог из lib/products.ts пока не
   // синхронизирован с таблицей products (это отдельная задача по
   // подключению реальной выгрузки из Posiflora).
-  const orderItemsRows = payload.items.map((item) => ({
+  const orderItemsRows = resolvedItems.map((item) => ({
     order_id: order.id,
     product_name: item.name,
     unit_price: item.price,
@@ -259,7 +282,7 @@ export async function POST(request: Request) {
   const recipientName = payload.isRecipientSelf ? payload.customerName : payload.recipientName;
   const deliveryTimeLabel = timeSlot?.label ?? payload.deliveryTimeSlot;
   const address = `${payload.deliveryAddress}${payload.deliveryApartment ? `, кв. ${payload.deliveryApartment}` : ""}`;
-  const itemsCount = payload.items.reduce((sum, item) => sum + item.quantity, 0);
+  const itemsCount = resolvedItems.reduce((sum, item) => sum + item.quantity, 0);
 
   notifyN8n({
     event: "order.created",
@@ -273,12 +296,15 @@ export async function POST(request: Request) {
     totalAmount,
     itemsCount,
   });
+  // Экранируем всё, что ввёл клиент, — иначе через имя/адрес/комментарий
+  // в HTML-уведомление сотруднику можно было бы вставить кликабельную
+  // ссылку (Telegram отрисует её как настоящий <a href>).
   notifyStaffTelegram(
-    `🌸 <b>Новый заказ ${order.order_number}</b>\n\n` +
-      `Клиент: ${payload.customerName}, ${payload.customerPhone}\n` +
-      `Получатель: ${recipientName}\n` +
-      `Доставка: ${payload.deliveryDate}, ${deliveryTimeLabel}\n` +
-      `Адрес: ${address}\n` +
+    `🌸 <b>Новый заказ ${escapeTelegramHtml(order.order_number)}</b>\n\n` +
+      `Клиент: ${escapeTelegramHtml(payload.customerName)}, ${escapeTelegramHtml(payload.customerPhone)}\n` +
+      `Получатель: ${escapeTelegramHtml(recipientName)}\n` +
+      `Доставка: ${escapeTelegramHtml(payload.deliveryDate)}, ${escapeTelegramHtml(deliveryTimeLabel)}\n` +
+      `Адрес: ${escapeTelegramHtml(address)}\n` +
       `Товаров: ${itemsCount} шт\n` +
       `Сумма: ${totalAmount} ₽`
   );

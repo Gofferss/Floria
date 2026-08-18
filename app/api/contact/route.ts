@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { toE164RussianPhone } from "@/lib/phone-mask";
 import { notifyN8n, notifyStaffTelegram } from "@/lib/n8n";
+import { escapeTelegramHtml } from "@/lib/telegram/bot";
 
 // Тот же node-рантайм, что и у /api/orders — консистентность важнее, чем
 // экономия на edge для такого редкого и лёгкого запроса.
@@ -44,8 +45,12 @@ export async function POST(request: Request) {
   const message = payload.message?.trim() ?? "";
 
   notifyN8n({ event: "contact.created", name, phone, message });
+  // Экранируем ввод клиента — без этого через поле "Сообщение" в HTML-
+  // уведомление сотруднику можно было бы вставить кликабельную ссылку.
   notifyStaffTelegram(
-    `📞 <b>Заявка на обратный звонок</b>\n\nИмя: ${name}\nТелефон: ${phone}\nСообщение: ${message || "—"}`
+    `📞 <b>Заявка на обратный звонок</b>\n\nИмя: ${escapeTelegramHtml(name)}\nТелефон: ${escapeTelegramHtml(
+      phone
+    )}\nСообщение: ${message ? escapeTelegramHtml(message) : "—"}`
   );
 
   return NextResponse.json({ success: true });

@@ -222,7 +222,7 @@ async function handleCallbackQuery(
     await setSession(chatId, "awaiting_edit", { editingId: id });
     await sendMessage(
       chatId,
-      `Сейчас: «${reminder.title}» (${formatDayMonth(reminder.eventDay, reminder.eventMonth)}).\n\n` +
+      `Сейчас: «${escapeHtml(reminder.title)}» (${formatDayMonth(reminder.eventDay, reminder.eventMonth)}).\n\n` +
         "Пришлите новый текст с датой — целиком, одним сообщением."
     );
     return;

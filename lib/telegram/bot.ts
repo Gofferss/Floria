@@ -51,6 +51,17 @@ async function callTelegramApi<T = unknown>(method: string, body: Record<string,
   return json.result as T;
 }
 
+/**
+ * Экранирует спецсимволы Telegram HTML-разметки (parse_mode: "HTML").
+ * Обязательна для любого пользовательского текста (имя клиента, адрес,
+ * сообщение из формы), который попадает в шаблон уведомления сотрудникам —
+ * без неё в чат-е строку типа `<a href="...">текст</a>` из формы заказа
+ * можно было бы вставить кликабельную ссылку в сообщение для сотрудника.
+ */
+export function escapeTelegramHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export async function sendMessage(
   chatId: number,
   text: string,
