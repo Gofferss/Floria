@@ -1,6 +1,6 @@
 import type { CategoryCard } from "@/lib/mock-data";
-import type { Occasion } from "@/lib/products";
-import { OCCASIONS } from "@/lib/products";
+import type { AvailabilityMode, Occasion } from "@/lib/products";
+import { AVAILABILITY_MODES, AVAILABILITY_MODE_LABELS, OCCASIONS } from "@/lib/products";
 
 type FilterPanelProps = {
   categories: CategoryCard[];
@@ -8,6 +8,8 @@ type FilterPanelProps = {
   onToggleCategory: (slug: string) => void;
   selectedOccasions: Set<Occasion>;
   onToggleOccasion: (occasion: Occasion) => void;
+  selectedAvailability: Set<AvailabilityMode>;
+  onToggleAvailability: (mode: AvailabilityMode) => void;
   priceFrom: string;
   priceTo: string;
   onPriceFromChange: (value: string) => void;
@@ -22,6 +24,8 @@ export function FilterPanel({
   onToggleCategory,
   selectedOccasions,
   onToggleOccasion,
+  selectedAvailability,
+  onToggleAvailability,
   priceFrom,
   priceTo,
   onPriceFromChange,
@@ -58,6 +62,27 @@ export function FilterPanel({
                 className="h-4 w-4 rounded border-lavender-300 text-gold-500 accent-gold-500 focus:ring-gold-400/40"
               />
               {category.title}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      {/* Наличие */}
+      <fieldset>
+        <legend className="font-display text-sm font-semibold text-ink">Наличие</legend>
+        <div className="mt-3 flex flex-col gap-2.5">
+          {AVAILABILITY_MODES.map((mode) => (
+            <label
+              key={mode}
+              className="flex cursor-pointer items-center gap-2.5 font-body text-sm text-ink/80"
+            >
+              <input
+                type="checkbox"
+                checked={selectedAvailability.has(mode)}
+                onChange={() => onToggleAvailability(mode)}
+                className="h-4 w-4 rounded border-lavender-300 text-gold-500 accent-gold-500 focus:ring-gold-400/40"
+              />
+              {AVAILABILITY_MODE_LABELS[mode]}
             </label>
           ))}
         </div>

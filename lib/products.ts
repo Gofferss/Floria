@@ -29,6 +29,14 @@ export type ProductSize = {
   priceModifier: number;
 };
 
+export const AVAILABILITY_MODES = ["in_stock", "made_to_order"] as const;
+export type AvailabilityMode = (typeof AVAILABILITY_MODES)[number];
+
+export const AVAILABILITY_MODE_LABELS: Record<AvailabilityMode, string> = {
+  in_stock: "В наличии",
+  made_to_order: "Под заказ",
+};
+
 export type Product = {
   id: string;
   slug: string;
@@ -40,6 +48,8 @@ export type Product = {
   composition: string[];
   description: string;
   sizes: ProductSize[];
+  images: string[];
+  availabilityMode: AvailabilityMode;
 };
 
 /** Запасной размер для товаров, у которых в attributes нет ни одного */
@@ -54,6 +64,8 @@ const PRODUCT_SELECT = `
   price,
   old_price,
   attributes,
+  images,
+  availability_mode,
   product_categories ( slug )
 `;
 
@@ -65,6 +77,8 @@ type ProductRow = {
   price: number | string;
   old_price: number | string | null;
   attributes: unknown;
+  images: unknown;
+  availability_mode: string | null;
   // supabase-js типизирует вложенный джойн как объект или массив в
   // зависимости от кардинальности — обрабатываем оба варианта
   product_categories: { slug: string } | { slug: string }[] | null;
@@ -106,6 +120,10 @@ function parseOccasions(attributes: Record<string, unknown>): Occasion[] {
   return parseStringArray(attributes.occasions).filter((o): o is Occasion => allowed.has(o));
 }
 
+function parseAvailabilityMode(value: string | null): AvailabilityMode {
+  return value === "made_to_order" ? "made_to_order" : "in_stock";
+}
+
 function mapRow(row: ProductRow): Product {
   const attributes =
     typeof row.attributes === "object" && row.attributes !== null
@@ -129,6 +147,8 @@ function mapRow(row: ProductRow): Product {
     composition: parseStringArray(attributes.composition),
     description: row.description ?? "",
     sizes: parseSizes(attributes),
+    images: parseStringArray(row.images),
+    availabilityMode: parseAvailabilityMode(row.availability_mode),
   };
 }
 

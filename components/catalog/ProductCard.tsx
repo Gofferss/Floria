@@ -15,6 +15,7 @@ const currency = new Intl.NumberFormat("ru-RU", {
 export function ProductCard({ product }: { product: Product }) {
   const { addItem } = useCart();
   const defaultSize = product.sizes[0];
+  const coverImage = product.images[0];
 
   function handleQuickAdd(e: React.MouseEvent) {
     e.preventDefault();
@@ -34,13 +35,30 @@ export function ProductCard({ product }: { product: Product }) {
       className="group flex flex-col overflow-hidden rounded-3xl border border-lavender-100 bg-white transition hover:-translate-y-1 hover:shadow-lg"
     >
       <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-lavender-200 to-lavender-50">
-        <BotanicalPattern className="absolute inset-0 h-full w-full text-white/70" />
-
-        {product.oldPrice && (
-          <span className="absolute left-3 top-3 rounded-full bg-gold-500 px-3 py-1 font-display text-xs font-semibold text-white">
-            Скидка
-          </span>
+        {coverImage ? (
+          // Внешние URL из Supabase Storage — next/image потребовал бы
+          // настройки remotePatterns, обычный img проще для карточек каталога
+          <img
+            src={coverImage}
+            alt={product.name}
+            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <BotanicalPattern className="absolute inset-0 h-full w-full text-white/70" />
         )}
+
+        <div className="absolute left-3 top-3 flex flex-col items-start gap-1.5">
+          {product.oldPrice && (
+            <span className="rounded-full bg-gold-500 px-3 py-1 font-display text-xs font-semibold text-white">
+              Скидка
+            </span>
+          )}
+          {product.availabilityMode === "made_to_order" && (
+            <span className="rounded-full bg-ink/70 px-3 py-1 font-display text-xs font-semibold text-white">
+              Под заказ
+            </span>
+          )}
+        </div>
 
         <button
           type="button"

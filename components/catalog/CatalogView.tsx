@@ -5,7 +5,7 @@ import { FilterPanel } from "@/components/catalog/FilterPanel";
 import { ProductCard } from "@/components/catalog/ProductCard";
 import { CloseIcon } from "@/components/ui/Icons";
 import type { CategoryCard } from "@/lib/mock-data";
-import type { Product, Occasion } from "@/lib/products";
+import type { Product, Occasion, AvailabilityMode } from "@/lib/products";
 
 type CatalogViewProps = {
   products: Product[];
@@ -26,6 +26,7 @@ export function CatalogView({
     () => new Set(initialCategorySlug ? [initialCategorySlug] : [])
   );
   const [selectedOccasions, setSelectedOccasions] = useState<Set<Occasion>>(new Set());
+  const [selectedAvailability, setSelectedAvailability] = useState<Set<AvailabilityMode>>(new Set());
 
   // /catalog и /catalog?category=... — один и тот же роут, поэтому переход
   // между пунктами меню "Букеты"/"Свадьба" не размонтирует CatalogView и не
@@ -54,9 +55,18 @@ export function CatalogView({
     });
   }
 
+  function toggleAvailability(mode: AvailabilityMode) {
+    setSelectedAvailability((prev) => {
+      const next = new Set(prev);
+      next.has(mode) ? next.delete(mode) : next.add(mode);
+      return next;
+    });
+  }
+
   function resetFilters() {
     setSelectedCategories(new Set());
     setSelectedOccasions(new Set());
+    setSelectedAvailability(new Set());
     setPriceFrom("");
     setPriceTo("");
   }
@@ -75,11 +85,14 @@ export function CatalogView({
       ) {
         return false;
       }
+      if (selectedAvailability.size > 0 && !selectedAvailability.has(product.availabilityMode)) {
+        return false;
+      }
       if (from !== null && product.basePrice < from) return false;
       if (to !== null && product.basePrice > to) return false;
       return true;
     });
-  }, [products, selectedCategories, selectedOccasions, priceFrom, priceTo]);
+  }, [products, selectedCategories, selectedOccasions, selectedAvailability, priceFrom, priceTo]);
 
   const filterProps = {
     categories,
@@ -87,6 +100,8 @@ export function CatalogView({
     onToggleCategory: toggleCategory,
     selectedOccasions,
     onToggleOccasion: toggleOccasion,
+    selectedAvailability,
+    onToggleAvailability: toggleAvailability,
     priceFrom,
     priceTo,
     onPriceFromChange: setPriceFrom,
@@ -113,9 +128,17 @@ export function CatalogView({
           className="inline-flex items-center gap-2 rounded-full border border-lavender-200 bg-white px-5 py-2.5 font-display text-sm font-medium text-ink lg:hidden"
         >
           Фильтры
-          {(selectedCategories.size > 0 || selectedOccasions.size > 0 || priceFrom || priceTo) && (
+          {(selectedCategories.size > 0 ||
+            selectedOccasions.size > 0 ||
+            selectedAvailability.size > 0 ||
+            priceFrom ||
+            priceTo) && (
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gold-500 text-[11px] font-semibold text-white">
-              {selectedCategories.size + selectedOccasions.size + (priceFrom ? 1 : 0) + (priceTo ? 1 : 0)}
+              {selectedCategories.size +
+                selectedOccasions.size +
+                selectedAvailability.size +
+                (priceFrom ? 1 : 0) +
+                (priceTo ? 1 : 0)}
             </span>
           )}
         </button>

@@ -261,13 +261,16 @@ export async function syncPosifloraCatalog(): Promise<CatalogSyncSummary> {
   }
 
   // Товары, которые раньше были реально синхронизированы (не
-  // seed:*-заглушки), но пропали из свежей выборки public+onWindow —
-  // мягко скрываем, не удаляем: на них может ссылаться order_items.
+  // seed:*-заглушки и не admin:*-товары, добавленные вручную в
+  // /admin/catalog — у них нет соответствия в Posiflora по определению),
+  // но пропали из свежей выборки public+onWindow — мягко скрываем,
+  // не удаляем: на них может ссылаться order_items.
   const { data: previouslySynced } = await supabaseAdmin
     .from("products")
     .select("id, posiflora_product_id")
     .eq("is_active", true)
-    .not("posiflora_product_id", "like", "seed:%");
+    .not("posiflora_product_id", "like", "seed:%")
+    .not("posiflora_product_id", "like", "admin:%");
 
   const toDeactivate = (previouslySynced ?? [])
     .filter((p) => !seenPosifloraIds.has(p.posiflora_product_id))
