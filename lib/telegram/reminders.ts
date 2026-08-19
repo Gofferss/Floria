@@ -154,7 +154,13 @@ export async function deleteReminder(id: string, chatId: number): Promise<boolea
 
 // ---------- Состояние диалога между сообщениями ----------
 
-export type BotSessionState = "idle" | "awaiting_add" | "awaiting_edit" | "awaiting_remind_days" | "awaiting_phone";
+export type BotSessionState =
+  | "idle"
+  | "awaiting_add"
+  | "awaiting_edit"
+  | "awaiting_remind_days"
+  | "awaiting_phone"
+  | "awaiting_otp_code";
 
 export type BotSession = {
   state: BotSessionState;

@@ -25,6 +25,7 @@ type OrderSummaryPanelProps = {
   onBonusInputChange: (value: string) => void;
   bonusApplied: number;
   availableBonus: number;
+  isLoggedIn: boolean;
   total: number;
   onSubmit: () => void;
   isSubmitting: boolean;
@@ -48,6 +49,7 @@ export function OrderSummaryPanel({
   onBonusInputChange,
   bonusApplied,
   availableBonus,
+  isLoggedIn,
   total,
   onSubmit,
   isSubmitting,
@@ -127,34 +129,54 @@ export function OrderSummaryPanel({
         )}
       </div>
 
-      {/* Бонусы */}
+      {/* Бонусы — доступны только вошедшим по СМС-коду: баланс и лимит
+          списания привязаны к сессии на сервере (см. /api/orders), а не
+          к телефону, вписанному в форму, — иначе можно было бы списать
+          чужие бонусы, просто зная чей-то номер. */}
       <div className="mt-5 border-t border-lavender-100 pt-5">
         <label htmlFor="bonusInput" className="font-display text-sm font-medium text-ink">
           Списать бонусы
         </label>
-        <div className="mt-2 flex items-center gap-2">
-          <input
-            id="bonusInput"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            max={availableBonus}
-            value={bonusInput}
-            onChange={(e) => onBonusInputChange(e.target.value)}
-            placeholder="0"
-            className="w-full rounded-xl border border-lavender-200 bg-lavender-50 px-4 py-2.5 font-body text-sm text-ink outline-none transition focus:border-gold-400 focus:bg-white focus:ring-2 focus:ring-gold-400/20"
-          />
-          <button
-            type="button"
-            onClick={() => onBonusInputChange(String(availableBonus))}
-            className="shrink-0 rounded-xl border border-lavender-200 px-3 py-2.5 font-body text-xs font-medium text-ink/70 transition hover:border-gold-300"
-          >
-            Все
-          </button>
-        </div>
-        <p className="mt-1.5 font-body text-xs text-ink/50">
-          Доступно {availableBonus} бонусов · 1 бонус = 1 ₽
-        </p>
+        {isLoggedIn ? (
+          <>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                id="bonusInput"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={availableBonus}
+                value={bonusInput}
+                onChange={(e) => onBonusInputChange(e.target.value)}
+                placeholder="0"
+                className="w-full rounded-xl border border-lavender-200 bg-lavender-50 px-4 py-2.5 font-body text-sm text-ink outline-none transition focus:border-gold-400 focus:bg-white focus:ring-2 focus:ring-gold-400/20"
+              />
+              <button
+                type="button"
+                onClick={() => onBonusInputChange(String(availableBonus))}
+                className="shrink-0 rounded-xl border border-lavender-200 px-3 py-2.5 font-body text-xs font-medium text-ink/70 transition hover:border-gold-300"
+              >
+                Все
+              </button>
+            </div>
+            <p className="mt-1.5 font-body text-xs text-ink/50">
+              Доступно {availableBonus} бонусов · 1 бонус = 1 ₽
+            </p>
+          </>
+        ) : (
+          <div className="mt-2 rounded-xl border border-dashed border-lavender-200 bg-lavender-50/60 px-4 py-3">
+            <p className="font-body text-xs leading-relaxed text-ink/60">
+              Войдите по коду из СМС, чтобы увидеть и списать накопленные бонусы.
+            </p>
+            <Link
+              href="/login?redirect=/checkout"
+              className="mt-1.5 inline-flex items-center gap-1 font-display text-xs font-semibold text-gold-600 hover:text-gold-700"
+            >
+              Войти
+              <ArrowRightIcon className="h-3 w-3" />
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Суммы */}

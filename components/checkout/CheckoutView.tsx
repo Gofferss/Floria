@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useCart } from "@/components/cart/CartProvider";
+import { createSupabaseBrowserClient } from "@/lib/auth/client";
 import { ContactFields } from "@/components/checkout/ContactFields";
 import { RecipientFields } from "@/components/checkout/RecipientFields";
 import { DeliveryFields } from "@/components/checkout/DeliveryFields";
@@ -10,7 +11,6 @@ import { CardMessageField } from "@/components/checkout/CardMessageField";
 import { OrderSummaryPanel } from "@/components/checkout/OrderSummaryPanel";
 import { BloomMark } from "@/components/ui/BloomMark";
 import { ArrowRightIcon, CheckIcon } from "@/components/ui/Icons";
-import { toE164RussianPhone } from "@/lib/phone-mask";
 import { trackEvent } from "@/lib/analytics/track";
 import {
   DELIVERY_PRICE,
@@ -60,38 +60,54 @@ export function CheckoutView() {
   const [orderNumber, setOrderNumber] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Реальный баланс бонусов клиента — раньше здесь была захардкоженная
-  // демо-константа 480, из-за которой любой посетитель мог списать до 480
-  // бонусов вне зависимости от того, сколько у него есть на самом деле.
-  // Подгружается по мере ввода телефона; окончательный лимит всё равно
-  // пересчитывается на сервере при отправке заказа (см. /api/orders) — этот
-  // подтягивается только для честного отображения в форме.
+  // Реальный баланс бонусов клиента. Раньше подтягивался по номеру,
+  // вписанному в форму, — а сервер после отправки заказа доверял этому
+  // же номеру для лимита списания. Из-за этого можно было списать чужие
+  // бонусы, просто зная (или подобрав) чей-то телефон. Теперь баланс
+  // виден и списываем только для реально вошедшей сессии (SMS-код на
+  // /login) — /api/customer-bonus больше не принимает номер, отдаёт
+  // баланс только текущего пользователя, то же самое проверяет и
+  // /api/orders на момент оформления.
   const [availableBonus, setAvailableBonus] = useState(0);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    const normalizedPhone = toE164RussianPhone(customerPhone);
-    if (!normalizedPhone) {
-      setAvailableBonus(0);
-      return;
-    }
-
     let cancelled = false;
-    const timeoutId = window.setTimeout(async () => {
+
+    async function loadBonusForSession() {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        if (!cancelled) {
+          setIsLoggedIn(false);
+          setAvailableBonus(0);
+        }
+        return;
+      }
+
       try {
-        const response = await fetch(`/api/customer-bonus?phone=${encodeURIComponent(normalizedPhone)}`);
+        const response = await fetch("/api/customer-bonus");
         const result = await response.json();
-        if (!cancelled) setAvailableBonus(Number(result?.bonusBalance) || 0);
+        if (cancelled) return;
+        setIsLoggedIn(Boolean(result?.loggedIn));
+        setAvailableBonus(Number(result?.bonusBalance) || 0);
       } catch (error) {
         console.error("Не удалось получить баланс бонусов:", error);
-        if (!cancelled) setAvailableBonus(0);
+        if (!cancelled) {
+          setIsLoggedIn(false);
+          setAvailableBonus(0);
+        }
       }
-    }, 500);
+    }
 
+    loadBonusForSession();
     return () => {
       cancelled = true;
-      window.clearTimeout(timeoutId);
     };
-  }, [customerPhone]);
+  }, []);
 
   const deliveryPrice = subtotal === 0 || subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_PRICE;
   // Бонусы ограничены суммой ПОСЛЕ скидки по промокоду — тот же порядок,
@@ -357,6 +373,7 @@ export function CheckoutView() {
             onBonusInputChange={setBonusInput}
             bonusApplied={bonusApplied}
             availableBonus={maxBonus}
+            isLoggedIn={isLoggedIn}
             total={total}
             onSubmit={handleSubmit}
             isSubmitting={status === "submitting"}

@@ -3,10 +3,11 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { createPosifloraOrder } from "@/lib/posiflora";
 import { getProductBySlug } from "@/lib/products";
 import { validatePromoCode, recordPromoCodeRedemption } from "@/lib/promo-codes";
-import { resolveOrCreateCustomerByPhone } from "@/lib/customer-sync";
+import { resolveOrCreateCustomerByPhone, refreshCustomerBonusBalance } from "@/lib/customer-sync";
 import { toE164RussianPhone } from "@/lib/phone-mask";
 import { notifyN8n, notifyStaffTelegram } from "@/lib/n8n";
 import { escapeTelegramHtml } from "@/lib/telegram/bot";
+import { createSupabaseServerClient } from "@/lib/auth/server";
 import {
   DELIVERY_PRICE,
   FREE_DELIVERY_THRESHOLD,
@@ -149,21 +150,58 @@ export async function POST(request: Request) {
     discountAmount = promoResult.discountAmount;
   }
 
-  // Резолвим клиента по телефону — источник правды для лимита списания
-  // бонусов. Раньше лимит был захардкожен константой (AVAILABLE_BONUS_DEMO
-  // = 480) и любой посетитель мог списать до 480 бонусов вне зависимости
-  // от реального баланса. При сбое (Posiflora/БД недоступны) — безопасный
-  // дефолт: 0 бонусов, а не доверие тому, что прислал клиент.
+  // Резолвим клиента по телефону — источник правды для ФИО/адреса заказа
+  // и связки с Posiflora, но НЕ для лимита списания бонусов (см. ниже).
   let customerId: string | null = null;
   let posifloraClientId: string | null = null;
-  let currentBonusBalance = 0;
   try {
     const resolved = await resolveOrCreateCustomerByPhone(payload.customerPhone, payload.customerName);
     customerId = resolved.customerId;
     posifloraClientId = resolved.posifloraClientId;
-    currentBonusBalance = resolved.bonusBalance;
   } catch (error) {
     console.error("Не удалось определить клиента для заказа:", error);
+  }
+
+  // Лимит списания бонусов берём ТОЛЬКО из настоящей вошедшей сессии
+  // (SMS-код на /login), а не из payload.customerPhone. Раньше баланс
+  // резолвился по любому телефону, который прислал клиент в теле
+  // запроса, — это позволяло указать чужой номер получателем/заказчиком
+  // и списать ЕГО бонусы на скидку себе, зная (или подобрав) только сам
+  // номер. Гость без входа бонусов списать не может — currentBonusBalance
+  // остаётся 0, что дальше просто обнуляет bonusUsed через тот же Math.min,
+  // что был и раньше.
+  let currentBonusBalance = 0;
+  try {
+    const supabase = createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      const supabaseAdmin = getSupabaseAdmin();
+      const { data: authCustomer } = await supabaseAdmin
+        .from("customers")
+        .select("id, posiflora_client_id, bonus_balance")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
+
+      if (authCustomer) {
+        currentBonusBalance =
+          typeof authCustomer.bonus_balance === "string"
+            ? Number.parseFloat(authCustomer.bonus_balance)
+            : (authCustomer.bonus_balance as number) ?? 0;
+
+        // Живой баланс прямо перед списанием — кэш мог отстать (см.
+        // BONUS_SYNC_STALE_MS), а здесь речь о реальном списании денег,
+        // а не просто отображении, так что освежаем в любом случае.
+        if (authCustomer.posiflora_client_id) {
+          const fresh = await refreshCustomerBonusBalance(authCustomer.id, authCustomer.posiflora_client_id);
+          if (fresh !== null) currentBonusBalance = fresh;
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Не удалось определить баланс бонусов вошедшего клиента:", error);
   }
 
   // Бонусы ограничены суммой, которая осталась ПОСЛЕ скидки по промокоду —

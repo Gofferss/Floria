@@ -11,6 +11,7 @@ import {
 import { parseReminderDate, formatDayMonth } from "@/lib/telegram/date-parse";
 import { CONTACTS } from "@/lib/contacts";
 import { toE164RussianPhone } from "@/lib/phone-mask";
+import { sendPhoneOtp, verifyPhoneOtp } from "@/lib/auth/otp";
 import { findPosifloraClientByPhone } from "@/lib/posiflora";
 import {
   ensureBotUser,
@@ -126,6 +127,17 @@ const BONUS_INVALID_PHONE_TEXT =
   "Не похоже на номер телефона 🤔 Введите 10 цифр после +7, например: +7 978 123-45-67";
 
 const BONUS_ERROR_TEXT = "Не получилось проверить баланс — сервис временно недоступен. Попробуйте чуть позже 🙏";
+
+// Баланс бонусов — чувствительные данные (по сути деньги), поэтому перед
+// показом номер подтверждаем кодом из СМС — тем же способом, что и вход
+// на сайте (lib/auth/otp.ts). Без этого шага кто угодно, зная чужой
+// номер, мог бы узнать (а на сайте раньше — ещё и потратить) чужие бонусы.
+function otpPromptText(displayPhone: string): string {
+  return `Отправили код на ${displayPhone} — введите его, чтобы посмотреть баланс.\n\nКод действует несколько минут.`;
+}
+
+const OTP_SEND_ERROR_TEXT = "Не получилось отправить код — проверьте номер или попробуйте чуть позже 🙏";
+const OTP_INVALID_TEXT = "Неверный или устаревший код 🤔 Проверьте и попробуйте снова.";
 
 function formatPhoneForDisplay(e164: string): string {
   // +79781234567 → +7 978 123-45-67
@@ -278,13 +290,11 @@ async function finalizeReminder(chatId: number, session: BotSession, remindDaysB
 }
 
 /**
- * Проверка баланса по номеру — спрашивает Posiflora напрямую (не наш
- * кэш customers), потому что бонусная карта могла завестись и в
- * шоуруме, без единого захода на сайт. Ошибка Posiflora не должна
- * выглядеть как "такого номера нет" — это разные ответы пользователю.
- * Всегда вызывается в ответ на текст пользователя — mode всегда "fresh".
+ * Первый шаг проверки баланса — только принимает номер и отправляет код
+ * подтверждения, саму Posiflora ещё не спрашиваем. Всегда в ответ на
+ * текст пользователя — mode всегда "fresh".
  */
-async function handleBonusBalanceLookup(chatId: number, rawText: string, oldMessageId: number | null): Promise<void> {
+async function handleBonusPhoneSubmitted(chatId: number, rawText: string, oldMessageId: number | null): Promise<void> {
   const phone = toE164RussianPhone(rawText);
   if (!phone) {
     // Сессию не сбрасываем — следующее сообщение можно сразу слать поправленным.
@@ -293,13 +303,38 @@ async function handleBonusBalanceLookup(chatId: number, rawText: string, oldMess
     return;
   }
 
+  const sent = await sendPhoneOtp(phone);
+  if (!sent.ok) {
+    console.error("[handleBonusPhoneSubmitted] sendPhoneOtp", sent.error);
+    const newId = await render(chatId, { kind: "fresh", oldMessageId }, OTP_SEND_ERROR_TEXT, CANCEL_KEYBOARD);
+    await setSession(chatId, "awaiting_phone", { menuMessageId: newId });
+    return;
+  }
+
+  const newId = await render(
+    chatId,
+    { kind: "fresh", oldMessageId },
+    otpPromptText(formatPhoneForDisplay(phone)),
+    CANCEL_KEYBOARD
+  );
+  await setSession(chatId, "awaiting_otp_code", { phone, menuMessageId: newId });
+}
+
+/**
+ * Второй шаг — код из СМС подтверждён, теперь можно спрашивать баланс.
+ * Спрашивает Posiflora напрямую (не наш кэш customers), потому что
+ * бонусная карта могла завестись и в шоуруме, без единого захода на
+ * сайт. Ошибка Posiflora не должна выглядеть как "такого номера нет" —
+ * это разные ответы пользователю.
+ */
+async function revealBonusBalance(chatId: number, phone: string, oldMessageId: number | null): Promise<void> {
   const displayPhone = formatPhoneForDisplay(phone);
 
   let client: { posifloraClientId: string; bonusBalance: number } | null;
   try {
     client = await findPosifloraClientByPhone(phone);
   } catch (error) {
-    console.error("[handleBonusBalanceLookup]", error);
+    console.error("[revealBonusBalance]", error);
     const newId = await render(chatId, { kind: "fresh", oldMessageId }, BONUS_ERROR_TEXT, MAIN_MENU);
     await setSession(chatId, "idle", { menuMessageId: newId });
     return;
@@ -335,6 +370,25 @@ async function handleBonusBalanceLookup(chatId: number, rawText: string, oldMess
     }
   );
   await setSession(chatId, "idle", { menuMessageId: newId });
+}
+
+/** Третий шаг — проверяем код, введённый пользователем, и только при успехе идём в revealBonusBalance. */
+async function handleBonusOtpSubmitted(chatId: number, code: string, phone: string, oldMessageId: number | null): Promise<void> {
+  const trimmed = code.trim();
+  if (!trimmed) {
+    const newId = await render(chatId, { kind: "fresh", oldMessageId }, OTP_INVALID_TEXT, CANCEL_KEYBOARD);
+    await setSession(chatId, "awaiting_otp_code", { phone, menuMessageId: newId });
+    return;
+  }
+
+  const verified = await verifyPhoneOtp(phone, trimmed);
+  if (!verified.ok) {
+    const newId = await render(chatId, { kind: "fresh", oldMessageId }, OTP_INVALID_TEXT, CANCEL_KEYBOARD);
+    await setSession(chatId, "awaiting_otp_code", { phone, menuMessageId: newId });
+    return;
+  }
+
+  await revealBonusBalance(chatId, phone, oldMessageId);
 }
 
 async function handleMessage(message: NonNullable<TelegramUpdate["message"]>): Promise<void> {
@@ -427,7 +481,18 @@ async function handleMessage(message: NonNullable<TelegramUpdate["message"]>): P
   }
 
   if (session.state === "awaiting_phone") {
-    await handleBonusBalanceLookup(chatId, text, menuMessageId);
+    await handleBonusPhoneSubmitted(chatId, text, menuMessageId);
+    return;
+  }
+
+  if (session.state === "awaiting_otp_code") {
+    const phone = session.pending.phone as string | undefined;
+    if (!phone) {
+      const newId = await render(chatId, freshMode, "Что-то пошло не так, начните заново.", MAIN_MENU);
+      await setSession(chatId, "idle", { menuMessageId: newId });
+      return;
+    }
+    await handleBonusOtpSubmitted(chatId, text, phone, menuMessageId);
     return;
   }
 
