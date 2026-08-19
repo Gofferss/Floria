@@ -2,9 +2,18 @@
 // Тонкая обёртка над Telegram Bot API. Используется и вебхуком
 // (app/api/telegram/webhook), и cron-эндпоинтом рассылки напоминаний
 // (app/api/telegram/send-due-reminders), и рассылкой из админки.
+//
+// Исходящие запросы идут через supabase/functions/telegram-relay —
+// прямая сеть с этого VPS до api.telegram.org временами обрывается
+// (эффект блокировки Telegram в РФ, ловит именно его IP/протокол).
+// Relay работает на инфраструктуре Supabase Edge Functions (Deno
+// Deploy) — туда с этого сервера всё стабильно, а оттуда до Telegram
+// уже обычный, не помеченный трафик. TELEGRAM_API_BASE — override на
+// случай отладки (вернуть на api.telegram.org напрямую).
 // ================================================================
 
-const TELEGRAM_API_BASE = "https://api.telegram.org";
+const TELEGRAM_API_BASE =
+  process.env.TELEGRAM_API_BASE ?? "https://qgogldtdzhyqiarvpgwk.supabase.co/functions/v1/telegram-relay";
 
 export class TelegramApiError extends Error {
   constructor(
