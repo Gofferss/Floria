@@ -38,9 +38,18 @@ function isValidDayMonth(day: number, month: number): boolean {
 export function parseReminderDate(text: string): ParsedDate | null {
   const normalized = text.toLowerCase();
 
-  // "17 августа"
+  // "17 августа" — НЕ \b после названия месяца: \b в JS считает границей
+  // переход \w/не-\w, а \w — только ASCII (a-z0-9_), кириллица в него не
+  // входит. Значит "августа" в конце строки (или перед пробелом) для \b
+  // выглядит как "не-\w сразу за не-\w" — то есть НЕ граница, и \b там не
+  // сработает никогда. Из-за этого "18 августа у жены др" не находил дату:
+  // паттерн не мог замкнуться после "августа". Числовые даты (17.08) эту
+  // ошибку не ловили — за них по границе стоит цифра, а цифры входят в \w.
+  // Правильная замена — явная проверка "дальше не буква" через \p{L}.
   const monthNames = Object.keys(MONTH_GENITIVE).join("|");
-  const namedMatch = normalized.match(new RegExp(`\\b(\\d{1,2})\\s+(${monthNames})\\b`, "u"));
+  const namedMatch = normalized.match(
+    new RegExp(`(?<![\\p{L}\\d])(\\d{1,2})\\s+(${monthNames})(?!\\p{L})`, "u")
+  );
   if (namedMatch) {
     const day = Number(namedMatch[1]);
     const month = MONTH_GENITIVE[namedMatch[2]];

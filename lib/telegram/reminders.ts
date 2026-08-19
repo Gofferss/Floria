@@ -82,11 +82,12 @@ export async function addReminder(
   chatId: number,
   title: string,
   day: number,
-  month: number
+  month: number,
+  remindDaysBefore: number
 ): Promise<BotReminder | null> {
   const { data, error } = await getSupabaseAdmin()
     .from("bot_reminders")
-    .insert({ chat_id: chatId, title, event_day: day, event_month: month })
+    .insert({ chat_id: chatId, title, event_day: day, event_month: month, remind_days_before: remindDaysBefore })
     .select()
     .single();
 
@@ -131,11 +132,12 @@ export async function updateReminder(
   chatId: number,
   title: string,
   day: number,
-  month: number
+  month: number,
+  remindDaysBefore: number
 ): Promise<boolean> {
   const { error } = await getSupabaseAdmin()
     .from("bot_reminders")
-    .update({ title, event_day: day, event_month: month, last_notified_year: null })
+    .update({ title, event_day: day, event_month: month, remind_days_before: remindDaysBefore, last_notified_year: null })
     .eq("id", id)
     .eq("chat_id", chatId);
 
@@ -152,7 +154,7 @@ export async function deleteReminder(id: string, chatId: number): Promise<boolea
 
 // ---------- Состояние диалога между сообщениями ----------
 
-export type BotSessionState = "idle" | "awaiting_add" | "awaiting_edit" | "awaiting_phone";
+export type BotSessionState = "idle" | "awaiting_add" | "awaiting_edit" | "awaiting_remind_days" | "awaiting_phone";
 
 export type BotSession = {
   state: BotSessionState;
