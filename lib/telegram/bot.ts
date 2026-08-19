@@ -159,3 +159,7 @@ export async function editMessageReplyMarkup(
     reply_markup: replyMarkup ?? { inline_keyboard: [] },
   });
 }
+
+export async function deleteMessage(chatId: number, messageId: number): Promise<void> {
+  await callTelegramApi("deleteMessage", { chat_id: chatId, message_id: messageId });
+}

@@ -4,6 +4,7 @@ import {
   sendMessage,
   editMessageText,
   editMessageReplyMarkup,
+  deleteMessage,
   answerCallbackQuery,
   type InlineKeyboardMarkup,
 } from "@/lib/telegram/bot";
@@ -34,14 +35,27 @@ export const runtime = "nodejs";
 // Telegram стейтлесс — состояние между сообщениями хранится в таблице
 // bot_sessions (lib/telegram/reminders.ts), включая id "рабочего"
 // сообщения (pending.menuMessageId): вместо того чтобы на каждый шаг
-// слать новое сообщение, бот РЕДАКТИРУЕТ это одно — навигация выглядит
-// как один экран, который меняется, а не бесконечная лента сообщений.
-// Свежим сообщением он становится заново только если редактирование не
-// удалось (например, старое сообщение стёрли) — см. renderControl.
+// слать новое сообщение, бот держит только ОДНО активное своё сообщение
+// и меняет его — см. render() и RenderMode ниже. Два способа "сменить
+// экран", по источнику события:
 //
-// Текст, который печатает сам пользователь (дата, номер телефона),
-// остаётся в чате как обычно — его никто не трогает и не удаляет,
-// редактируется только СВОЁ сообщение бота.
+//   - клик по кнопке (callback_query) → EDIT на месте (editMessageText).
+//     Пользователь и так смотрит именно в это сообщение — тут это и
+//     быстро, и не дёргает скролл.
+//   - ответ обычным текстом (дата, телефон, число дней) → DELETE
+//     старого рабочего сообщения + отправка нового. Если вместо этого
+//     редактировать старое, оно рискует остаться далеко вверху экрана,
+//     пока сообщения самого пользователя (а их бывает несколько подряд,
+//     если он не сразу попал в нужный формат) уезжают вниз — тогда
+//     кажется, что бот не отвечает, хотя он просто "ответил" где-то
+//     невидимо в истории чата. Удаление+новое сообщение держит ответ
+//     бота рядом с тем, что печатает пользователь, и при этом в чате
+//     всё равно висит только одно сообщение бота одновременно — то же
+//     сокращение "простыни", просто отслеживающее место, а не только
+//     количество сообщений.
+//
+// Текст, который печатает сам пользователь, никогда не трогаем —
+// удаляется только СВОЁ сообщение бота, и только предыдущее рабочее.
 //
 // Сама рассылка "за N дней до даты" сюда не входит — см.
 // app/api/telegram/send-due-reminders, его дёргает по расписанию n8n
@@ -139,25 +153,35 @@ type TelegramUpdate = {
 };
 
 /**
- * Единая точка показа "рабочего экрана" — пробует отредактировать
- * messageId, если он есть; если редактирование не удалось (сообщение
- * стёрли, слишком старое и т.п.) — шлёт новое и возвращает его id.
- * Вызывающий код каждый раз обязан сохранить возвращённый id обратно в
- * сессию (pending.menuMessageId), иначе следующий шаг снова начнёт
- * слать новые сообщения.
+ * "edit" — событие пришло из клика по кнопке, messageId точно известен
+ * (Telegram присылает его в самом callback_query) и точно свежий.
+ * "fresh" — событие пришло из текста пользователя; oldMessageId — то,
+ * что было активным рабочим сообщением до этого (может быть null,
+ * если это первое сообщение вообще).
  */
-async function renderControl(
-  chatId: number,
-  messageId: number | null,
-  text: string,
-  keyboard?: InlineKeyboardMarkup
-): Promise<number> {
-  if (messageId) {
+type RenderMode = { kind: "edit"; messageId: number } | { kind: "fresh"; oldMessageId: number | null };
+
+/**
+ * Единая точка показа "рабочего экрана" — см. RenderMode и комментарий
+ * в начале файла. Вызывающий код каждый раз обязан сохранить
+ * возвращённый id обратно в сессию (pending.menuMessageId).
+ */
+async function render(chatId: number, mode: RenderMode, text: string, keyboard?: InlineKeyboardMarkup): Promise<number> {
+  if (mode.kind === "edit") {
     try {
-      await editMessageText(chatId, messageId, text, keyboard);
-      return messageId;
+      await editMessageText(chatId, mode.messageId, text, keyboard);
+      return mode.messageId;
     } catch (error) {
-      console.warn("[renderControl] edit failed, sending new message instead:", error);
+      console.warn("[render] edit failed, falling back to delete+send:", error);
+    }
+  }
+
+  const staleId = mode.kind === "edit" ? mode.messageId : mode.oldMessageId;
+  if (staleId) {
+    try {
+      await deleteMessage(chatId, staleId);
+    } catch (error) {
+      console.warn("[render] delete of stale message failed (likely already gone):", error);
     }
   }
   const sent = await sendMessage(chatId, text, keyboard);
@@ -199,30 +223,29 @@ function remindersListKeyboard(reminders: BotReminder[], confirmDeleteId?: strin
   return { inline_keyboard: rows };
 }
 
-async function showMainMenu(chatId: number, messageId: number | null): Promise<void> {
-  const newId = await renderControl(chatId, messageId, WELCOME_TEXT, MAIN_MENU);
+async function showMainMenu(chatId: number, mode: RenderMode): Promise<void> {
+  const newId = await render(chatId, mode, WELCOME_TEXT, MAIN_MENU);
   await setSession(chatId, "idle", { menuMessageId: newId });
 }
 
-async function startAddFlow(chatId: number, messageId: number | null): Promise<void> {
-  const newId = await renderControl(chatId, messageId, ADD_PROMPT, CANCEL_KEYBOARD);
+async function startAddFlow(chatId: number, mode: RenderMode): Promise<void> {
+  const newId = await render(chatId, mode, ADD_PROMPT, CANCEL_KEYBOARD);
   await setSession(chatId, "awaiting_add", { menuMessageId: newId });
 }
 
-async function startBonusFlow(chatId: number, messageId: number | null): Promise<void> {
-  const newId = await renderControl(chatId, messageId, BONUS_PHONE_PROMPT, CANCEL_KEYBOARD);
+async function startBonusFlow(chatId: number, mode: RenderMode): Promise<void> {
+  const newId = await render(chatId, mode, BONUS_PHONE_PROMPT, CANCEL_KEYBOARD);
   await setSession(chatId, "awaiting_phone", { menuMessageId: newId });
 }
 
-async function showReminders(chatId: number, messageId: number | null): Promise<void> {
+async function showReminders(chatId: number, mode: RenderMode): Promise<void> {
   const reminders = await listReminders(chatId);
-  const newId = await renderControl(chatId, messageId, remindersListText(reminders), remindersListKeyboard(reminders));
+  const newId = await render(chatId, mode, remindersListText(reminders), remindersListKeyboard(reminders));
   await setSession(chatId, "idle", { menuMessageId: newId });
 }
 
 /** Общий финальный шаг для "добавить" и "изменить" — оба доходят сюда после выбора срока напоминания. */
-async function finalizeReminder(chatId: number, session: BotSession, remindDaysBefore: number): Promise<void> {
-  const menuMessageId = menuMessageIdOf(session);
+async function finalizeReminder(chatId: number, session: BotSession, remindDaysBefore: number, mode: RenderMode): Promise<void> {
   const pending = session.pending as {
     mode?: "add" | "edit";
     title?: string;
@@ -232,7 +255,7 @@ async function finalizeReminder(chatId: number, session: BotSession, remindDaysB
   };
 
   if (!pending.title || !pending.day || !pending.month) {
-    const newId = await renderControl(chatId, menuMessageId, "Что-то пошло не так, начните заново.", MAIN_MENU);
+    const newId = await render(chatId, mode, "Что-то пошло не так, начните заново.", MAIN_MENU);
     await setSession(chatId, "idle", { menuMessageId: newId });
     return;
   }
@@ -250,7 +273,7 @@ async function finalizeReminder(chatId: number, session: BotSession, remindDaysB
       : "Не получилось сохранить, попробуйте ещё раз.";
   }
 
-  const newId = await renderControl(chatId, menuMessageId, resultText, MAIN_MENU);
+  const newId = await render(chatId, mode, resultText, MAIN_MENU);
   await setSession(chatId, "idle", { menuMessageId: newId });
 }
 
@@ -259,12 +282,13 @@ async function finalizeReminder(chatId: number, session: BotSession, remindDaysB
  * кэш customers), потому что бонусная карта могла завестись и в
  * шоуруме, без единого захода на сайт. Ошибка Posiflora не должна
  * выглядеть как "такого номера нет" — это разные ответы пользователю.
+ * Всегда вызывается в ответ на текст пользователя — mode всегда "fresh".
  */
-async function handleBonusBalanceLookup(chatId: number, rawText: string, menuMessageId: number | null): Promise<void> {
+async function handleBonusBalanceLookup(chatId: number, rawText: string, oldMessageId: number | null): Promise<void> {
   const phone = toE164RussianPhone(rawText);
   if (!phone) {
     // Сессию не сбрасываем — следующее сообщение можно сразу слать поправленным.
-    const newId = await renderControl(chatId, menuMessageId, BONUS_INVALID_PHONE_TEXT, CANCEL_KEYBOARD);
+    const newId = await render(chatId, { kind: "fresh", oldMessageId }, BONUS_INVALID_PHONE_TEXT, CANCEL_KEYBOARD);
     await setSession(chatId, "awaiting_phone", { menuMessageId: newId });
     return;
   }
@@ -276,15 +300,15 @@ async function handleBonusBalanceLookup(chatId: number, rawText: string, menuMes
     client = await findPosifloraClientByPhone(phone);
   } catch (error) {
     console.error("[handleBonusBalanceLookup]", error);
-    const newId = await renderControl(chatId, menuMessageId, BONUS_ERROR_TEXT, MAIN_MENU);
+    const newId = await render(chatId, { kind: "fresh", oldMessageId }, BONUS_ERROR_TEXT, MAIN_MENU);
     await setSession(chatId, "idle", { menuMessageId: newId });
     return;
   }
 
   if (!client) {
-    const newId = await renderControl(
+    const newId = await render(
       chatId,
-      menuMessageId,
+      { kind: "fresh", oldMessageId },
       `Не нашли номер ${displayPhone} в нашей базе 🤔\n\n` +
         "Зарегистрируйтесь на сайте — это займёт меньше минуты, и бонусы начнут копиться с первого заказа.",
       {
@@ -298,9 +322,9 @@ async function handleBonusBalanceLookup(chatId: number, rawText: string, menuMes
     return;
   }
 
-  const newId = await renderControl(
+  const newId = await render(
     chatId,
-    menuMessageId,
+    { kind: "fresh", oldMessageId },
     `🎁 Баланс бонусов по номеру ${displayPhone}: <b>${client.bonusBalance} ₽</b>\n\n` +
       "Можно списать их при оформлении букета на сайте — просто укажите этот же номер при заказе.",
     {
@@ -320,40 +344,39 @@ async function handleMessage(message: NonNullable<TelegramUpdate["message"]>): P
   await ensureBotUser(chatId, message.from?.first_name, message.from?.username);
 
   if (text.startsWith("/start")) {
-    await showMainMenu(chatId, null);
+    // /start тоже отвечает на текст пользователя — тот же приём: убрать
+    // старое рабочее сообщение (если было) и прислать новое рядом с текущим.
+    const priorSession = await getSession(chatId);
+    await showMainMenu(chatId, { kind: "fresh", oldMessageId: menuMessageIdOf(priorSession) });
     return;
   }
 
   const session = await getSession(chatId);
   const menuMessageId = menuMessageIdOf(session);
+  const freshMode: RenderMode = { kind: "fresh", oldMessageId: menuMessageId };
 
   if (text === "/add" || text.startsWith("/add@")) {
-    await startAddFlow(chatId, menuMessageId);
+    await startAddFlow(chatId, freshMode);
     return;
   }
   if (text === "/reminders" || text.startsWith("/reminders@")) {
-    await showReminders(chatId, menuMessageId);
+    await showReminders(chatId, freshMode);
     return;
   }
   if (text === "/bonus" || text.startsWith("/bonus@")) {
-    await startBonusFlow(chatId, menuMessageId);
+    await startBonusFlow(chatId, freshMode);
     return;
   }
 
   if (session.state === "awaiting_add") {
     const parsed = parseReminderDate(text);
     if (!parsed) {
-      const newId = await renderControl(chatId, menuMessageId, PARSE_ERROR_TEXT, CANCEL_KEYBOARD);
+      const newId = await render(chatId, freshMode, PARSE_ERROR_TEXT, CANCEL_KEYBOARD);
       await setSession(chatId, "awaiting_add", { menuMessageId: newId });
       return;
     }
 
-    const newId = await renderControl(
-      chatId,
-      menuMessageId,
-      remindDaysPromptText(parsed.day, parsed.month),
-      remindDaysKeyboard()
-    );
+    const newId = await render(chatId, freshMode, remindDaysPromptText(parsed.day, parsed.month), remindDaysKeyboard());
     await setSession(chatId, "awaiting_remind_days", {
       mode: "add",
       title: text,
@@ -367,24 +390,19 @@ async function handleMessage(message: NonNullable<TelegramUpdate["message"]>): P
   if (session.state === "awaiting_edit") {
     const editingId = session.pending.editingId as string | undefined;
     if (!editingId) {
-      const newId = await renderControl(chatId, menuMessageId, "Что-то пошло не так, начните заново.", MAIN_MENU);
+      const newId = await render(chatId, freshMode, "Что-то пошло не так, начните заново.", MAIN_MENU);
       await setSession(chatId, "idle", { menuMessageId: newId });
       return;
     }
 
     const parsed = parseReminderDate(text);
     if (!parsed) {
-      const newId = await renderControl(chatId, menuMessageId, PARSE_ERROR_TEXT, CANCEL_KEYBOARD);
+      const newId = await render(chatId, freshMode, PARSE_ERROR_TEXT, CANCEL_KEYBOARD);
       await setSession(chatId, "awaiting_edit", { editingId, menuMessageId: newId });
       return;
     }
 
-    const newId = await renderControl(
-      chatId,
-      menuMessageId,
-      remindDaysPromptText(parsed.day, parsed.month),
-      remindDaysKeyboard()
-    );
+    const newId = await render(chatId, freshMode, remindDaysPromptText(parsed.day, parsed.month), remindDaysKeyboard());
     await setSession(chatId, "awaiting_remind_days", {
       mode: "edit",
       editingId,
@@ -400,11 +418,11 @@ async function handleMessage(message: NonNullable<TelegramUpdate["message"]>): P
     const trimmed = text.trim();
     const n = Number.parseInt(trimmed, 10);
     if (!Number.isInteger(n) || n < 1 || n > 365 || String(n) !== trimmed) {
-      const newId = await renderControl(chatId, menuMessageId, REMIND_DAYS_INVALID_TEXT, remindDaysKeyboard());
+      const newId = await render(chatId, freshMode, REMIND_DAYS_INVALID_TEXT, remindDaysKeyboard());
       await setSession(chatId, "awaiting_remind_days", { ...session.pending, menuMessageId: newId });
       return;
     }
-    await finalizeReminder(chatId, session, n);
+    await finalizeReminder(chatId, session, n, freshMode);
     return;
   }
 
@@ -414,7 +432,7 @@ async function handleMessage(message: NonNullable<TelegramUpdate["message"]>): P
   }
 
   // idle + произвольный текст — просто показываем меню, не пытаемся угадать намерение.
-  const newId = await renderControl(chatId, menuMessageId, "Выберите действие:", MAIN_MENU);
+  const newId = await render(chatId, freshMode, "Выберите действие:", MAIN_MENU);
   await setSession(chatId, "idle", { menuMessageId: newId });
 }
 
@@ -432,28 +450,29 @@ async function handleCallbackQuery(
 
   await ensureBotUser(chatId, callbackQuery.from.first_name, callbackQuery.from.username);
   const session = await getSession(chatId);
+  const editMode: RenderMode = { kind: "edit", messageId };
 
   if (data === "menu") {
     await answerCallbackQuery(callbackQuery.id);
-    await showMainMenu(chatId, messageId);
+    await showMainMenu(chatId, editMode);
     return;
   }
 
   if (data === "add") {
     await answerCallbackQuery(callbackQuery.id);
-    await startAddFlow(chatId, messageId);
+    await startAddFlow(chatId, editMode);
     return;
   }
 
   if (data === "bonus_balance") {
     await answerCallbackQuery(callbackQuery.id);
-    await startBonusFlow(chatId, messageId);
+    await startBonusFlow(chatId, editMode);
     return;
   }
 
   if (data === "list") {
     await answerCallbackQuery(callbackQuery.id);
-    await showReminders(chatId, messageId);
+    await showReminders(chatId, editMode);
     return;
   }
 
@@ -461,10 +480,10 @@ async function handleCallbackQuery(
     const n = Number(data.slice("remind_days:".length));
     await answerCallbackQuery(callbackQuery.id);
     if (session.state !== "awaiting_remind_days" || !Number.isInteger(n)) {
-      await showMainMenu(chatId, messageId);
+      await showMainMenu(chatId, editMode);
       return;
     }
-    await finalizeReminder(chatId, session, n);
+    await finalizeReminder(chatId, session, n, editMode);
     return;
   }
 
@@ -474,14 +493,14 @@ async function handleCallbackQuery(
     await answerCallbackQuery(callbackQuery.id);
 
     if (!reminder) {
-      const newId = await renderControl(chatId, messageId, "Это напоминание уже не найдено.", MAIN_MENU);
+      const newId = await render(chatId, editMode, "Это напоминание уже не найдено.", MAIN_MENU);
       await setSession(chatId, "idle", { menuMessageId: newId });
       return;
     }
 
-    const newId = await renderControl(
+    const newId = await render(
       chatId,
-      messageId,
+      editMode,
       `Сейчас: «${escapeHtml(reminder.title)}» (${formatDayMonth(reminder.eventDay, reminder.eventMonth)}, ` +
         `за ${reminder.remindDaysBefore} дн.).\n\nПришлите новый текст с датой — целиком, одним сообщением.`,
       CANCEL_KEYBOARD
@@ -494,7 +513,7 @@ async function handleCallbackQuery(
     const id = data.slice("delete_confirm:".length);
     await deleteReminder(id, chatId);
     await answerCallbackQuery(callbackQuery.id, "Удалено");
-    await showReminders(chatId, messageId);
+    await showReminders(chatId, editMode);
     return;
   }
 
