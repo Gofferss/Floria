@@ -19,3 +19,5 @@ export {
 } from "./orders";
 
 export { syncPosifloraCatalog, type CatalogSyncSummary } from "./catalog";
+
+export { searchInventoryItems, getAllAvailableInventoryItemIds, type InventoryItemOption } from "./inventory";

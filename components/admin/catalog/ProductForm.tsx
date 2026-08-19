@@ -1,13 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   createProduct,
   updateProduct,
   uploadProductImage,
+  searchInventoryItemsAction,
   type AdminCategory,
   type AdminProductDetail,
+  type AvailabilitySource,
+  type RecipeItemInput,
 } from "@/lib/actions/catalog";
 import { slugify } from "@/lib/blog";
 import type { OccasionOption } from "@/lib/occasions";
@@ -48,6 +51,15 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
   const [availabilityMode, setAvailabilityMode] = useState<AvailabilityMode>(
     product?.availabilityMode ?? "in_stock"
   );
+  const [availabilitySource, setAvailabilitySource] = useState<AvailabilitySource>(
+    product?.availabilitySource ?? "manual"
+  );
+  const [recipeItems, setRecipeItems] = useState<(RecipeItemInput & { key: string })[]>(
+    (product?.recipeItems ?? []).map((r) => ({ ...r, key: randomSizeId() }))
+  );
+  const [recipeSearch, setRecipeSearch] = useState("");
+  const [recipeSearchResults, setRecipeSearchResults] = useState<{ id: string; title: string }[]>([]);
+  const [recipeSearchLoading, setRecipeSearchLoading] = useState(false);
   const [isActive, setIsActive] = useState(product?.isActive ?? true);
 
   const [images, setImages] = useState<string[]>(product?.images ?? []);
@@ -115,6 +127,50 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
     });
   }
 
+  // Живой поиск позиций склада Posiflora по мере ввода — debounce, чтобы
+  // не дёргать API на каждое нажатие клавиши.
+  useEffect(() => {
+    const query = recipeSearch.trim();
+    if (query.length < 2) {
+      setRecipeSearchResults([]);
+      return;
+    }
+
+    let cancelled = false;
+    setRecipeSearchLoading(true);
+    const timeoutId = window.setTimeout(async () => {
+      const results = await searchInventoryItemsAction(query);
+      if (!cancelled) {
+        setRecipeSearchResults(results);
+        setRecipeSearchLoading(false);
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [recipeSearch]);
+
+  function addRecipeItem(item: { id: string; title: string }) {
+    if (recipeItems.some((r) => r.posifloraInventoryItemId === item.id)) return;
+    setRecipeItems((prev) => [
+      ...prev,
+      { posifloraInventoryItemId: item.id, itemName: item.title, quantity: 1, key: randomSizeId() },
+    ]);
+    setRecipeSearch("");
+    setRecipeSearchResults([]);
+  }
+
+  function updateRecipeQuantity(key: string, value: string) {
+    const quantity = Number(value);
+    setRecipeItems((prev) => prev.map((r) => (r.key === key ? { ...r, quantity: Number.isFinite(quantity) ? quantity : r.quantity } : r)));
+  }
+
+  function removeRecipeItem(key: string) {
+    setRecipeItems((prev) => prev.filter((r) => r.key !== key));
+  }
+
   function updateComposition(index: number, value: string) {
     setComposition((prev) => prev.map((c, i) => (i === index ? value : c)));
   }
@@ -177,6 +233,12 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
       oldPrice: oldPrice ? Number(oldPrice) : null,
       stockQuantity: Number(stockQuantity) || 0,
       availabilityMode,
+      availabilitySource,
+      recipeItems: recipeItems.map(({ posifloraInventoryItemId, itemName, quantity }) => ({
+        posifloraInventoryItemId,
+        itemName,
+        quantity,
+      })),
       isActive,
       images,
       occasions: Array.from(selectedOccasions),
@@ -280,36 +342,136 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
           свадебная флористика, которая собирается только после оформления заказа.
         </p>
 
-        <div className="mt-4 flex flex-wrap gap-3">
-          {(["in_stock", "made_to_order"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setAvailabilityMode(mode)}
-              className={`rounded-full border px-4 py-2 font-display text-sm font-medium transition ${
-                availabilityMode === mode
-                  ? "border-gold-500 bg-gold-500 text-white"
-                  : "border-lavender-200 bg-white text-ink/70 hover:border-gold-300"
+        <div className="mt-4 flex items-center gap-3 rounded-2xl bg-lavender-50/60 px-4 py-3">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={availabilitySource === "recipe"}
+            onClick={() => setAvailabilitySource((v) => (v === "recipe" ? "manual" : "recipe"))}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+              availabilitySource === "recipe" ? "bg-gold-500" : "bg-lavender-200"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition ${
+                availabilitySource === "recipe" ? "left-[22px]" : "left-0.5"
               }`}
-            >
-              {mode === "in_stock" ? "В наличии" : "Под заказ"}
-            </button>
-          ))}
+            />
+          </button>
+          <div>
+            <span className="block font-display text-sm font-semibold text-ink">
+              Определять автоматически по составу
+            </span>
+            <span className="block font-body text-xs text-ink/50">
+              Сверяем состав с остатками на складе Posiflora — если ингредиента не хватает, статус меняется сам.
+              Можно в любой момент вернуть на ручное управление.
+            </span>
+          </div>
         </div>
 
-        {availabilityMode === "in_stock" && (
-          <div className="mt-5 max-w-[200px]">
-            <FormField label="Остаток на складе, шт." htmlFor="productStock">
+        {availabilitySource === "manual" ? (
+          <>
+            <div className="mt-4 flex flex-wrap gap-3">
+              {(["in_stock", "made_to_order"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setAvailabilityMode(mode)}
+                  className={`rounded-full border px-4 py-2 font-display text-sm font-medium transition ${
+                    availabilityMode === mode
+                      ? "border-gold-500 bg-gold-500 text-white"
+                      : "border-lavender-200 bg-white text-ink/70 hover:border-gold-300"
+                  }`}
+                >
+                  {mode === "in_stock" ? "В наличии" : "Под заказ"}
+                </button>
+              ))}
+            </div>
+
+            {availabilityMode === "in_stock" && (
+              <div className="mt-5 max-w-[200px]">
+                <FormField label="Остаток на складе, шт." htmlFor="productStock">
+                  <input
+                    id="productStock"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={stockQuantity}
+                    onChange={(e) => setStockQuantity(e.target.value)}
+                    className={inputClass()}
+                  />
+                </FormField>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="mt-5">
+            <p className="font-display text-sm font-medium text-ink">Состав для проверки остатков</p>
+            <p className="mt-1 font-body text-xs text-ink/50">
+              Ищите настоящие позиции склада Posiflora — рецепт ссылается на них, чтобы остатки сверялись с реальными
+              данными.
+            </p>
+
+            <div className="relative mt-3">
               <input
-                id="productStock"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                value={stockQuantity}
-                onChange={(e) => setStockQuantity(e.target.value)}
+                type="text"
+                value={recipeSearch}
+                onChange={(e) => setRecipeSearch(e.target.value)}
+                placeholder="Начните вводить название цветка на складе…"
                 className={inputClass()}
               />
-            </FormField>
+              {recipeSearch.trim().length >= 2 && (
+                <div className="absolute inset-x-0 top-full z-10 mt-1.5 max-h-64 overflow-y-auto rounded-2xl border border-lavender-100 bg-white shadow-lg">
+                  {recipeSearchLoading ? (
+                    <p className="px-4 py-3 font-body text-xs text-ink/50">Ищем…</p>
+                  ) : recipeSearchResults.length === 0 ? (
+                    <p className="px-4 py-3 font-body text-xs text-ink/50">Ничего не нашли на складе</p>
+                  ) : (
+                    recipeSearchResults.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => addRecipeItem(item)}
+                        className="block w-full px-4 py-2.5 text-left font-body text-sm text-ink transition hover:bg-lavender-50"
+                      >
+                        {item.title}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-col gap-2.5">
+              {recipeItems.length === 0 && (
+                <p className="font-body text-sm text-ink/50">Пока ничего не добавлено</p>
+              )}
+              {recipeItems.map((item) => (
+                <div
+                  key={item.key}
+                  className="flex items-center gap-3 rounded-xl border border-lavender-100 px-4 py-2.5"
+                >
+                  <span className="flex-1 font-body text-sm text-ink">{item.itemName}</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    value={item.quantity}
+                    onChange={(e) => updateRecipeQuantity(item.key, e.target.value)}
+                    className={`${inputClass()} w-20 shrink-0`}
+                  />
+                  <span className="shrink-0 font-body text-xs text-ink/40">шт</span>
+                  <button
+                    type="button"
+                    onClick={() => removeRecipeItem(item.key)}
+                    aria-label="Убрать из состава"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink/40 transition hover:bg-lavender-100 hover:text-red-600"
+                  >
+                    <CloseIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

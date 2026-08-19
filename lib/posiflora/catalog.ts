@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { posifloraFetch } from "./http";
 import { generateProductSlug } from "./slug";
+import { getAllAvailableInventoryItemIds } from "./inventory";
 
 // ================================================================
 // Синхронизация каталога (категории + товары) из Posiflora в наш кэш
@@ -170,8 +171,78 @@ export type CatalogSyncSummary = {
   productsCreated: number;
   productsUpdated: number;
   productsDeactivated: number;
+  recipeProductsChecked: number;
   errors: string[];
 };
+
+/**
+ * Автоналичие по составу — товары с availability_source='recipe' (см.
+ * migrations/010_recipe_availability.sql). Для каждого такого товара:
+ * все ингредиенты рецепта есть на складе (хоть в каком-то количестве,
+ * см. оговорку в lib/posiflora/inventory.ts) → 'in_stock', иначе
+ * 'made_to_order'. Товары с availability_source='manual' (по умолчанию
+ * все) здесь не трогаем вообще — ручной режим приоритетнее автоматики.
+ *
+ * Один общий запрос остатков на ВСЕ уникальные ингредиенты сразу
+ * (а не по одному на товар) — при пересекающихся рецептах (одна и та
+ * же роза в десятке букетов) кратно меньше обращений к Posiflora.
+ */
+async function syncComputedAvailability(errors: string[]): Promise<number> {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: recipeProducts, error: productsError } = await supabaseAdmin
+    .from("products")
+    .select("id")
+    .eq("availability_source", "recipe");
+
+  if (productsError) {
+    errors.push(`Автоналичие: не удалось получить список товаров: ${productsError.message}`);
+    return 0;
+  }
+  if (!recipeProducts || recipeProducts.length === 0) return 0;
+
+  const productIds = recipeProducts.map((p) => p.id);
+  const { data: recipeItems, error: itemsError } = await supabaseAdmin
+    .from("product_recipe_items")
+    .select("product_id, posiflora_inventory_item_id")
+    .in("product_id", productIds);
+
+  if (itemsError) {
+    errors.push(`Автоналичие: не удалось получить рецепты: ${itemsError.message}`);
+    return 0;
+  }
+
+  const itemsByProduct = new Map<string, string[]>();
+  for (const row of recipeItems ?? []) {
+    const list = itemsByProduct.get(row.product_id) ?? [];
+    list.push(row.posiflora_inventory_item_id);
+    itemsByProduct.set(row.product_id, list);
+  }
+
+  const availableIds = await getAllAvailableInventoryItemIds();
+
+  let checked = 0;
+  for (const productId of productIds) {
+    const ingredientIds = itemsByProduct.get(productId);
+    // Товар помечен "по рецепту", но рецепт ещё не заполнен — не
+    // затираем последний осознанный статус пустым результатом.
+    if (!ingredientIds || ingredientIds.length === 0) continue;
+
+    const inStock = ingredientIds.every((id) => availableIds.has(id));
+    const { error } = await supabaseAdmin
+      .from("products")
+      .update({ availability_mode: inStock ? "in_stock" : "made_to_order" })
+      .eq("id", productId);
+
+    if (error) {
+      errors.push(`Автоналичие (${productId}): ${error.message}`);
+    } else {
+      checked++;
+    }
+  }
+
+  return checked;
+}
 
 export async function syncPosifloraCatalog(): Promise<CatalogSyncSummary> {
   const supabaseAdmin = getSupabaseAdmin();
@@ -180,114 +251,129 @@ export async function syncPosifloraCatalog(): Promise<CatalogSyncSummary> {
     productsCreated: 0,
     productsUpdated: 0,
     productsDeactivated: 0,
+    recipeProductsChecked: 0,
     errors: [],
   };
 
-  const categoryIdMap = await syncCategories();
-  summary.categoriesProcessed = categoryIdMap.size;
+  // Категории/товары и проверка наличия по рецепту читают Posiflora
+  // независимо друг от друга — сбой одного не должен блокировать другой
+  // (см. syncComputedAvailability ниже, вызывается уже вне этого try).
+  // Наблюдали живьём: /categories иногда отвечает 500 сам по себе, пока
+  // /inventory-items работает нормально — без этой изоляции такой сбой
+  // остановил бы вообще весь синк, включая проверку остатков.
+  try {
+    const categoryIdMap = await syncCategories();
+    summary.categoriesProcessed = categoryIdMap.size;
 
-  const items = await fetchAllInventoryItems();
-  const seenPosifloraIds = new Set<string>();
+    const items = await fetchAllInventoryItems();
+    const seenPosifloraIds = new Set<string>();
 
-  for (const item of items) {
-    const title = item.attributes?.title?.trim();
-    if (!title) continue;
+    for (const item of items) {
+      const title = item.attributes?.title?.trim();
+      if (!title) continue;
 
-    seenPosifloraIds.add(item.id);
+      seenPosifloraIds.add(item.id);
 
-    const price = toPrice(item.attributes?.priceMin);
-    const description = item.attributes?.description ?? null;
-    const posifloraCategoryId = item.relationships?.category?.data?.id;
-    const categoryId = posifloraCategoryId ? categoryIdMap.get(posifloraCategoryId) ?? null : null;
+      const price = toPrice(item.attributes?.priceMin);
+      const description = item.attributes?.description ?? null;
+      const posifloraCategoryId = item.relationships?.category?.data?.id;
+      const categoryId = posifloraCategoryId ? categoryIdMap.get(posifloraCategoryId) ?? null : null;
 
-    const { data: existing } = await supabaseAdmin
-      .from("products")
-      .select("id")
-      .eq("posiflora_product_id", item.id)
-      .maybeSingle();
-
-    if (existing) {
-      // Обновляем ТОЛЬКО поля, которыми владеет Posiflora. attributes
-      // (наши sizes/occasions/composition) здесь сознательно не
-      // упоминаются — это территория флориста/менеджера, синк её не
-      // трогает.
-      const { error } = await supabaseAdmin
+      const { data: existing } = await supabaseAdmin
         .from("products")
-        .update({
-          name: title,
-          description,
-          price,
-          category_id: categoryId,
-          is_available: true,
-          synced_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
+        .select("id")
+        .eq("posiflora_product_id", item.id)
+        .maybeSingle();
+
+      if (existing) {
+        // Обновляем ТОЛЬКО поля, которыми владеет Posiflora. attributes
+        // (наши sizes/occasions/composition) здесь сознательно не
+        // упоминаются — это территория флориста/менеджера, синк её не
+        // трогает.
+        const { error } = await supabaseAdmin
+          .from("products")
+          .update({
+            name: title,
+            description,
+            price,
+            category_id: categoryId,
+            is_available: true,
+            synced_at: new Date().toISOString(),
+          })
+          .eq("id", existing.id);
+
+        if (error) {
+          summary.errors.push(`Обновление "${title}" (${item.id}): ${error.message}`);
+        } else {
+          summary.productsUpdated++;
+        }
+        continue;
+      }
+
+      // Новый товар — минимальный каркас attributes, is_active: false.
+      // Карточка не должна появиться на витрине раньше, чем куратор
+      // впишет размеры/повод/состав.
+      const slug = generateProductSlug(title, item.id);
+      const { error } = await supabaseAdmin.from("products").insert({
+        posiflora_product_id: item.id,
+        category_id: categoryId,
+        name: title,
+        slug,
+        description,
+        price,
+        stock_quantity: 0,
+        is_available: true,
+        is_active: false,
+        attributes: {
+          sizes: [{ id: "std", label: "Стандарт", priceModifier: 0 }],
+          occasions: [],
+          composition: [],
+        },
+        synced_at: new Date().toISOString(),
+      });
 
       if (error) {
-        summary.errors.push(`Обновление "${title}" (${item.id}): ${error.message}`);
+        summary.errors.push(`Создание "${title}" (${item.id}): ${error.message}`);
       } else {
-        summary.productsUpdated++;
+        summary.productsCreated++;
       }
-      continue;
     }
 
-    // Новый товар — минимальный каркас attributes, is_active: false.
-    // Карточка не должна появиться на витрине раньше, чем куратор
-    // впишет размеры/повод/состав.
-    const slug = generateProductSlug(title, item.id);
-    const { error } = await supabaseAdmin.from("products").insert({
-      posiflora_product_id: item.id,
-      category_id: categoryId,
-      name: title,
-      slug,
-      description,
-      price,
-      stock_quantity: 0,
-      is_available: true,
-      is_active: false,
-      attributes: {
-        sizes: [{ id: "std", label: "Стандарт", priceModifier: 0 }],
-        occasions: [],
-        composition: [],
-      },
-      synced_at: new Date().toISOString(),
-    });
-
-    if (error) {
-      summary.errors.push(`Создание "${title}" (${item.id}): ${error.message}`);
-    } else {
-      summary.productsCreated++;
-    }
-  }
-
-  // Товары, которые раньше были реально синхронизированы (не
-  // seed:*-заглушки и не admin:*-товары, добавленные вручную в
-  // /admin/catalog — у них нет соответствия в Posiflora по определению),
-  // но пропали из свежей выборки public+onWindow — мягко скрываем,
-  // не удаляем: на них может ссылаться order_items.
-  const { data: previouslySynced } = await supabaseAdmin
-    .from("products")
-    .select("id, posiflora_product_id")
-    .eq("is_active", true)
-    .not("posiflora_product_id", "like", "seed:%")
-    .not("posiflora_product_id", "like", "admin:%");
-
-  const toDeactivate = (previouslySynced ?? [])
-    .filter((p) => !seenPosifloraIds.has(p.posiflora_product_id))
-    .map((p) => p.id);
-
-  if (toDeactivate.length > 0) {
-    const { error } = await supabaseAdmin
+    // Товары, которые раньше были реально синхронизированы (не
+    // seed:*-заглушки и не admin:*-товары, добавленные вручную в
+    // /admin/catalog — у них нет соответствия в Posiflora по определению),
+    // но пропали из свежей выборки public+onWindow — мягко скрываем,
+    // не удаляем: на них может ссылаться order_items.
+    const { data: previouslySynced } = await supabaseAdmin
       .from("products")
-      .update({ is_active: false })
-      .in("id", toDeactivate);
+      .select("id, posiflora_product_id")
+      .eq("is_active", true)
+      .not("posiflora_product_id", "like", "seed:%")
+      .not("posiflora_product_id", "like", "admin:%");
 
-    if (error) {
-      summary.errors.push(`Деактивация пропавших товаров: ${error.message}`);
-    } else {
-      summary.productsDeactivated = toDeactivate.length;
+    const toDeactivate = (previouslySynced ?? [])
+      .filter((p) => !seenPosifloraIds.has(p.posiflora_product_id))
+      .map((p) => p.id);
+
+    if (toDeactivate.length > 0) {
+      const { error } = await supabaseAdmin
+        .from("products")
+        .update({ is_active: false })
+        .in("id", toDeactivate);
+
+      if (error) {
+        summary.errors.push(`Деактивация пропавших товаров: ${error.message}`);
+      } else {
+        summary.productsDeactivated = toDeactivate.length;
+      }
     }
+  } catch (error) {
+    summary.errors.push(
+      `Синхронизация категорий/товаров полностью упала: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
+
+  summary.recipeProductsChecked = await syncComputedAvailability(summary.errors);
 
   return summary;
 }

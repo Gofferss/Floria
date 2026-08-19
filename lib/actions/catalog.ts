@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { getStaffUser } from "@/lib/auth/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { searchInventoryItems, type InventoryItemOption } from "@/lib/posiflora";
 import type { AvailabilityMode, Occasion, ProductSize } from "@/lib/products";
 
 // ================================================================
@@ -46,6 +47,14 @@ export async function getCatalogCategories(): Promise<AdminCategory[]> {
   return data ?? [];
 }
 
+export type AvailabilitySource = "manual" | "recipe";
+
+export type RecipeItemInput = {
+  posifloraInventoryItemId: string;
+  itemName: string;
+  quantity: number;
+};
+
 export type ProductInput = {
   name: string;
   slug: string;
@@ -55,6 +64,8 @@ export type ProductInput = {
   oldPrice: number | null;
   stockQuantity: number;
   availabilityMode: AvailabilityMode;
+  availabilitySource: AvailabilitySource;
+  recipeItems: RecipeItemInput[];
   isActive: boolean;
   images: string[];
   occasions: Occasion[];
@@ -74,6 +85,34 @@ function validateProductInput(input: ProductInput): string | null {
     return "Старая цена не может быть меньше текущей";
   }
   if (input.sizes.length === 0) return "Добавьте хотя бы один размер";
+  if (input.availabilitySource === "recipe" && input.recipeItems.length === 0) {
+    return "Добавьте хотя бы один ингредиент в состав или переключите наличие обратно на ручное";
+  }
+  return null;
+}
+
+/** Полная замена рецепта товара — проще и надёжнее построчного diff при таком небольшом объёме строк. */
+async function replaceRecipeItems(productId: string, items: RecipeItemInput[]): Promise<string | null> {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { error: deleteError } = await supabaseAdmin
+    .from("product_recipe_items")
+    .delete()
+    .eq("product_id", productId);
+  if (deleteError) return `Не удалось обновить состав: ${deleteError.message}`;
+
+  if (items.length === 0) return null;
+
+  const { error: insertError } = await supabaseAdmin.from("product_recipe_items").insert(
+    items.map((item) => ({
+      product_id: productId,
+      posiflora_inventory_item_id: item.posifloraInventoryItemId,
+      item_name: item.itemName,
+      quantity: item.quantity,
+    }))
+  );
+  if (insertError) return `Не удалось сохранить состав: ${insertError.message}`;
+
   return null;
 }
 
@@ -110,6 +149,7 @@ export async function createProduct(
       is_available: true,
       is_active: input.isActive,
       availability_mode: input.availabilityMode,
+      availability_source: input.availabilitySource,
       images: input.images,
       attributes: buildAttributes(input),
     })
@@ -123,6 +163,9 @@ export async function createProduct(
     }
     return { success: false, error: "Не удалось сохранить товар" };
   }
+
+  const recipeError = await replaceRecipeItems(product.id, input.recipeItems);
+  if (recipeError) return { success: false, error: recipeError };
 
   revalidatePath("/admin/catalog");
   revalidatePath("/catalog");
@@ -158,6 +201,7 @@ export async function updateProduct(
       stock_quantity: input.stockQuantity,
       is_active: input.isActive,
       availability_mode: input.availabilityMode,
+      availability_source: input.availabilitySource,
       images: input.images,
       attributes: buildAttributes(input),
     })
@@ -172,6 +216,9 @@ export async function updateProduct(
     }
     return { success: false, error: "Не удалось сохранить товар" };
   }
+
+  const recipeError = await replaceRecipeItems(product.id, input.recipeItems);
+  if (recipeError) return { success: false, error: recipeError };
 
   revalidatePath("/admin/catalog");
   revalidatePath("/catalog");
@@ -203,15 +250,23 @@ export type AdminProductDetail = ProductInput & { id: string };
 export async function getProductForEdit(id: string): Promise<AdminProductDetail | null> {
   await requireStaff();
 
-  const { data, error } = await getSupabaseAdmin()
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data, error } = await supabaseAdmin
     .from("products")
     .select(
-      "id, name, slug, category_id, description, price, old_price, stock_quantity, is_active, availability_mode, images, attributes"
+      "id, name, slug, category_id, description, price, old_price, stock_quantity, is_active, availability_mode, availability_source, images, attributes"
     )
     .eq("id", id)
     .maybeSingle();
 
   if (error || !data) return null;
+
+  const { data: recipeRows } = await supabaseAdmin
+    .from("product_recipe_items")
+    .select("posiflora_inventory_item_id, item_name, quantity")
+    .eq("product_id", id)
+    .order("created_at", { ascending: true });
 
   const attributes = (data.attributes ?? {}) as {
     sizes?: ProductSize[];
@@ -229,12 +284,29 @@ export async function getProductForEdit(id: string): Promise<AdminProductDetail 
     oldPrice: data.old_price === null ? null : Number(data.old_price),
     stockQuantity: data.stock_quantity,
     availabilityMode: data.availability_mode === "made_to_order" ? "made_to_order" : "in_stock",
+    availabilitySource: data.availability_source === "recipe" ? "recipe" : "manual",
+    recipeItems: (recipeRows ?? []).map((r) => ({
+      posifloraInventoryItemId: r.posiflora_inventory_item_id,
+      itemName: r.item_name,
+      quantity: Number(r.quantity),
+    })),
     isActive: data.is_active,
     images: (data.images as string[]) ?? [],
     occasions: attributes.occasions ?? [],
     composition: attributes.composition ?? [],
     sizes: attributes.sizes?.length ? attributes.sizes : [{ id: "std", label: "Стандарт", priceModifier: 0 }],
   };
+}
+
+/** Поиск позиций склада Posiflora для автокомплита в форме рецепта. */
+export async function searchInventoryItemsAction(query: string): Promise<InventoryItemOption[]> {
+  await requireStaff();
+  try {
+    return await searchInventoryItems(query);
+  } catch (error) {
+    console.error("[searchInventoryItemsAction]", error);
+    return [];
+  }
 }
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
