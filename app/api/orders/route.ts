@@ -343,6 +343,7 @@ export async function POST(request: Request) {
 
   // --- Алерт сотрудникам (fire-and-forget) ---
   const recipientName = payload.isRecipientSelf ? payload.customerName : payload.recipientName;
+  const recipientPhone = payload.isRecipientSelf ? payload.customerPhone : payload.recipientPhone;
   const deliveryTimeLabel = timeSlot?.label ?? payload.deliveryTimeSlot;
   const address = `${payload.deliveryAddress}${payload.deliveryApartment ? `, кв. ${payload.deliveryApartment}` : ""}`;
   const itemsCount = resolvedItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -361,16 +362,25 @@ export async function POST(request: Request) {
   });
   // Экранируем всё, что ввёл клиент, — иначе через имя/адрес/комментарий
   // в HTML-уведомление сотруднику можно было бы вставить кликабельную
-  // ссылку (Telegram отрисует её как настоящий <a href>).
+  // ссылку (Telegram отрисует её как настоящий <a href>). Состав заказа,
+  // открытку и комментарий курьеру раньше сюда не включали — флорист
+  // видел только количество товаров и сумму, без единой подсказки, что
+  // именно собирать (issue замечен 2026-08-20).
+  const itemsLines = resolvedItems
+    .map((item) => `• ${escapeTelegramHtml(item.name)} × ${item.quantity} — ${item.price * item.quantity} ₽`)
+    .join("\n");
+
   notifyStaffTelegram(
     `🌸 <b>Новый заказ ${escapeTelegramHtml(order.order_number)}</b>\n\n` +
       `Клиент: ${escapeTelegramHtml(payload.customerName)}, ${escapeTelegramHtml(payload.customerPhone)}\n` +
-      `Получатель: ${escapeTelegramHtml(recipientName)}\n` +
+      `Получатель: ${escapeTelegramHtml(recipientName)}, ${escapeTelegramHtml(recipientPhone)}\n` +
       `Доставка: ${escapeTelegramHtml(payload.deliveryDate)}, ${escapeTelegramHtml(deliveryTimeLabel)}\n` +
-      `Адрес: ${escapeTelegramHtml(address)}\n` +
-      `Товаров: ${itemsCount} шт\n` +
-      (discountAmount > 0 ? `Скидка по промокоду: −${discountAmount} ₽\n` : "") +
-      `Сумма: ${totalAmount} ₽`
+      `Адрес: ${escapeTelegramHtml(address)}\n\n` +
+      `<b>Состав:</b>\n${itemsLines}\n` +
+      (payload.cardText ? `\n<b>Текст открытки:</b> ${escapeTelegramHtml(payload.cardText)}\n` : "") +
+      (payload.courierComment ? `\n<b>Комментарий курьеру:</b> ${escapeTelegramHtml(payload.courierComment)}\n` : "") +
+      (discountAmount > 0 ? `\nСкидка по промокоду: −${discountAmount} ₽` : "") +
+      `\nСумма: ${totalAmount} ₽`
   );
 
   return NextResponse.json({

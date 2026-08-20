@@ -3,6 +3,7 @@ import { LogoutButton } from "@/components/auth/LogoutButton";
 
 const NAV_LINKS = [
   { href: "/admin", label: "Дашборд" },
+  { href: "/admin/orders", label: "Заказы" },
   { href: "/admin/blog", label: "Блог" },
   { href: "/admin/catalog", label: "Каталог" },
   { href: "/admin/categories", label: "Категории" },
