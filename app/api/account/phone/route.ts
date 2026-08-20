@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { linkAuthenticatedCustomerToPhone } from "@/lib/customer-sync";
-import { isValidPhone } from "@/lib/checkout";
+import { verifyPhoneOtp } from "@/lib/auth/otp";
+import { toE164RussianPhone } from "@/lib/phone-mask";
 
 // Использует getSupabaseAdmin() внутри linkAuthenticatedCustomerToPhone —
 // обычный supabase-js service-role клиент, Node-рантайм.
@@ -11,6 +12,14 @@ export const runtime = "nodejs";
  * Заменяет прежний сбор телефона через Telegram-бота (вебхук удалён
  * вместе с остальным Telegram-кодом при пивоте на VK — см. миграцию 006).
  * VK OAuth номер телефона не отдаёт, поэтому клиент вводит его сам здесь.
+ *
+ * ВАЖНО: раньше номер привязывался сразу, без проверки, что он реально
+ * принадлежит вошедшему — linkAuthenticatedCustomerToPhone при совпадении
+ * номера с уже существующей карточкой клиента переносит на неё историю
+ * заказов и бонусный баланс, так что без подтверждения кодом это было
+ * равносильно перехвату чужого аккаунта по одному только известному
+ * номеру телефона (найдено при аудите 2026-08-20). Код отправляется
+ * через /api/account/phone/send-code — сюда приходит вместе с ним.
  */
 export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
@@ -29,9 +38,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Невалидный JSON" }, { status: 400 });
   }
 
-  const phone = (body as { phone?: unknown })?.phone;
-  if (typeof phone !== "string" || !isValidPhone(phone)) {
+  const rawPhone = (body as { phone?: unknown })?.phone;
+  const code = (body as { code?: unknown })?.code;
+  const phone = typeof rawPhone === "string" ? toE164RussianPhone(rawPhone) : null;
+
+  if (!phone) {
     return NextResponse.json({ error: "Проверьте номер телефона" }, { status: 400 });
+  }
+  if (typeof code !== "string" || !code.trim()) {
+    return NextResponse.json({ error: "Введите код из СМС" }, { status: 400 });
+  }
+
+  const verified = await verifyPhoneOtp(phone, code.trim());
+  if (!verified.ok) {
+    return NextResponse.json({ error: "Неверный или устаревший код" }, { status: 400 });
   }
 
   try {
