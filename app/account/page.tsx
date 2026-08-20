@@ -178,7 +178,7 @@ export default async function AccountPage() {
               <span className="font-display text-sm font-semibold text-ink">Профиль</span>
 
               <div className="mt-4">
-                <EditableName authUserId={user.id} initialName={fullName} />
+                <EditableName initialName={fullName} />
               </div>
 
               <div className="mt-4 flex items-center gap-2.5 border-t border-lavender-100 pt-4">

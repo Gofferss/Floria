@@ -91,11 +91,10 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         )}
 
         {/*
-          content — HTML из blog_posts.content, писать в это поле пока
-          может только is_staff() (RLS из миграции 000). dangerouslySetInnerHTML
-          безопасен в этих рамках; как только появится админка — редактор
-          должен либо санитизировать HTML на входе, либо быть WYSIWYG с
-          ограниченным набором тегов, а не голым textarea.
+          content — HTML из blog_posts.content, уже прогнанный через
+          sanitizeBlogContent при сохранении (lib/actions/blog.ts) —
+          dangerouslySetInnerHTML здесь безопасен именно поэтому, а не
+          просто потому что писать может только сотрудник.
         */}
         <div
           className="prose prose-img:rounded-2xl mt-6"

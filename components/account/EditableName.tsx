@@ -1,15 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { createSupabaseBrowserClient } from "@/lib/auth/client";
+import { updateCustomerName } from "@/lib/actions/account";
 import { EditIcon, CheckIcon, CloseIcon } from "@/components/ui/Icons";
 
 type EditableNameProps = {
-  authUserId: string;
   initialName: string;
 };
 
-export function EditableName({ authUserId, initialName }: EditableNameProps) {
+export function EditableName({ initialName }: EditableNameProps) {
   const [name, setName] = useState(initialName);
   const [draft, setDraft] = useState(initialName);
   const [editing, setEditing] = useState(false);
@@ -26,22 +25,12 @@ export function EditableName({ authUserId, initialName }: EditableNameProps) {
     setSaving(true);
     setError(null);
 
-    const supabase = createSupabaseBrowserClient();
-    const { data: updated, error: updateError } = await supabase
-      .from("customers")
-      .update({ full_name: trimmed })
-      .eq("auth_user_id", authUserId)
-      .select("id");
+    const result = await updateCustomerName(trimmed);
 
     setSaving(false);
 
-    // Без RLS-политики на UPDATE запрос "успешен", но не находит ни одной
-    // строки под текущим authenticated-токеном — supabase-js в этом случае
-    // не возвращает error, поэтому проверяем количество обновлённых строк
-    // явно, иначе изменение молча пропадает без объяснений (см. RLS-блок
-    // migrations/001_setup_full_db.sql — "customer_read_own" закомментирован).
-    if (updateError || !updated || updated.length === 0) {
-      setError("Не удалось сохранить — обратитесь к администратору");
+    if (!result.success) {
+      setError(result.error);
       return;
     }
 

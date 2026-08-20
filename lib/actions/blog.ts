@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { getStaffUser } from "@/lib/auth/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { sanitizeBlogContent } from "@/lib/sanitize-html";
 
 // ================================================================
 // Server Actions для админки блога. Права проверяются на каждый вызов
@@ -45,7 +46,7 @@ export async function createBlogPost(
 
   const title = input.title.trim();
   const slug = input.slug.trim();
-  const content = input.content.trim();
+  const content = sanitizeBlogContent(input.content.trim());
 
   if (!title) return { success: false, error: "Укажите заголовок статьи" };
   if (!slug) return { success: false, error: "Укажите URL-адрес (slug)" };
@@ -102,7 +103,7 @@ export async function updateBlogPost(
 
   const title = input.title.trim();
   const slug = input.slug.trim();
-  const content = input.content.trim();
+  const content = sanitizeBlogContent(input.content.trim());
 
   if (!title) return { success: false, error: "Укажите заголовок статьи" };
   if (!slug) return { success: false, error: "Укажите URL-адрес (slug)" };

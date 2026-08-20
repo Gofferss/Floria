@@ -19,11 +19,9 @@ export type BlogPost = {
   title: string;
   slug: string;
   excerpt: string | null;
-  /** HTML. Рендерится через dangerouslySetInnerHTML внутри .prose —
-   *  безопасно, пока писать сюда может только is_staff() (см. RLS в
-   *  миграции 000). Когда появится админка — редактор должен либо сам
-   *  санитизировать HTML, либо быть WYSIWYG с ограниченным набором
-   *  тегов, а не голым textarea, принимающим произвольный HTML. */
+  /** HTML, уже прогнанный через sanitizeBlogContent (lib/sanitize-html.ts)
+   *  при сохранении в lib/actions/blog.ts — рендерится в dangerouslySetInnerHTML
+   *  внутри .prose (app/blog/[slug]) как доверенное значение. */
   content: string;
   coverImage: string | null;
   /** Доп. фото статьи — карусель на странице статьи (см. PhotoCarousel).
