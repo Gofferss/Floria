@@ -11,13 +11,14 @@ export const metadata: Metadata = {
 };
 
 type EditBlogPostPageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export default async function EditBlogPostPage({ params }: EditBlogPostPageProps) {
   await requireStaffUser();
 
-  const post = await getBlogPostForEdit(params.id);
+  const { id } = await params;
+  const post = await getBlogPostForEdit(id);
   if (!post) notFound();
 
   return (

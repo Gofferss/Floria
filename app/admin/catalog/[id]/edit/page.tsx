@@ -12,14 +12,15 @@ export const metadata: Metadata = {
 };
 
 type EditProductPageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export default async function EditProductPage({ params }: EditProductPageProps) {
   await requireStaffUser();
 
+  const { id } = await params;
   const [product, categories, occasions] = await Promise.all([
-    getProductForEdit(params.id),
+    getProductForEdit(id),
     getCatalogCategories(),
     getOccasions(),
   ]);

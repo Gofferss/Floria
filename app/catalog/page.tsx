@@ -14,11 +14,12 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 type CatalogPageProps = {
-  searchParams: { category?: string; q?: string };
+  searchParams: Promise<{ category?: string; q?: string }>;
 };
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
-  const [products, priceBounds, categories, occasions] = await Promise.all([
+  const [params, products, priceBounds, categories, occasions] = await Promise.all([
+    searchParams,
     getProducts(),
     getPriceBounds(),
     getCategories(),
@@ -31,8 +32,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
       categories={categories}
       occasions={occasions}
       priceBounds={priceBounds}
-      initialCategorySlug={searchParams.category}
-      initialQuery={searchParams.q}
+      initialCategorySlug={params.category}
+      initialQuery={params.q}
     />
   );
 }

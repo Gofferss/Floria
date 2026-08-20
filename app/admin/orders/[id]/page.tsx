@@ -70,17 +70,18 @@ function timeRangeLabel(from: string | null, to: string | null): string {
   return `${from.slice(0, 5)}–${to.slice(0, 5)}`;
 }
 
-export default async function AdminOrderDetailPage({ params }: { params: { id: string } }) {
+export default async function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireStaffUser();
 
+  const { id } = await params;
   const supabase = getSupabaseAdmin();
 
   const [{ data: order, error: orderError }, { data: items, error: itemsError }] = await Promise.all([
-    supabase.from("orders").select("*").eq("id", params.id).maybeSingle(),
+    supabase.from("orders").select("*").eq("id", id).maybeSingle(),
     supabase
       .from("order_items")
       .select("id, product_name, unit_price, quantity, total_price")
-      .eq("order_id", params.id)
+      .eq("order_id", id)
       .order("created_at", { ascending: true }),
   ]);
 

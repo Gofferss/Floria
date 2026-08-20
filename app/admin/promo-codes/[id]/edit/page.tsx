@@ -11,13 +11,14 @@ export const metadata: Metadata = {
 };
 
 type EditPromoCodePageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export default async function EditPromoCodePage({ params }: EditPromoCodePageProps) {
   await requireStaffUser();
 
-  const promoCode = await getPromoCodeForEdit(params.id);
+  const { id } = await params;
+  const promoCode = await getPromoCodeForEdit(id);
   if (!promoCode) notFound();
 
   return (

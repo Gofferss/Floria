@@ -11,13 +11,14 @@ export const metadata: Metadata = {
 };
 
 type EditCategoryPageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export default async function EditCategoryPage({ params }: EditCategoryPageProps) {
   await requireStaffUser();
 
-  const category = await getCategoryForEdit(params.id);
+  const { id } = await params;
+  const category = await getCategoryForEdit(id);
   if (!category) notFound();
 
   return (

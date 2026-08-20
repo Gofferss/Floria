@@ -16,7 +16,7 @@ function toNumber(value: number | string | null | undefined): number {
  * Актуальность кэша — задача checkout/аккаунта/вебхуков, не шапки.
  */
 export async function Header() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -11,13 +11,14 @@ export const metadata: Metadata = {
 };
 
 type EditStoryPageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export default async function EditStoryPage({ params }: EditStoryPageProps) {
   await requireStaffUser();
 
-  const story = await getStoryForEdit(params.id);
+  const { id } = await params;
+  const story = await getStoryForEdit(id);
   if (!story) notFound();
 
   return (

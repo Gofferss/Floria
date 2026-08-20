@@ -10,7 +10,7 @@ import { getCategories } from "@/lib/categories";
 import { getProductBySlug, getProductSlugs, getRelatedProducts } from "@/lib/products";
 
 type ProductPageProps = {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 };
 
 // Каталог живой — перегенерируем страницу товара не чаще раза в минуту.
@@ -22,7 +22,8 @@ export async function generateStaticParams() {
 }
 
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
-  const product = await getProductBySlug(params.slug);
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
   if (!product) return {};
   return {
     title: `${product.name} — Floria`,
@@ -31,7 +32,8 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 }
 
 export default async function ProductPage({ params }: ProductPageProps) {
-  const product = await getProductBySlug(params.slug);
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
   if (!product) notFound();
 
   const [categories, relatedProducts] = await Promise.all([getCategories(), getRelatedProducts(product)]);

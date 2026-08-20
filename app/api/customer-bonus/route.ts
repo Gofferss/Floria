@@ -16,7 +16,7 @@ export const runtime = "nodejs";
  * см. также /api/orders, где то же самое применяется к списанию.
  */
 export async function GET() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

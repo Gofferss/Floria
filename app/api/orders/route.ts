@@ -172,7 +172,7 @@ export async function POST(request: Request) {
   // что был и раньше.
   let currentBonusBalance = 0;
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
