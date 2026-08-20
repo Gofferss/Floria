@@ -26,6 +26,12 @@ import {
   type BotReminder,
   type BotSession,
 } from "@/lib/telegram/reminders";
+import {
+  findRecurringOccasionCandidates,
+  isOccasionDismissed,
+  dismissOccasion,
+  linkBotUserPhone,
+} from "@/lib/telegram/occasions";
 
 // Node-рантайм ради crypto.timingSafeEqual и service-role supabase-js
 // клиента — та же причина, что у остальных внутренних роутов проекта.
@@ -372,6 +378,42 @@ async function revealBonusBalance(chatId: number, phone: string, oldMessageId: n
   await setSession(chatId, "idle", { menuMessageId: newId });
 }
 
+/**
+ * Если в заказах клиента (по delivery_date) один и тот же день±3 повторяется
+ * в разных годах — предлагаем завести на него напоминание. Шлём ОТДЕЛЬНЫМ
+ * новым сообщением после баланса (не поверх него) — у баланса уже своя
+ * финальная клавиатура со ссылками на сайт, её лучше не перезатирать.
+ * Не больше одного предложения за раз, чтобы не забрасывать сообщениями.
+ */
+async function maybeSuggestOccasion(chatId: number, phone: string): Promise<void> {
+  const candidates = await findRecurringOccasionCandidates(phone);
+  if (candidates.length === 0) return;
+
+  const reminders = await listReminders(chatId);
+
+  for (const candidate of candidates) {
+    const alreadyHasReminder = reminders.some(
+      (r) => r.eventMonth === candidate.month && r.eventDay === candidate.day
+    );
+    if (alreadyHasReminder) continue;
+    if (await isOccasionDismissed(chatId, candidate.month, candidate.day)) continue;
+
+    const sent = await sendMessage(
+      chatId,
+      `Заметил: у вас заказы в районе ${formatDayMonth(candidate.day, candidate.month)} повторяются каждый год 🌸\n\n` +
+        "Добавить напоминание на эту дату, чтобы не забыть в следующем году?",
+      {
+        inline_keyboard: [
+          [{ text: "Добавить напоминание", callback_data: `occ_add:${candidate.month}:${candidate.day}` }],
+          [{ text: "Не сейчас", callback_data: `occ_skip:${candidate.month}:${candidate.day}` }],
+        ],
+      }
+    );
+    await setSession(chatId, "idle", { menuMessageId: sent.message_id });
+    return;
+  }
+}
+
 /** Третий шаг — проверяем код, введённый пользователем, и только при успехе идём в revealBonusBalance. */
 async function handleBonusOtpSubmitted(chatId: number, code: string, phone: string, oldMessageId: number | null): Promise<void> {
   const trimmed = code.trim();
@@ -389,6 +431,8 @@ async function handleBonusOtpSubmitted(chatId: number, code: string, phone: stri
   }
 
   await revealBonusBalance(chatId, phone, oldMessageId);
+  await linkBotUserPhone(chatId, phone);
+  await maybeSuggestOccasion(chatId, phone);
 }
 
 async function handleMessage(message: NonNullable<TelegramUpdate["message"]>): Promise<void> {
@@ -594,6 +638,39 @@ async function handleCallbackQuery(
     await answerCallbackQuery(callbackQuery.id);
     const reminders = await listReminders(chatId);
     await editMessageReplyMarkup(chatId, messageId, remindersListKeyboard(reminders, id));
+    return;
+  }
+
+  if (data.startsWith("occ_add:")) {
+    const [, monthStr, dayStr] = data.split(":");
+    const month = Number(monthStr);
+    const day = Number(dayStr);
+    await answerCallbackQuery(callbackQuery.id);
+
+    if (!Number.isInteger(month) || !Number.isInteger(day)) {
+      await showMainMenu(chatId, editMode);
+      return;
+    }
+
+    const reminder = await addReminder(chatId, `Повторяющийся повод (${formatDayMonth(day, month)})`, day, month, 10);
+    const text = reminder
+      ? `Готово! Напомню за 10 дн. до ${formatDayMonth(day, month)} 🌷\n\n` +
+        "Название можно поменять в «Мои напоминания» → ✏️"
+      : "Не получилось сохранить, попробуйте ещё раз.";
+    const newId = await render(chatId, editMode, text, MAIN_MENU);
+    await setSession(chatId, "idle", { menuMessageId: newId });
+    return;
+  }
+
+  if (data.startsWith("occ_skip:")) {
+    const [, monthStr, dayStr] = data.split(":");
+    const month = Number(monthStr);
+    const day = Number(dayStr);
+    if (Number.isInteger(month) && Number.isInteger(day)) {
+      await dismissOccasion(chatId, month, day);
+    }
+    await answerCallbackQuery(callbackQuery.id, "Хорошо, не буду напоминать про эту дату");
+    await showMainMenu(chatId, editMode);
     return;
   }
 
