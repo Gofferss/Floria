@@ -49,3 +49,26 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
   revalidatePath("/admin/orders");
   return { success: true };
 }
+
+/**
+ * Отдельная от статуса отметка «флорист увидел и взял в работу» — быстрый
+ * чек-бокс в списке заказов, не требует открывать карточку и выбирать
+ * стадию. accepted=false очищает отметку (снять галочку по ошибке).
+ */
+export async function setOrderFloristAccepted(orderId: string, accepted: boolean): Promise<ActionResult> {
+  await requireStaff();
+
+  const { error } = await getSupabaseAdmin()
+    .from("orders")
+    .update({ florist_accepted_at: accepted ? new Date().toISOString() : null })
+    .eq("id", orderId);
+
+  if (error) {
+    console.error("[setOrderFloristAccepted]", error.message);
+    return { success: false, error: "Не удалось сохранить отметку" };
+  }
+
+  revalidatePath(`/admin/orders/${orderId}`);
+  revalidatePath("/admin/orders");
+  return { success: true };
+}

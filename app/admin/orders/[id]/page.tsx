@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireStaffUser } from "@/lib/auth/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { OrderStatusControl } from "@/components/admin/orders/OrderStatusControl";
+import { FloristAcceptedCheckbox } from "@/components/admin/orders/FloristAcceptedCheckbox";
 import type { OrderStatus } from "@/lib/actions/orders";
 
 export const metadata: Metadata = {
@@ -43,6 +44,7 @@ type OrderDetail = {
   total_amount: number;
   admin_comment: string | null;
   created_at: string;
+  florist_accepted_at: string | null;
 };
 
 type OrderItemRow = {
@@ -111,7 +113,10 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
             Оформлен {dateTimeFormatter.format(new Date(detail.created_at))}
           </p>
         </div>
-        <OrderStatusControl orderId={detail.id} status={detail.status} />
+        <div className="flex flex-col items-end gap-2">
+          <OrderStatusControl orderId={detail.id} status={detail.status} />
+          <FloristAcceptedCheckbox orderId={detail.id} accepted={!!detail.florist_accepted_at} />
+        </div>
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2">

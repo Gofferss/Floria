@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireStaffUser } from "@/lib/auth/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import type { OrderStatus } from "@/lib/actions/orders";
+import { FloristAcceptedCheckbox } from "@/components/admin/orders/FloristAcceptedCheckbox";
 
 export const metadata: Metadata = {
   title: "Заказы — Админка Floria",
@@ -21,6 +22,7 @@ type AdminOrderRow = {
   total_amount: number;
   delivery_date: string;
   created_at: string;
+  florist_accepted_at: string | null;
 };
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -56,7 +58,9 @@ export default async function AdminOrdersListPage() {
 
   const { data, error } = await getSupabaseAdmin()
     .from("orders")
-    .select("id, order_number, customer_name, customer_phone, status, total_amount, delivery_date, created_at")
+    .select(
+      "id, order_number, customer_name, customer_phone, status, total_amount, delivery_date, created_at, florist_accepted_at"
+    )
     .order("created_at", { ascending: false });
 
   if (error) console.error("[AdminOrdersListPage]", error.message);
@@ -100,6 +104,9 @@ export default async function AdminOrdersListPage() {
                   <th className="px-5 py-3.5 font-display text-xs font-semibold uppercase tracking-wide text-ink/50">
                     Статус
                   </th>
+                  <th className="px-5 py-3.5 font-display text-xs font-semibold uppercase tracking-wide text-ink/50">
+                    Флорист
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -129,6 +136,9 @@ export default async function AdminOrdersListPage() {
                       >
                         {STATUS_LABEL[order.status]}
                       </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <FloristAcceptedCheckbox orderId={order.id} accepted={!!order.florist_accepted_at} />
                     </td>
                   </tr>
                 ))}
