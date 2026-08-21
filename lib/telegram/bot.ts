@@ -39,6 +39,21 @@ export type InlineKeyboardMarkup = {
   inline_keyboard: InlineKeyboardButton[][];
 };
 
+/** Клавиатура, заменяющая системную (не привязана к конкретному сообщению,
+ *  в отличие от InlineKeyboardMarkup) — нужна только для request_contact,
+ *  Telegram не даёт запросить номер через inline-кнопку. */
+export type ReplyKeyboardButton = { text: string; request_contact?: boolean };
+
+export type ReplyKeyboardMarkup = {
+  keyboard: ReplyKeyboardButton[][];
+  resize_keyboard?: boolean;
+  one_time_keyboard?: boolean;
+};
+
+export type ReplyKeyboardRemove = { remove_keyboard: true };
+
+type AnyReplyMarkup = InlineKeyboardMarkup | ReplyKeyboardMarkup | ReplyKeyboardRemove;
+
 // Сеть до api.telegram.org с этого сервера временами подвисает (см.
 // комментарий в lib/n8n.ts про соединения из контейнера n8n) — без
 // таймаута fetch может зависнуть на неопределённое время вместо быстрой
@@ -99,7 +114,7 @@ export function escapeTelegramHtml(text: string): string {
 export async function sendMessage(
   chatId: number,
   text: string,
-  replyMarkup?: InlineKeyboardMarkup
+  replyMarkup?: AnyReplyMarkup
 ): Promise<{ message_id: number }> {
   return callTelegramApi("sendMessage", {
     chat_id: chatId,

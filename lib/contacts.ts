@@ -22,6 +22,10 @@ export const CONTACTS = {
   /** Телеграм-канал с каталогом букетов */
   telegram: "https://t.me/floria_simferopol",
 
+  /** Бот-напоминальщик (не канал выше!) — там же теперь можно привязать
+   *  номер и получать код входа в Telegram вместо СМС. */
+  telegramBot: "https://t.me/floria_flowers_crimea_bot",
+
   /** Виджет Яндекс.Карт с организацией студии */
   yandexMapSrc: "https://yandex.ru/map-widget/v1/?z=12&ol=biz&oid=212296589658",
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Webhook } from "standardwebhooks";
+import { trySendOtpViaTelegram } from "@/lib/auth/otp-delivery";
 
 // Node-рантайм: используем обычный fetch к SMS.ru, без специфики Edge.
 export const runtime = "nodejs";
@@ -89,13 +90,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Bad payload" }, { status: 400 });
   }
 
-  try {
-    await sendSmsViaSmsRu(phone, otp);
-  } catch (error) {
-    console.error("Не удалось отправить SMS через SMS.ru:", error);
-    // Возвращаем ошибку намеренно — если промолчать 200-кой, Supabase
-    // решит, что код успешно доставлен, а человек его так и не получит.
-    return NextResponse.json({ error: "Не удалось отправить SMS" }, { status: 500 });
+  const sentViaTelegram = await trySendOtpViaTelegram(phone, otp);
+
+  if (!sentViaTelegram) {
+    try {
+      await sendSmsViaSmsRu(phone, otp);
+    } catch (error) {
+      console.error("Не удалось отправить SMS через SMS.ru:", error);
+      // Возвращаем ошибку намеренно — если промолчать 200-кой, Supabase
+      // решит, что код успешно доставлен, а человек его так и не получит.
+      return NextResponse.json({ error: "Не удалось отправить SMS" }, { status: 500 });
+    }
   }
 
   // Supabase не ждёт тело ответа — только код 200.

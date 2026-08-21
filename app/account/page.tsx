@@ -4,9 +4,11 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient, getStaffUser } from "@/lib/auth/server";
 import { getPosifloraClientBalance } from "@/lib/posiflora";
 import { syncCustomerWithPosiflora } from "@/lib/customer-sync";
+import { getSupabaseAdmin } from "@/lib/supabase";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { BonusCard } from "@/components/account/BonusCard";
 import { ProfileCompletionBanner } from "@/components/account/ProfileCompletionBanner";
+import { TelegramLinkBanner } from "@/components/account/TelegramLinkBanner";
 import { OrderHistoryList, type AccountOrder } from "@/components/account/OrderHistoryList";
 import { EditableName } from "@/components/account/EditableName";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
@@ -69,6 +71,18 @@ async function resolveAccountBonusBalance(customer: AccountCustomer | null): Pro
   return 0;
 }
 
+/** Есть ли уже привязанный (не заблокированный) чат бота на этот номер — см. sms-hook, куда это и нужно в первую очередь. */
+async function isPhoneLinkedToBot(phone: string | null): Promise<boolean> {
+  if (!phone) return false;
+  const { data } = await getSupabaseAdmin()
+    .from("bot_users")
+    .select("chat_id")
+    .eq("phone", phone)
+    .eq("is_blocked", false)
+    .limit(1);
+  return !!data?.length;
+}
+
 export default async function AccountPage() {
   const supabase = await createSupabaseServerClient();
   const {
@@ -91,7 +105,7 @@ export default async function AccountPage() {
   // параллельно, а не один за другим: живой запрос в Posiflora (и
   // возможное самовосстановление связи) и так добавляет странице
   // сетевую задержку, которой раньше не было.
-  const [ordersResult, bonusBalance, staff] = await Promise.all([
+  const [ordersResult, bonusBalance, staff, phoneLinkedToBot] = await Promise.all([
     customer
       ? supabase
           .from("orders")
@@ -103,6 +117,7 @@ export default async function AccountPage() {
 
     resolveAccountBonusBalance(customer),
     getStaffUser(),
+    isPhoneLinkedToBot(customer?.phone ?? null),
   ]);
 
   const orders = (ordersResult.data ?? []) as AccountOrder[];
@@ -158,6 +173,12 @@ export default async function AccountPage() {
         {!phone && (
           <div className="mb-8">
             <ProfileCompletionBanner initialPhone={phone} />
+          </div>
+        )}
+
+        {phone && !phoneLinkedToBot && (
+          <div className="mb-8">
+            <TelegramLinkBanner />
           </div>
         )}
 

@@ -7,6 +7,7 @@ import {
   deleteMessage,
   answerCallbackQuery,
   type InlineKeyboardMarkup,
+  type ReplyKeyboardMarkup,
 } from "@/lib/telegram/bot";
 import { parseReminderDate, formatDayMonth } from "@/lib/telegram/date-parse";
 import { CONTACTS } from "@/lib/contacts";
@@ -82,6 +83,7 @@ const MAIN_MENU: InlineKeyboardMarkup = {
     [{ text: "🎁 Узнать бонусный баланс", callback_data: "bonus_balance" }],
     [{ text: "➕ Добавить напоминание", callback_data: "add" }],
     [{ text: "📋 Мои напоминания", callback_data: "list" }],
+    [{ text: "🔐 Получать код входа сюда", callback_data: "link_phone" }],
     [{ text: "🌐 Наш сайт", url: CONTACTS.siteUrl }],
     [{ text: "📱 Каталог в Telegram", url: CONTACTS.telegram }],
   ],
@@ -145,6 +147,30 @@ function otpPromptText(displayPhone: string): string {
 const OTP_SEND_ERROR_TEXT = "Не получилось отправить код — проверьте номер или попробуйте чуть позже 🙏";
 const OTP_INVALID_TEXT = "Неверный или устаревший код 🤔 Проверьте и попробуйте снова.";
 
+// ================================================================
+// Привязка номера через "поделиться контактом" — отдельно от проверки
+// бонуса выше: там номер подтверждается кодом из СМС, потому что вводится
+// текстом (мог бы ввести чужой). Здесь Telegram сам присылает номер,
+// привязанный к аккаунту нажавшего кнопку (contact.user_id), — второй
+// код не нужен, это и так подтверждённый номер, но per contact.user_id
+// обязательно сверяем с отправителем (см. handleMessage), иначе можно
+// было бы прислать боту чужую визитку и получать чужие коды входа.
+// ================================================================
+
+const LINK_PHONE_PROMPT_TEXT =
+  "Поделитесь номером телефона — и в следующий раз код для входа на сайт " +
+  "придёт сюда, в Telegram, а не по СМС. Быстрее и без сбоев у операторов связи.";
+
+const LINK_PHONE_KEYBOARD: ReplyKeyboardMarkup = {
+  keyboard: [[{ text: "📱 Поделиться номером", request_contact: true }], [{ text: "◀️ Отмена" }]],
+  resize_keyboard: true,
+  one_time_keyboard: true,
+};
+
+const LINK_PHONE_SUCCESS_TEXT = "Готово! Теперь код для входа на сайт будет приходить сюда. 🎉";
+const LINK_PHONE_WRONG_CONTACT_TEXT = "Нужен именно ваш номер — воспользуйтесь кнопкой ниже 🙏";
+const LINK_PHONE_INVALID_PHONE_TEXT = "Не получилось распознать номер — попробуйте ещё раз.";
+
 function formatPhoneForDisplay(e164: string): string {
   // +79781234567 → +7 978 123-45-67
   const d = e164.slice(2);
@@ -161,6 +187,7 @@ type TelegramUpdate = {
     chat: { id: number };
     from?: { id: number; first_name?: string; username?: string };
     text?: string;
+    contact?: { phone_number: string; user_id?: number };
   };
   callback_query?: {
     id: string;
@@ -435,11 +462,55 @@ async function handleBonusOtpSubmitted(chatId: number, code: string, phone: stri
   await maybeSuggestOccasion(chatId, phone);
 }
 
+/**
+ * Контакт пришёл либо по кнопке request_contact, либо (реже) человек
+ * вручную прикрепил визитку из списка контактов Telegram — во втором
+ * случае это может быть ЧУЖОЙ номер, а бот его привяжет к ЭТОМУ чату.
+ * contact.user_id у настоящего "поделиться своим номером" всегда равен
+ * id отправителя; если это не так — отклоняем, не привязываем.
+ */
+async function handleContactShared(
+  chatId: number,
+  contact: NonNullable<NonNullable<TelegramUpdate["message"]>["contact"]>,
+  fromId: number | undefined,
+  oldMessageId: number | null
+): Promise<void> {
+  if (!fromId || contact.user_id !== fromId) {
+    await sendMessage(chatId, LINK_PHONE_WRONG_CONTACT_TEXT, LINK_PHONE_KEYBOARD);
+    return;
+  }
+
+  const phone = toE164RussianPhone(contact.phone_number);
+  if (!phone) {
+    await sendMessage(chatId, LINK_PHONE_INVALID_PHONE_TEXT, LINK_PHONE_KEYBOARD);
+    return;
+  }
+
+  await linkBotUserPhone(chatId, phone);
+  // remove_keyboard в этом же сообщении убирает клавиатуру "Поделиться
+  // номером" снизу экрана — она сама по себе не пропадёт от инлайн-кнопок ниже.
+  await sendMessage(chatId, LINK_PHONE_SUCCESS_TEXT, { remove_keyboard: true });
+  await showMainMenu(chatId, { kind: "fresh", oldMessageId });
+}
+
 async function handleMessage(message: NonNullable<TelegramUpdate["message"]>): Promise<void> {
   const chatId = message.chat.id;
   const text = message.text?.trim() ?? "";
 
   await ensureBotUser(chatId, message.from?.first_name, message.from?.username);
+
+  if (message.contact) {
+    const priorSession = await getSession(chatId);
+    await handleContactShared(chatId, message.contact, message.from?.id, menuMessageIdOf(priorSession));
+    return;
+  }
+
+  if (text === "◀️ Отмена") {
+    const priorSession = await getSession(chatId);
+    await sendMessage(chatId, "Хорошо, отменил.", { remove_keyboard: true });
+    await showMainMenu(chatId, { kind: "fresh", oldMessageId: menuMessageIdOf(priorSession) });
+    return;
+  }
 
   if (text.startsWith("/start")) {
     // /start тоже отвечает на текст пользователя — тот же приём: убрать
@@ -582,6 +653,15 @@ async function handleCallbackQuery(
   if (data === "list") {
     await answerCallbackQuery(callbackQuery.id);
     await showReminders(chatId, editMode);
+    return;
+  }
+
+  if (data === "link_phone") {
+    await answerCallbackQuery(callbackQuery.id);
+    // Отдельным новым сообщением, не через render(): у него другой тип
+    // клавиатуры (снизу экрана, а не под сообщением), редактировать
+    // существующее "рабочее" сообщение под неё нельзя.
+    await sendMessage(chatId, LINK_PHONE_PROMPT_TEXT, LINK_PHONE_KEYBOARD);
     return;
   }
 
