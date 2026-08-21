@@ -103,6 +103,11 @@ export async function POST(request: Request) {
     }
   }
 
-  // Supabase не ждёт тело ответа — только код 200.
-  return new NextResponse(null, { status: 200 });
+  // Документация Supabase утверждает, что пустого 200 достаточно, но на
+  // практике их auth-сервис реально отвечает "400: Invalid Content-Type:
+  // Missing Content-Type header" на ответ без заголовка — обнаружено
+  // 2026-08-21 при первом реальном тесте (раньше хук вообще не был
+  // настроен на этот адрес, поэтому баг не проявлялся). NextResponse.json
+  // сам проставляет Content-Type: application/json.
+  return NextResponse.json({});
 }
