@@ -35,6 +35,7 @@ export function ProductPurchasePanel({ product }: { product: Product }) {
         size: selectedSize.label,
         price: unitPrice,
         image: product.images[0],
+        availabilityMode: product.availabilityMode,
       },
       quantity
     );

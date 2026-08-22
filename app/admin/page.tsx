@@ -10,6 +10,7 @@ import {
   TagIcon,
   StoryRingIcon,
   ChartBarIcon,
+  TruckIcon,
 } from "@/components/ui/Icons";
 
 export const metadata: Metadata = {
@@ -17,6 +18,13 @@ export const metadata: Metadata = {
 };
 
 const SECTIONS = [
+  // Заказы первыми — это то, ради чего в админку заходят чаще всего.
+  {
+    href: "/admin/orders",
+    icon: TruckIcon,
+    title: "Заказы",
+    description: "Заказы с сайта: состав, адрес, статус и отметка «принят в работу».",
+  },
   {
     href: "/admin/blog",
     icon: EditIcon,

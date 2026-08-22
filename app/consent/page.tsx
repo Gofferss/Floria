@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/info/PageHeader";
-import { CONTACTS } from "@/lib/contacts";
+import { CONTACTS, LEGAL } from "@/lib/contacts";
 
 export const metadata: Metadata = {
   title: "Согласие на обработку персональных данных — Floria",
   description: "Согласие субъекта персональных данных на их обработку студией цветов Floria.",
 };
 
-const UPDATED_AT = "17 августа 2026";
+const UPDATED_AT = "22 августа 2026";
+const SITE_HOST = "floria-simferopol.ru";
 
 export default function ConsentPage() {
   return (
@@ -19,34 +20,18 @@ export default function ConsentPage() {
       />
 
       <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
-        <div className="mb-10 rounded-2xl border border-gold-400/40 bg-gold-500/5 px-5 py-4">
-          <p className="font-body text-sm leading-relaxed text-ink/70">
-            <strong className="font-display font-semibold text-ink">Черновик.</strong>{" "}
-            Структурный шаблон, а не готовый к публикации юридический документ. Реквизиты
-            оператора (ИП/ООО, ИНН, ОГРН) — placeholder, их нужно заполнить и весь текст
-            согласовать с юристом перед запуском, как и{" "}
-            <a href="/privacy" className="text-gold-600 underline underline-offset-2 hover:text-gold-700">
-              Политику конфиденциальности
-            </a>{" "}
-            и{" "}
-            <a href="/offer" className="text-gold-600 underline underline-offset-2 hover:text-gold-700">
-              Публичную оферту
-            </a>
-            .
-          </p>
-        </div>
-
         <div className="flex flex-col gap-10 font-body text-sm leading-relaxed text-ink/80 [&_h2]:font-display [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-ink [&_ol]:flex [&_ol]:list-decimal [&_ol]:flex-col [&_ol]:gap-2 [&_ol]:pl-5 [&_p]:mt-3">
           <section>
             <h2>1. Кто и кому даёт согласие</h2>
             <p>
               Я, действуя свободно, своей волей и в своём интересе, а также подтверждая
-              свою дееспособность, даю согласие студии цветов Floria (далее — «Оператор»,
-              реквизиты — в разделе 7) на обработку моих персональных данных на условиях,
-              изложенных в настоящем документе.
+              свою дееспособность, даю согласие {LEGAL.entityFull} (ОГРНИП {LEGAL.ogrnip},
+              ИНН {LEGAL.inn}), далее — «Оператор» (полные реквизиты — в разделе 7), на
+              обработку моих персональных данных на условиях, изложенных в настоящем
+              документе.
             </p>
             <p>
-              Согласие даётся при заполнении любой формы на сайте floria.ru, где присутствует
+              Согласие даётся при заполнении любой формы на сайте {SITE_HOST}, где присутствует
               соответствующий чекбокс: вход по коду из СМС, оформление заказа, форма обратной
               связи.
             </p>
@@ -88,8 +73,9 @@ export default function ConsentPage() {
             <p>
               Для исполнения указанных целей Оператор вправе передавать данные лицам,
               перечисленным в разделе 5 Политики конфиденциальности (сервис учёта заказов
-              Posiflora, СМС-провайдер, платёжные системы, хостинг-провайдер) — в объёме,
-              необходимом для оказания соответствующей услуги.
+              Posiflora, СМС-провайдер, платёжные системы, мессенджер Telegram при
+              подключении бота, хостинг-провайдер) — в объёме, необходимом для оказания
+              соответствующей услуги.
             </p>
           </section>
 
@@ -106,9 +92,11 @@ export default function ConsentPage() {
           <section>
             <h2>7. Реквизиты Оператора</h2>
             <p>
-              Студия цветов Floria
+              {LEGAL.entityFull}
               <br />
-              [Указать: ИП/ООО, полное наименование, ИНН, ОГРН/ОГРНИП]
+              ОГРНИП: {LEGAL.ogrnip}
+              <br />
+              ИНН: {LEGAL.inn}
               <br />
               Адрес: {CONTACTS.addressFull}
               <br />

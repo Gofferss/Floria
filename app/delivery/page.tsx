@@ -11,7 +11,13 @@ import {
   QrIcon,
   TruckIcon,
 } from "@/components/ui/Icons";
-import { DELIVERY_PRICE, FREE_DELIVERY_THRESHOLD, TIME_SLOTS } from "@/lib/checkout";
+import {
+  DELIVERY_PRICE,
+  ASAP_SURCHARGE,
+  SAME_DAY_CUTOFF_HOUR,
+  MADE_TO_ORDER_LEAD_DAYS,
+  TIME_SLOTS,
+} from "@/lib/checkout";
 import { CONTACTS } from "@/lib/contacts";
 
 const currency = new Intl.NumberFormat("ru-RU", {
@@ -22,7 +28,7 @@ const currency = new Intl.NumberFormat("ru-RU", {
 
 export const metadata: Metadata = {
   title: "Доставка и оплата — студия цветов Floria",
-  description: `Доставка букетов по Симферополю: бесплатно от ${FREE_DELIVERY_THRESHOLD} ₽, интервалы с 8:00 до 22:00. Оплата наличными, картой и через СБП.`,
+  description: `Доставка букетов по Симферополю — ${DELIVERY_PRICE} ₽, интервалы с 8:00 до 22:00, самовывоз бесплатно. Оплата наличными, картой и через СБП.`,
 };
 
 // Интервалы берём из тех же констант, что и форма оформления заказа,
@@ -43,13 +49,13 @@ export default function DeliveryPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
           <HighlightCard
             icon={<TruckIcon className="h-6 w-6" />}
-            title="Бесплатно"
-            subtitle={`при заказе от ${currency.format(FREE_DELIVERY_THRESHOLD)}`}
+            title={currency.format(DELIVERY_PRICE)}
+            subtitle="доставка по Симферополю"
           />
           <HighlightCard
-            icon={<CardIcon className="h-6 w-6" />}
-            title={currency.format(DELIVERY_PRICE)}
-            subtitle="доставка по городу до этой суммы"
+            icon={<CheckIcon className="h-6 w-6" />}
+            title="Самовывоз"
+            subtitle="бесплатно, из студии на Киевской"
           />
           <HighlightCard
             icon={<ClockIcon className="h-6 w-6" />}
@@ -72,8 +78,9 @@ export default function DeliveryPage() {
                   {currency.format(DELIVERY_PRICE)}.
                 </Bullet>
                 <Bullet>
-                  При заказе от {currency.format(FREE_DELIVERY_THRESHOLD)} доставка бесплатная —
-                  скидка применяется в корзине автоматически.
+                  Срочная доставка «как можно скорее» — плюс{" "}
+                  {currency.format(ASAP_SURCHARGE)}: курьер выезжает отдельно, вне общего
+                  маршрута.
                 </Bullet>
                 <Bullet>
                   За пределы города и в другие населённые пункты Крыма — по договорённости,
@@ -81,7 +88,7 @@ export default function DeliveryPage() {
                 </Bullet>
                 <Bullet>
                   Самовывоз из студии по адресу {CONTACTS.addressLine} — бесплатно и в любое
-                  рабочее время.
+                  рабочее время. Выбирается при оформлении заказа.
                 </Bullet>
               </ul>
             </InfoBlock>
@@ -102,8 +109,25 @@ export default function DeliveryPage() {
                 ))}
               </div>
               <p className="mt-4 font-body text-sm leading-relaxed text-ink/60">
-                Есть и вариант «как можно скорее» — если букет нужен срочно, соберём и отправим
-                ближайшим рейсом.
+                Есть и вариант «как можно скорее» — соберём и отправим ближайшим рейсом,
+                доплата {currency.format(ASAP_SURCHARGE)} за отдельный выезд курьера.
+              </p>
+              <p className="mt-3 font-body text-sm leading-relaxed text-ink/60">
+                Заказы на текущий день принимаем до {SAME_DAY_CUTOFF_HOUR}:00 — позже выберите
+                следующую дату или позвоните, обсудим возможность.
+              </p>
+            </InfoBlock>
+
+            <InfoBlock title="Букеты «под заказ»">
+              <p className="font-body text-sm leading-relaxed text-ink/70">
+                Часть букетов мы собираем под конкретный заказ — из цветов, которых сейчас нет
+                на витрине. Такие позиции отмечены в каталоге, и для них нужен запас минимум
+                в {MADE_TO_ORDER_LEAD_DAYS} дня.
+              </p>
+              <p className="mt-3 font-body text-sm leading-relaxed text-ink/60">
+                Это время уходит на то, чтобы заказать и привезти нужные цветы, а не собрать из
+                того, что осталось. При оформлении календарь сам предложит ближайшую доступную
+                дату.
               </p>
             </InfoBlock>
 
@@ -152,13 +176,13 @@ export default function DeliveryPage() {
             />
             <PaymentCard
               icon={<CardIcon className="h-6 w-6" />}
-              title="Картой при получении"
-              description="У курьера есть терминал — можно оплатить картой на месте. Также принимаем оплату картой онлайн при оформлении."
+              title="Банковский перевод"
+              description="Пришлём реквизиты после оформления заказа. Удобно, если оплачивает другой человек или нужен безналичный расчёт."
             />
             <PaymentCard
               icon={<BanknoteIcon className="h-6 w-6" />}
               title="Наличными"
-              description="Курьеру при вручении букета или в студии при самовывозе. Сдача будет — предупредите, с какой суммы."
+              description="В студии при самовывозе или курьеру при вручении букета. Сдача будет — предупредите, с какой суммы."
             />
           </div>
 
@@ -168,6 +192,41 @@ export default function DeliveryPage() {
               За каждый заказ начисляем бонусы на счёт в личном кабинете — 1 бонус равен 1 ₽.
               Списать их можно при следующей покупке прямо в корзине, частично или полностью.
             </p>
+          </div>
+        </section>
+
+        {/* Телеграм-бот */}
+        <section className="mt-14 lg:mt-20">
+          <div className="rounded-3xl border border-lavender-200 bg-lavender-50/60 p-6 sm:p-8">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-2xl">
+                <span className="font-display text-xs font-semibold uppercase tracking-widest text-gold-600">
+                  Telegram-бот
+                </span>
+                <h2 className="mt-2 font-display text-2xl font-bold text-ink">
+                  Не забыть про важную дату
+                </h2>
+                <p className="mt-3 font-body text-base leading-relaxed text-ink/70">
+                  У нас есть бот, который напомнит о дне рождения или годовщине заранее — за
+                  столько дней, сколько скажете. Чтобы вы успели заказать букет спокойно, а не
+                  в последний момент.
+                </p>
+                <ul className="mt-4 flex flex-col gap-2.5">
+                  <Bullet>Напомнит о дате заранее — вы сами выбираете, за сколько дней</Bullet>
+                  <Bullet>Покажет ваш бонусный баланс</Bullet>
+                  <Bullet>Пришлёт код для входа на сайт прямо в Telegram, без ожидания СМС</Bullet>
+                </ul>
+              </div>
+              <Link
+                href={CONTACTS.telegramBot}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-lavender-600 px-7 py-3.5 font-display text-sm font-semibold uppercase tracking-wide text-white transition hover:bg-lavender-700"
+              >
+                Открыть бота
+                <ArrowRightIcon className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
         </section>
 

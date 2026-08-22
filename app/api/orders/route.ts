@@ -10,9 +10,11 @@ import { escapeTelegramHtml } from "@/lib/telegram/bot";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import {
-  DELIVERY_PRICE,
-  FREE_DELIVERY_THRESHOLD,
   TIME_SLOTS,
+  calcDeliveryPrice,
+  earliestDeliveryDate,
+  MADE_TO_ORDER_LEAD_DAYS,
+  SAME_DAY_CUTOFF_HOUR,
   type CheckoutPayload,
 } from "@/lib/checkout";
 
@@ -65,7 +67,12 @@ function validatePayload(body: unknown): ValidationResult {
   if (!payload.deliveryTimeSlot) {
     return { valid: false, error: "Не указано время доставки" };
   }
-  if (!payload.deliveryAddress?.trim()) {
+  if (!TIME_SLOTS.some((slot) => slot.id === payload.deliveryTimeSlot)) {
+    return { valid: false, error: "Некорректный интервал доставки" };
+  }
+  // Самовывоз — адрес не нужен; для доставки он обязателен.
+  payload.isPickup = payload.isPickup === true;
+  if (!payload.isPickup && !payload.deliveryAddress?.trim()) {
     return { valid: false, error: "Не указан адрес доставки" };
   }
   if (!Array.isArray(payload.items) || payload.items.length === 0) {
@@ -124,6 +131,7 @@ export async function POST(request: Request) {
   // в БД и в Posiflora без проверки.
   type ResolvedItem = { name: string; size: string; price: number; quantity: number };
   const resolvedItems: ResolvedItem[] = [];
+  let hasMadeToOrder = false;
   for (const item of payload.items) {
     const product = item.productSlug ? await getProductBySlug(item.productSlug) : null;
     if (!product) {
@@ -132,6 +140,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (product.availabilityMode === "made_to_order") hasMadeToOrder = true;
     const size = product.sizes.find((s) => s.label === item.size) ?? product.sizes[0];
     resolvedItems.push({
       name: product.name,
@@ -141,10 +150,30 @@ export async function POST(request: Request) {
     });
   }
 
+  // Дату проверяем на сервере по тем же правилам, что показывает форма
+  // (после 21:00 сегодня уже нельзя, «под заказ» — минимум через двое
+  // суток). Признак «под заказ» берём из каталога, а не из тела запроса:
+  // иначе срок можно было бы обойти, подменив его в devtools.
+  const earliest = earliestDeliveryDate({ hasMadeToOrder });
+  if (payload.deliveryDate < earliest) {
+    return NextResponse.json(
+      {
+        error: hasMadeToOrder
+          ? `Букет «под заказ» собирается минимум за ${MADE_TO_ORDER_LEAD_DAYS} дня — выберите дату с ${earliest}`
+          : `Заказы на сегодня принимаем до ${SAME_DAY_CUTOFF_HOUR}:00 — выберите дату с ${earliest} или позвоните нам`,
+      },
+      { status: 400 }
+    );
+  }
+
   // Суммы пересчитываем на сервере — не доверяем итогам, посчитанным на
   // клиенте (клиент мог отправить что угодно).
   const itemsTotal = resolvedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const deliveryPrice = itemsTotal >= FREE_DELIVERY_THRESHOLD || itemsTotal === 0 ? 0 : DELIVERY_PRICE;
+  const deliveryPrice = calcDeliveryPrice({
+    isPickup: payload.isPickup,
+    timeSlot: payload.deliveryTimeSlot,
+    itemsTotal,
+  });
 
   // Промокод перепроверяем заново на сервере — ровно по той же причине,
   // что и цены товаров выше: клиент мог заранее проверить код на другую
@@ -269,8 +298,9 @@ export async function POST(request: Request) {
       recipient_phone: payload.isRecipientSelf ? payload.customerPhone : payload.recipientPhone,
       is_recipient_self: payload.isRecipientSelf,
 
-      delivery_address: payload.deliveryAddress,
-      delivery_apartment: payload.deliveryApartment || null,
+      is_pickup: payload.isPickup,
+      delivery_address: payload.isPickup ? null : payload.deliveryAddress,
+      delivery_apartment: payload.isPickup ? null : payload.deliveryApartment || null,
       delivery_date: payload.deliveryDate,
       delivery_time_from: timeSlot?.from ?? null,
       delivery_time_to: timeSlot?.to ?? null,
@@ -355,7 +385,9 @@ export async function POST(request: Request) {
   const recipientName = payload.isRecipientSelf ? payload.customerName : payload.recipientName;
   const recipientPhone = payload.isRecipientSelf ? payload.customerPhone : payload.recipientPhone;
   const deliveryTimeLabel = timeSlot?.label ?? payload.deliveryTimeSlot;
-  const address = `${payload.deliveryAddress}${payload.deliveryApartment ? `, кв. ${payload.deliveryApartment}` : ""}`;
+  const address = payload.isPickup
+    ? "Самовывоз"
+    : `${payload.deliveryAddress}${payload.deliveryApartment ? `, кв. ${payload.deliveryApartment}` : ""}`;
   const itemsCount = resolvedItems.reduce((sum, item) => sum + item.quantity, 0);
 
   notifyN8n({
@@ -384,8 +416,8 @@ export async function POST(request: Request) {
     `🌸 <b>Новый заказ ${escapeTelegramHtml(order.order_number)}</b>\n\n` +
       `Клиент: ${escapeTelegramHtml(payload.customerName)}, ${escapeTelegramHtml(payload.customerPhone)}\n` +
       `Получатель: ${escapeTelegramHtml(recipientName)}, ${escapeTelegramHtml(recipientPhone)}\n` +
-      `Доставка: ${escapeTelegramHtml(payload.deliveryDate)}, ${escapeTelegramHtml(deliveryTimeLabel)}\n` +
-      `Адрес: ${escapeTelegramHtml(address)}\n\n` +
+      `${payload.isPickup ? "🏪 <b>САМОВЫВОЗ</b>" : "🚚 Доставка"}: ${escapeTelegramHtml(payload.deliveryDate)}, ${escapeTelegramHtml(deliveryTimeLabel)}\n` +
+      `${payload.isPickup ? "Заберут из студии" : `Адрес: ${escapeTelegramHtml(address)}`}\n\n` +
       `<b>Состав:</b>\n${itemsLines}\n` +
       (payload.cardText ? `\n<b>Текст открытки:</b> ${escapeTelegramHtml(payload.cardText)}\n` : "") +
       (payload.courierComment ? `\n<b>Комментарий курьеру:</b> ${escapeTelegramHtml(payload.courierComment)}\n` : "") +

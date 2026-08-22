@@ -12,9 +12,12 @@ import { OrderSummaryPanel } from "@/components/checkout/OrderSummaryPanel";
 import { BloomMark } from "@/components/ui/BloomMark";
 import { ArrowRightIcon, CheckIcon } from "@/components/ui/Icons";
 import { trackEvent } from "@/lib/analytics/track";
+import { CONTACTS } from "@/lib/contacts";
 import {
-  DELIVERY_PRICE,
-  FREE_DELIVERY_THRESHOLD,
+  calcDeliveryPrice,
+  earliestDeliveryDate,
+  studioNow,
+  SAME_DAY_CUTOFF_HOUR,
   isValidPhone,
   type CheckoutPayload,
 } from "@/lib/checkout";
@@ -41,6 +44,7 @@ export function CheckoutView() {
   const [isRecipientSelf, setIsRecipientSelf] = useState(true);
   const [recipientName, setRecipientName] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
+  const [isPickup, setIsPickup] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState("");
   const [timeSlot, setTimeSlot] = useState("");
   const [street, setStreet] = useState("");
@@ -109,7 +113,24 @@ export function CheckoutView() {
     };
   }, []);
 
-  const deliveryPrice = subtotal === 0 || subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_PRICE;
+  // «Под заказ» в корзине сдвигает минимальную дату — товар нужно успеть
+  // собрать. Итоговую проверку всё равно делает сервер, здесь — подсказка
+  // и ограничение календаря, чтобы клиент не выбрал заведомо невозможное.
+  const hasMadeToOrder = useMemo(
+    () => items.some((item) => item.availabilityMode === "made_to_order"),
+    [items]
+  );
+  const minDate = useMemo(() => earliestDeliveryDate({ hasMadeToOrder }), [hasMadeToOrder]);
+  const isAfterCutoff = useMemo(() => studioNow().getUTCHours() >= SAME_DAY_CUTOFF_HOUR, []);
+
+  // Если выбранная дата стала недоступной (сменили корзину, наступил
+  // вечер) — подставляем ближайшую возможную, чтобы форма не отправляла
+  // заведомо отклоняемое значение.
+  useEffect(() => {
+    if (!deliveryDate || deliveryDate < minDate) setDeliveryDate(minDate);
+  }, [minDate, deliveryDate]);
+
+  const deliveryPrice = calcDeliveryPrice({ isPickup, timeSlot, itemsTotal: subtotal });
   // Бонусы ограничены суммой ПОСЛЕ скидки по промокоду — тот же порядок,
   // что и на сервере (см. /api/orders), иначе тут показали бы клиенту
   // лимит бонусов больше, чем сервер реально позволит списать.
@@ -191,9 +212,13 @@ export function CheckoutView() {
       if (!isValidPhone(recipientPhone)) next.recipientPhone = "Проверьте номер телефона";
     }
     if (!deliveryDate) next.deliveryDate = "Выберите дату";
+    else if (deliveryDate < minDate) next.deliveryDate = "На эту дату уже нельзя — выберите позже";
     if (!timeSlot) next.timeSlot = "Выберите время";
-    if (!street.trim()) next.street = "Укажите улицу";
-    if (!house.trim()) next.house = "Укажите номер дома";
+    // При самовывозе адрес не нужен — клиент забирает из студии.
+    if (!isPickup) {
+      if (!street.trim()) next.street = "Укажите улицу";
+      if (!house.trim()) next.house = "Укажите номер дома";
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -213,11 +238,12 @@ export function CheckoutView() {
       isRecipientSelf,
       recipientName: isRecipientSelf ? customerName : recipientName,
       recipientPhone: isRecipientSelf ? customerPhone : recipientPhone,
+      isPickup,
       deliveryDate,
       deliveryTimeSlot: timeSlot,
-      deliveryAddress: `${street}, ${house}`,
-      deliveryApartment: apartment,
-      courierComment,
+      deliveryAddress: isPickup ? "" : `${street}, ${house}`,
+      deliveryApartment: isPickup ? "" : apartment,
+      courierComment: isPickup ? "" : courierComment,
       cardText,
       bonusUsed: bonusApplied,
       promoCode: appliedPromoCode,
@@ -273,6 +299,26 @@ export function CheckoutView() {
           Вернуться в каталог
           <ArrowRightIcon className="h-4 w-4" />
         </Link>
+
+        {/* Момент, когда предложение уместно: повод уже есть, дата известна */}
+        <div className="mt-10 w-full rounded-3xl border border-lavender-200 bg-lavender-50/60 p-5 text-left sm:p-6">
+          <p className="font-display text-sm font-semibold text-ink">
+            Чтобы в следующий раз не вспоминать в последний момент
+          </p>
+          <p className="mt-1.5 font-body text-sm leading-relaxed text-ink/65">
+            Наш Telegram-бот напомнит о дате заранее — за столько дней, сколько попросите.
+            Заодно покажет бонусный баланс.
+          </p>
+          <a
+            href={CONTACTS.telegramBot}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 font-display text-sm font-semibold text-lavender-700 underline underline-offset-4 transition hover:text-lavender-600"
+          >
+            Настроить напоминание
+            <ArrowRightIcon className="h-3.5 w-3.5" />
+          </a>
+        </div>
       </div>
     );
   }
@@ -334,8 +380,13 @@ export function CheckoutView() {
             errors={{ name: errors.recipientName, phone: errors.recipientPhone }}
           />
           <DeliveryFields
+            isPickup={isPickup}
+            onPickupChange={setIsPickup}
             date={deliveryDate}
             onDateChange={setDeliveryDate}
+            minDate={minDate}
+            hasMadeToOrder={hasMadeToOrder}
+            isAfterCutoff={isAfterCutoff}
             timeSlot={timeSlot}
             onTimeSlotChange={setTimeSlot}
             street={street}
