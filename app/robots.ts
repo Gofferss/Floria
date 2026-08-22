@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { CONTACTS } from "@/lib/contacts";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -7,5 +8,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: "/",
       disallow: ["/admin", "/admin/", "/account", "/api"],
     },
+    sitemap: `${CONTACTS.siteUrl}/sitemap.xml`,
   };
 }
