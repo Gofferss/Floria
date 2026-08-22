@@ -2,9 +2,17 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { sendPhoneOtp } from "@/lib/auth/otp";
 import { toE164RussianPhone } from "@/lib/phone-mask";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 // Node-рантайм ради sendPhoneOtp (создаёт отдельный supabase-js клиент).
 export const runtime = "nodejs";
+
+// Каждый вызов = отправленная СМС, то есть реальные деньги. У Supabase
+// есть свой лимит, но он общий на проект — то есть чужой перебор мог бы
+// исчерпать квоту и оставить без входа настоящих клиентов. Свой лимит
+// по адресу отсекает это раньше.
+const SEND_CODE_LIMIT = 5;
+const SEND_CODE_WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * Первый шаг привязки телефона в ЛК (после входа через VK) — только
@@ -15,6 +23,9 @@ export const runtime = "nodejs";
  * как и везде в проекте, где решается судьба бонусов, сначала СМС-код.
  */
 export async function POST(request: Request) {
+  const limit = rateLimit(`send-code:${clientIp(request)}`, SEND_CODE_LIMIT, SEND_CODE_WINDOW_MS);
+  if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },

@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 // Node-рантайм ради service-role supabase-js, как у остальных API-роутов.
 export const runtime = "nodejs";
 
 const MAX_LENGTH = 200;
+
+// Ручка открытая и пишет строку в БД на каждый вызов — без лимита ею
+// можно раздуть analytics_events и заодно испортить статистику. Живой
+// посетитель за минуту столько событий не набирает даже активно кликая.
+const TRACK_LIMIT = 60;
+const TRACK_WINDOW_MS = 60 * 1000;
 
 type TrackBody = {
   eventType?: unknown;
@@ -19,6 +26,9 @@ type TrackBody = {
  * на заголовок, просто пытаемся распарсить как JSON.
  */
 export async function POST(request: Request) {
+  const limit = rateLimit(`track:${clientIp(request)}`, TRACK_LIMIT, TRACK_WINDOW_MS);
+  if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
+
   let body: TrackBody;
   try {
     body = await request.json();

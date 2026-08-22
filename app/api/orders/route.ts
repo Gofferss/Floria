@@ -8,6 +8,7 @@ import { toE164RussianPhone } from "@/lib/phone-mask";
 import { notifyN8n, notifyStaffTelegram } from "@/lib/n8n";
 import { escapeTelegramHtml } from "@/lib/telegram/bot";
 import { createSupabaseServerClient } from "@/lib/auth/server";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import {
   DELIVERY_PRICE,
   FREE_DELIVERY_THRESHOLD,
@@ -92,7 +93,16 @@ function generateOrderNumber(): string {
   return `FL-${time}${random}`;
 }
 
+// Каждый заказ — уведомление флористу и строка в БД. Живой клиент за час
+// столько заказов не оформляет, а поток фальшивых способен похоронить
+// настоящие среди уведомлений.
+const ORDER_LIMIT = 10;
+const ORDER_WINDOW_MS = 60 * 60 * 1000;
+
 export async function POST(request: Request) {
+  const limit = rateLimit(`orders:${clientIp(request)}`, ORDER_LIMIT, ORDER_WINDOW_MS);
+  if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
+
   let body: unknown;
   try {
     body = await request.json();

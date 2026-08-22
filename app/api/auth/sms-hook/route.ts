@@ -86,7 +86,11 @@ export async function POST(request: Request) {
   const otp = payload.sms?.otp;
 
   if (!phone || !otp) {
-    console.error("Send SMS Hook: в payload нет телефона или OTP", payload);
+    // Сам payload не логируем: в нём лежит sms.otp — действующий код
+    // входа. Достаточно знать, ЧЕГО не хватило.
+    console.error(
+      `Send SMS Hook: в payload нет ${!phone ? "телефона" : ""}${!phone && !otp ? " и " : ""}${!otp ? "OTP" : ""}`
+    );
     return NextResponse.json({ error: "Bad payload" }, { status: 400 });
   }
 
