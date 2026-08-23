@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireStaffUser } from "@/lib/auth/server";
-import { listCategoriesAdmin } from "@/lib/actions/categories";
+import { listCategoriesAdmin, deleteCategory } from "@/lib/actions/categories";
 import { ArrowRightIcon, EditIcon } from "@/components/ui/Icons";
 import { ToggleActiveButton } from "@/components/admin/categories/ToggleActiveButton";
+import { DeleteButton } from "@/components/admin/DeleteButton";
 
 export const metadata: Metadata = {
   title: "Категории — Админка Floria",
@@ -66,6 +67,10 @@ export default async function AdminCategoriesPage() {
                         </span>
                         <span className="mt-0.5 block font-body text-xs text-ink/40">
                           /catalog?category={category.slug}
+                          {" · "}
+                          {category.productCount === 0
+                            ? "нет товаров"
+                            : `товаров: ${category.productCount}`}
                         </span>
                       </Link>
                     </td>
@@ -92,6 +97,16 @@ export default async function AdminCategoriesPage() {
                         >
                           <EditIcon className="h-4 w-4" />
                         </Link>
+                        <DeleteButton
+                          iconOnly
+                          what={`категорию «${category.name}»`}
+                          consequence={
+                            category.productCount > 0
+                              ? `Товары не удалятся: ${category.productCount} шт. останутся без категории, их нужно будет разложить заново.`
+                              : undefined
+                          }
+                          action={deleteCategory.bind(null, category.id)}
+                        />
                       </div>
                     </td>
                   </tr>

@@ -244,6 +244,35 @@ export async function toggleProductActive(id: string, isActive: boolean): Promis
   return { success: true, data: null };
 }
 
+/**
+ * Удаляет товар насовсем.
+ *
+ * История заказов не пострадает: order_items хранит product_name, unit_price
+ * и quantity снимком на момент покупки, а внешний ключ product_id объявлен с
+ * ON DELETE SET NULL. В заказе останется всё, что нужно для чека, — исчезнет
+ * только ссылка на карточку.
+ *
+ * Важное ограничение: товар, пришедший из Posiflora, синхронизация заведёт
+ * заново при следующем прогоне — удалять имеет смысл только то, что создано
+ * вручную (posiflora_product_id вида seed: или admin:). Для товаров из CRM
+ * правильный инструмент — скрытие через toggleProductActive.
+ */
+export async function deleteProduct(id: string): Promise<ActionResult<null>> {
+  await requireStaff();
+
+  const { error } = await getSupabaseAdmin().from("products").delete().eq("id", id);
+
+  if (error) {
+    console.error("[deleteProduct]", error.message);
+    return { success: false, error: "Не удалось удалить товар" };
+  }
+
+  revalidatePath("/admin/catalog");
+  revalidatePath("/catalog");
+  revalidatePath("/");
+  return { success: true, data: null };
+}
+
 export type AdminProductDetail = ProductInput & { id: string };
 
 /** Один товар для формы редактирования — включая скрытые. */

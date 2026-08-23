@@ -31,6 +31,8 @@ export type AdminCategoryDetail = {
   imageUrl: string | null;
   sortOrder: number;
   isActive: boolean;
+  /** Сколько товаров привязано — нужно, чтобы предупредить перед удалением. */
+  productCount: number;
 };
 
 export type CategoryInput = {
@@ -54,7 +56,9 @@ function validateCategoryInput(input: CategoryInput): string | null {
 export async function listCategoriesAdmin(): Promise<AdminCategoryDetail[]> {
   await requireStaff();
 
-  const { data, error } = await getSupabaseAdmin()
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data, error } = await supabaseAdmin
     .from("product_categories")
     .select("id, name, slug, subtitle, image_url, sort_order, is_active")
     .order("sort_order", { ascending: true });
@@ -62,6 +66,19 @@ export async function listCategoriesAdmin(): Promise<AdminCategoryDetail[]> {
   if (error) {
     console.error("[listCategoriesAdmin]", error.message);
     return [];
+  }
+
+  // Считаем товары одним запросом на всю таблицу, а не по запросу на
+  // категорию: категорий единицы, товаров тоже немного, зато не плодим
+  // N+1 обращений к базе на каждую отрисовку списка.
+  const { data: productRows } = await supabaseAdmin
+    .from("products")
+    .select("category_id")
+    .not("category_id", "is", null);
+
+  const counts = new Map<string, number>();
+  for (const row of productRows ?? []) {
+    counts.set(row.category_id, (counts.get(row.category_id) ?? 0) + 1);
   }
 
   return (data ?? []).map((row) => ({
@@ -72,6 +89,7 @@ export async function listCategoriesAdmin(): Promise<AdminCategoryDetail[]> {
     imageUrl: row.image_url,
     sortOrder: row.sort_order,
     isActive: row.is_active,
+    productCount: counts.get(row.id) ?? 0,
   }));
 }
 
@@ -86,6 +104,11 @@ export async function getCategoryForEdit(id: string): Promise<AdminCategoryDetai
 
   if (error || !data) return null;
 
+  const { count } = await getSupabaseAdmin()
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("category_id", id);
+
   return {
     id: data.id,
     name: data.name,
@@ -94,6 +117,7 @@ export async function getCategoryForEdit(id: string): Promise<AdminCategoryDetai
     imageUrl: data.image_url,
     sortOrder: data.sort_order,
     isActive: data.is_active,
+    productCount: count ?? 0,
   };
 }
 
@@ -178,6 +202,34 @@ export async function toggleCategoryActive(id: string, isActive: boolean): Promi
   if (error) {
     console.error("[toggleCategoryActive]", error.message);
     return { success: false, error: "Не удалось изменить статус категории" };
+  }
+
+  revalidatePath("/admin/categories");
+  revalidatePath("/");
+  revalidatePath("/catalog");
+  return { success: true, data: null };
+}
+
+/**
+ * Удаляет категорию насовсем.
+ *
+ * Товары при этом НЕ удаляются: внешний ключ products.category_id объявлен
+ * с ON DELETE SET NULL, поэтому они просто остаются без категории и их можно
+ * разложить заново. Сколько товаров это затронет, интерфейс показывает в
+ * подтверждении — считается в listCategoriesAdmin.
+ *
+ * Мягкое скрытие (toggleCategoryActive) никуда не делось и остаётся верным
+ * выбором для сезонных категорий вроде «Тюльпаны к 8 марта»: скрыл до весны,
+ * вернул обратно. Удаление — для того, что заведено по ошибке.
+ */
+export async function deleteCategory(id: string): Promise<ActionResult<null>> {
+  await requireStaff();
+
+  const { error } = await getSupabaseAdmin().from("product_categories").delete().eq("id", id);
+
+  if (error) {
+    console.error("[deleteCategory]", error.message);
+    return { success: false, error: "Не удалось удалить категорию" };
   }
 
   revalidatePath("/admin/categories");

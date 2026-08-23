@@ -204,3 +204,29 @@ export async function togglePromoCodeActive(id: string, isActive: boolean): Prom
   revalidatePath("/admin/promo-codes");
   return { success: true, data: null };
 }
+
+/**
+ * Удаляет промокод насовсем.
+ *
+ * ВНИМАНИЕ: внешний ключ promo_code_redemptions.promo_code_id объявлен с
+ * ON DELETE CASCADE, поэтому вместе с кодом исчезает и история его
+ * применений — кто и когда получил скидку. Это единственное из удалений в
+ * админке, которое реально теряет данные, поэтому в подтверждении число
+ * применений показывается отдельно.
+ *
+ * Если история нужна для отчётности — код надо не удалять, а отключать
+ * через togglePromoCodeActive.
+ */
+export async function deletePromoCode(id: string): Promise<ActionResult<null>> {
+  await requireStaff();
+
+  const { error } = await getSupabaseAdmin().from("promo_codes").delete().eq("id", id);
+
+  if (error) {
+    console.error("[deletePromoCode]", error.message);
+    return { success: false, error: "Не удалось удалить промокод" };
+  }
+
+  revalidatePath("/admin/promo-codes");
+  return { success: true, data: null };
+}

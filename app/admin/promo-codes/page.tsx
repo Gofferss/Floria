@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireStaffUser } from "@/lib/auth/server";
-import { listPromoCodesAdmin } from "@/lib/actions/promo-codes";
+import { listPromoCodesAdmin, deletePromoCode } from "@/lib/actions/promo-codes";
 import { ArrowRightIcon, EditIcon } from "@/components/ui/Icons";
 import { ToggleActiveButton } from "@/components/admin/promo/ToggleActiveButton";
+import { DeleteButton } from "@/components/admin/DeleteButton";
 
 export const metadata: Metadata = {
   title: "Промокоды — Админка Floria",
@@ -122,6 +123,19 @@ export default async function AdminPromoCodesPage() {
                         >
                           <EditIcon className="h-4 w-4" />
                         </Link>
+                        <DeleteButton
+                          iconOnly
+                          what={`промокод «${promo.code}»`}
+                          consequence={
+                            // Единственное удаление в админке, которое реально
+                            // теряет данные: promo_code_redemptions удаляются
+                            // каскадом вместе с кодом.
+                            promo.timesUsed > 0
+                              ? `Вместе с кодом сотрётся история его применений — ${promo.timesUsed} шт. Если нужна для отчётности, лучше просто отключить.`
+                              : undefined
+                          }
+                          action={deletePromoCode.bind(null, promo.id)}
+                        />
                       </div>
                     </td>
                   </tr>

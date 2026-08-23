@@ -4,10 +4,12 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   createOccasion,
+  deleteOccasion,
   toggleOccasionActive,
   updateOccasion,
   type AdminOccasion,
 } from "@/lib/actions/occasions";
+import { DeleteButton } from "@/components/admin/DeleteButton";
 import { inputClass } from "@/components/ui/input-styles";
 import { ArrowRightIcon } from "@/components/ui/Icons";
 
@@ -95,6 +97,16 @@ function OccasionRow({ occasion }: { occasion: AdminOccasion }) {
         >
           {occasion.isActive ? "Скрыть" : "Показать"}
         </button>
+        <DeleteButton
+          iconOnly
+          what={`повод «${occasion.name}»`}
+          consequence={
+            occasion.productCount > 0
+              ? `Повод снимется с ${occasion.productCount} товаров. Сами товары останутся.`
+              : undefined
+          }
+          action={() => deleteOccasion(occasion.id)}
+        />
       </div>
 
       {error && <p className="w-full font-body text-xs text-red-600">{error}</p>}

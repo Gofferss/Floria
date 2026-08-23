@@ -5,6 +5,8 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { AVAILABILITY_MODE_LABELS, type AvailabilityMode } from "@/lib/products";
 import { ArrowRightIcon, EditIcon } from "@/components/ui/Icons";
 import { ToggleActiveButton } from "@/components/admin/catalog/ToggleActiveButton";
+import { DeleteButton } from "@/components/admin/DeleteButton";
+import { deleteProduct } from "@/lib/actions/catalog";
 
 export const metadata: Metadata = {
   title: "Каталог — Админка Floria",
@@ -20,6 +22,8 @@ type AdminProductRow = {
   price: number;
   is_active: boolean;
   availability_mode: string | null;
+  /** seed:/admin: — заведён у нас; всё остальное приходит из Posiflora. */
+  posiflora_product_id: string | null;
   product_categories: { name: string } | { name: string }[] | null;
 };
 
@@ -39,7 +43,7 @@ export default async function AdminCatalogListPage() {
 
   const { data, error } = await getSupabaseAdmin()
     .from("products")
-    .select("id, name, slug, price, is_active, availability_mode, product_categories ( name )")
+    .select("id, name, slug, price, is_active, availability_mode, posiflora_product_id, product_categories ( name )")
     .order("created_at", { ascending: false });
 
   if (error) console.error("[AdminCatalogListPage]", error.message);
@@ -140,6 +144,19 @@ export default async function AdminCatalogListPage() {
                         >
                           <EditIcon className="h-4 w-4" />
                         </Link>
+                        <DeleteButton
+                          iconOnly
+                          what={`товар «${product.name}»`}
+                          consequence={
+                            // Товар из Posiflora синхронизация заведёт заново на
+                            // следующем прогоне — предупреждаем, чтобы человек не
+                            // удивлялся его возвращению и выбрал «Скрыть».
+                            String(product.posiflora_product_id ?? "").match(/^(seed|admin):/)
+                              ? "История заказов сохранится: в ней остаются название и цена на момент покупки."
+                              : "Этот товар приходит из Посифлоры — синхронизация заведёт его заново. Чтобы убрать насовсем, лучше скрыть."
+                          }
+                          action={deleteProduct.bind(null, product.id)}
+                        />
                       </div>
                     </td>
                   </tr>
