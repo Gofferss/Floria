@@ -25,7 +25,7 @@ export function Hero() {
   const bouquetExists = fileExists(BOUQUET_PHOTO);
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-lavender-100 via-lavender-50 to-white">
+    <section className="relative overflow-hidden">
       <HeroBackdrop />
 
       <HeroBotanicals />
