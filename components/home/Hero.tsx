@@ -1,18 +1,13 @@
 import { existsSync } from "fs";
 import { join } from "path";
-import Image from "next/image";
 import { ArrowRightIcon } from "@/components/ui/Icons";
-import { HeroBackdrop, type PhotoAccent } from "@/components/home/HeroBackdrop";
+import { HeroBackdrop } from "@/components/home/HeroBackdrop";
+import { HeroBotanicals } from "@/components/home/HeroBotanicals";
 import { HeroBouquetPhoto } from "@/components/home/HeroBouquetPhoto";
+import { StoriesRail } from "@/components/home/StoriesRail";
 import { TrackedLink } from "@/components/analytics/TrackedLink";
 
 const BOUQUET_PHOTO = "/hero-bouquet-summer.png";
-
-const PHOTO_ACCENTS: PhotoAccent[] = [
-  { src: "/flower-rose.png", alt: "", top: "6%", left: "7%", size: "w-24 sm:w-32 lg:w-40", depth: 18, delay: "0s", rotate: -6, anim: "motion-safe:animate-float-slow" },
-  { src: "/flower-tulip.png", alt: "", top: "68%", left: "3%", size: "w-16 sm:w-20 lg:w-24", depth: 24, delay: "1.4s", rotate: 10, anim: "motion-safe:animate-float-fast" },
-  { src: "/flower-potted.png", alt: "", top: "6%", left: "80%", size: "w-24 sm:w-28 lg:w-32", depth: 20, delay: "0.7s", rotate: 5, anim: "motion-safe:animate-float-slow" },
-];
 
 /**
  * Проверяем на сервере, что файл реально лежит в /public, а не полагаемся
@@ -28,30 +23,14 @@ function fileExists(publicPath: string): boolean {
 
 export function Hero() {
   const bouquetExists = fileExists(BOUQUET_PHOTO);
-  const availableAccents = PHOTO_ACCENTS.filter((accent) => fileExists(accent.src));
 
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-lavender-100 via-lavender-50 to-white">
-      <HeroBackdrop accents={availableAccents} />
+      <HeroBackdrop />
 
-      {/* Боковые паттерны с левитацией. Показываем только от xl (1280px) —
-          при max-w-7xl (тоже 1280px) именно с этой ширины у секции
-          появляется реальное свободное поле по краям. Только прозрачность,
-          без градиентной растушёвки — она давала резкий светлый край. */}
-      <div
-        className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-28 opacity-20 motion-safe:animate-float-slow xl:block 2xl:w-48"
-        aria-hidden="true"
-      >
-        <Image src="/pattern-left.png" alt="" fill className="object-cover object-left" />
-      </div>
-      <div
-        className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-28 opacity-20 motion-safe:animate-float-fast motion-safe:[animation-delay:0.6s] xl:block 2xl:w-48"
-        aria-hidden="true"
-      >
-        <Image src="/pattern-right.png" alt="" fill className="object-cover object-right" />
-      </div>
+      <HeroBotanicals />
 
-      <div className="relative z-20 mx-auto grid max-w-7xl grid-cols-1 items-center gap-8 px-4 py-10 sm:gap-12 sm:px-6 sm:py-14 lg:grid-cols-2 lg:gap-16 lg:px-8 lg:py-24">
+      <div className="relative z-20 mx-auto grid max-w-7xl grid-cols-1 items-center gap-8 px-4 pt-10 sm:gap-12 sm:px-6 sm:pt-14 lg:grid-cols-2 lg:gap-16 lg:px-8 lg:pt-24">
         {/* Текстовый блок */}
         <div className="animate-fade-up">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1 font-display text-[11px] font-semibold uppercase tracking-widest text-gold-700 ring-1 ring-gold-400/30 sm:px-4 sm:py-1.5 sm:text-xs">
@@ -95,6 +74,12 @@ export function Hero() {
         </div>
 
         {bouquetExists && <HeroBouquetPhoto src={BOUQUET_PHOTO} />}
+      </div>
+
+      {/* Истории — нижняя строка хиро-блока. Сетка выше двухколоночная, а
+          ряд кружков должен идти во всю ширину, поэтому он вынесен из неё. */}
+      <div className="relative z-20 mx-auto max-w-7xl px-4 pb-10 sm:px-6 sm:pb-14 lg:px-8 lg:pb-16">
+        <StoriesRail />
       </div>
     </section>
   );
