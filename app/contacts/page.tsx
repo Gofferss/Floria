@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/info/PageHeader";
+import { YandexMapEmbed } from "@/components/info/YandexMapEmbed";
 import { ContactForm } from "@/components/info/ContactForm";
 import {
   ClockIcon,
@@ -99,12 +100,9 @@ export default function ContactsPage() {
                 </a>
               </div>
               <div className="mt-4 overflow-hidden rounded-3xl border border-lavender-100 bg-lavender-50">
-                <iframe
+                <YandexMapEmbed
                   src={CONTACTS.yandexMapSrc}
                   title={`Студия цветов Floria на карте — ${CONTACTS.addressFull}`}
-                  loading="lazy"
-                  allowFullScreen
-                  className="h-[320px] w-full border-0 sm:h-[400px]"
                 />
               </div>
               <p className="mt-3 font-body text-sm text-ink/50">

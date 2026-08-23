@@ -124,6 +124,12 @@ export function Footer() {
               Согласие на обработку персональных данных
             </Link>
             <Link
+              href="/cookies"
+              className="font-body text-xs text-lavender-100/50 transition hover:text-gold-400"
+            >
+              Файлы cookie
+            </Link>
+            <Link
               href="/offer"
               className="font-body text-xs text-lavender-100/50 transition hover:text-gold-400"
             >

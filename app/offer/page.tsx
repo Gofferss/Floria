@@ -220,7 +220,7 @@ export default function OfferPage() {
               <br />
               Телефон: {CONTACTS.phone}
               <br />
-              Email: {CONTACTS.email}
+              Электронная почта: {CONTACTS.email}
             </p>
           </section>
 

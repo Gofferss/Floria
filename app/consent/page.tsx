@@ -43,7 +43,7 @@ export default function ConsentPage() {
               <li>Фамилия, имя;</li>
               <li>Номер телефона;</li>
               <li>Адрес доставки, если оформляется заказ;</li>
-              <li>Email — если указан добровольно;</li>
+              <li>Адрес электронной почты — если указан добровольно;</li>
               <li>Иные данные, которые я указываю добровольно в полях форм (например, текст открытки к букету, комментарий курьеру).</li>
             </ol>
           </section>
@@ -102,7 +102,7 @@ export default function ConsentPage() {
               <br />
               Телефон: {CONTACTS.phone}
               <br />
-              Email: {CONTACTS.email}
+              Электронная почта: {CONTACTS.email}
             </p>
           </section>
         </div>

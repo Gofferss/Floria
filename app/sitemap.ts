@@ -21,6 +21,7 @@ const STATIC_PAGES: { path: string; priority: number; changeFrequency: MetadataR
   { path: "/contacts", priority: 0.5, changeFrequency: "monthly" },
   { path: "/privacy", priority: 0.1, changeFrequency: "yearly" },
   { path: "/consent", priority: 0.1, changeFrequency: "yearly" },
+  { path: "/cookies", priority: 0.1, changeFrequency: "yearly" },
   { path: "/offer", priority: 0.1, changeFrequency: "yearly" },
 ];
 

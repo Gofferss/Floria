@@ -26,7 +26,7 @@ export function StaffLoginView() {
 
   function validate(): boolean {
     const next: Record<string, string> = {};
-    if (!email.trim()) next.email = "Укажите email";
+    if (!email.trim()) next.email = "Укажите адрес электронной почты";
     if (password.length < 6) next.password = "Минимум 6 символов";
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -44,7 +44,7 @@ export function StaffLoginView() {
 
     if (error) {
       setFormError(
-        error.message === "Invalid login credentials" ? "Неверный email или пароль" : error.message
+        error.message === "Invalid login credentials" ? "Неверный адрес электронной почты или пароль" : error.message
       );
       setStatus("idle");
       return;
@@ -65,7 +65,7 @@ export function StaffLoginView() {
       )}
 
       <div className="mt-4 flex flex-col gap-4">
-        <FormField label="Email" htmlFor="staffEmail" required error={errors.email}>
+        <FormField label="Электронная почта" htmlFor="staffEmail" required error={errors.email}>
           <input
             id="staffEmail"
             type="email"

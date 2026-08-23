@@ -14,7 +14,7 @@ export function StaffLoginToggle() {
           onClick={() => setOpen(true)}
           className="font-body text-xs text-ink/40 underline underline-offset-2 transition hover:text-ink/60"
         >
-          Я сотрудник — войти по email
+          Я сотрудник — войти по электронной почте
         </button>
       </div>
     );
