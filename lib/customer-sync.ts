@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { findOrCreatePosifloraClient, getPosifloraClientBalance } from "@/lib/posiflora";
+import { requireE164RussianPhone } from "@/lib/phone-mask";
 
 /** Баланс считается устаревшим и подлежит освежению через это время */
 export const BONUS_SYNC_STALE_MS = 30 * 60 * 1000; // 30 минут
@@ -27,6 +28,8 @@ export async function syncCustomerWithPosiflora(
   phone: string,
   fullName?: string | null
 ): Promise<SyncedCustomer> {
+  phone = requireE164RussianPhone(phone);
+
   const posifloraClient = await findOrCreatePosifloraClient({
     phone,
     fullName: fullName ?? undefined,
@@ -43,6 +46,25 @@ export async function syncCustomerWithPosiflora(
     .eq("id", customerId);
 
   if (error) {
+    // Тот же клиент Posiflora уже привязан к ДРУГОЙ строке customers —
+    // значит, на одного человека у нас две карточки (исторически номер
+    // хранился то с плюсом, то без, и .eq("phone", ...) считал их разными
+    // людьми; теперь номер нормализуется на входе — см. lib/phone.ts).
+    // Раньше здесь бросалось исключение, и кабинет уходил в бесконечный
+    // цикл: каждая его загрузка заново дёргала Posiflora, падала на этом
+    // же констрейнте и показывала 0 бонусов. Баланс мы уже получили —
+    // отдаём его, а конфликт пишем в лог один раз, без падения.
+    if (error.code === "23505") {
+      console.error(
+        `Клиент Posiflora ${posifloraClient.posifloraClientId} уже привязан к другой карточке; ` +
+          `customers.id=${customerId} остаётся без связи. Нужно объединить дубли.`
+      );
+      return {
+        posifloraClientId: posifloraClient.posifloraClientId,
+        bonusBalance: posifloraClient.bonusBalance,
+      };
+    }
+
     throw new Error(`Не удалось записать синхронизацию с Posiflora: ${error.message}`);
   }
 
@@ -73,6 +95,8 @@ export async function resolveOrCreateCustomerByPhone(
   phone: string,
   fullName?: string
 ): Promise<ResolvedCustomer> {
+  phone = requireE164RussianPhone(phone);
+
   const supabaseAdmin = getSupabaseAdmin();
 
   const { data: existing, error: selectError } = await supabaseAdmin
@@ -176,6 +200,8 @@ export async function linkAuthenticatedCustomerToPhone(
   phone: string,
   fullName?: string | null
 ): Promise<ResolvedCustomer> {
+  phone = requireE164RussianPhone(phone);
+
   const supabaseAdmin = getSupabaseAdmin();
 
   const { data: myCustomer, error: myError } = await supabaseAdmin

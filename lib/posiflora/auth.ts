@@ -1,3 +1,11 @@
+/**
+ * Ни один запрос к Posiflora не должен держать рендер страницы дольше этого.
+ * Раньше таймаута не было вовсе: голый fetch ждёт ответа минутами, поэтому
+ * недоступная Posiflora превращала личный кабинет в «страница не грузится».
+ * Бонусы — не критичный блок, лучше показать 0, чем заставлять ждать.
+ */
+export const POSIFLORA_TIMEOUT_MS = 5000;
+
 // ================================================================
 // Сессия Posiflora API.
 //
@@ -67,6 +75,9 @@ async function loginWithCredentials(): Promise<PosifloraSession> {
 
   const response = await fetch(`${getPosifloraBaseUrl()}/sessions`, {
     method: "POST",
+    // Авторизация — первый из двух последовательных запросов при каждой
+    // загрузке кабинета, поэтому висеть без ограничения ей нельзя тем более.
+    signal: AbortSignal.timeout(POSIFLORA_TIMEOUT_MS),
     headers: { "Content-Type": "application/vnd.api+json" },
     body: JSON.stringify({
       data: { type: "sessions", attributes: { username, password } },
@@ -83,6 +94,7 @@ async function loginWithCredentials(): Promise<PosifloraSession> {
 async function refreshWithToken(refreshToken: string): Promise<PosifloraSession> {
   const response = await fetch(`${getPosifloraBaseUrl()}/sessions`, {
     method: "PATCH",
+    signal: AbortSignal.timeout(POSIFLORA_TIMEOUT_MS),
     headers: { "Content-Type": "application/vnd.api+json" },
     body: JSON.stringify({
       data: { type: "sessions", attributes: { refreshToken } },

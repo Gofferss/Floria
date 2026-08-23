@@ -1,4 +1,10 @@
-import { getPosifloraAccessToken, getPosifloraBaseUrl, invalidatePosifloraSession } from "./auth";
+import {
+  getPosifloraAccessToken,
+  getPosifloraBaseUrl,
+  invalidatePosifloraSession,
+  POSIFLORA_TIMEOUT_MS,
+} from "./auth";
+
 
 /**
  * Аутентифицированный запрос к Posiflora API. При 401 сбрасывает кэш
@@ -15,6 +21,7 @@ export async function posifloraFetch(
 
   const response = await fetch(`${getPosifloraBaseUrl()}${path}`, {
     ...init,
+    signal: init.signal ?? AbortSignal.timeout(POSIFLORA_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/vnd.api+json",
       Authorization: `Bearer ${accessToken}`,

@@ -37,3 +37,22 @@ export function toE164RussianPhone(value: string): string | null {
   if (digits.length !== 10) return null;
   return `+7${digits}`;
 }
+
+/**
+ * То же, что toE164RussianPhone, но бросает исключение вместо null.
+ *
+ * Для мест, где номер уже прошёл валидацию на входе и невалидное значение
+ * означает испорченные данные, а не штатную ветку — прежде всего для работы
+ * с customers.phone: раньше номер писался в базу «как пришёл» (Supabase Auth
+ * отдаёт "79787265766", форма заказа — "+7 (978) 726-57-66"), поиск шёл
+ * точным совпадением строки, и на одного человека заводилось несколько
+ * карточек. Отсюда же брался конфликт по customers_posiflora_client_id_key,
+ * вешавший личный кабинет.
+ */
+export function requireE164RussianPhone(value: string): string {
+  const normalized = toE164RussianPhone(value);
+  if (!normalized) {
+    throw new Error(`Не удалось нормализовать номер телефона: "${value}"`);
+  }
+  return normalized;
+}
