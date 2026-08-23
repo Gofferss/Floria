@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import { PhoneLoginForm } from "@/components/auth/PhoneLoginForm";
 import { StaffLoginToggle } from "@/components/auth/StaffLoginToggle";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
+import { TelegramIcon } from "@/components/ui/Icons";
+import { CONTACTS } from "@/lib/contacts";
 
 export const metadata: Metadata = {
   title: "Вход — Floria",
@@ -32,6 +34,45 @@ export default function LoginPage() {
           <Suspense fallback={null}>
             <PhoneLoginForm />
           </Suspense>
+        </div>
+
+        {/* Альтернативный способ получить код.
+            Пока имя отправителя не одобрено операторами связи, СМС доходят
+            не на все номера, и человеку нужен работающий путь прямо здесь,
+            а не сообщение об ошибке после неудачной попытки.
+
+            Это справочная информация о правилах пользования собственным
+            сервисом на собственном сайте — по разъяснениям ФАС такие
+            сведения рекламой не являются (п. 2 ч. 2 ст. 2 ФЗ «О рекламе»),
+            а запрет из ч. 10.7 ст. 5 касается размещения рекламы НА
+            ограниченном ресурсе, а не ссылки на него со своего сайта. */}
+        <div className="mt-6 rounded-3xl border border-lavender-100 bg-white/70 p-5 text-center">
+          <p className="font-display text-sm font-semibold text-ink">
+            Код не приходит?
+          </p>
+          <p className="mt-2 font-body text-sm leading-relaxed text-ink/60">
+            У некоторых операторов связи СМС пока не доставляются. Получите код в
+            нашем боте: откройте его, нажмите «Поделиться номером» — и вернитесь
+            сюда, код придёт в чат.
+          </p>
+          <a
+            href={CONTACTS.telegramBot}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex items-center gap-2 rounded-full border border-gold-400/60 bg-gold-50 px-5 py-2.5 font-display text-sm font-semibold text-gold-700 transition hover:border-gold-500 hover:bg-gold-100"
+          >
+            <TelegramIcon className="h-4 w-4" />
+            Открыть бота Floria
+          </a>
+          <p className="mt-3 font-body text-xs text-ink/45">
+            Или позвоните нам — оформим заказ без входа:{" "}
+            <a
+              href={`tel:+${CONTACTS.phone.replace(/\D/g, "")}`}
+              className="whitespace-nowrap underline underline-offset-2 transition hover:text-gold-600"
+            >
+              {CONTACTS.phone}
+            </a>
+          </p>
         </div>
 
         <Suspense fallback={null}>
