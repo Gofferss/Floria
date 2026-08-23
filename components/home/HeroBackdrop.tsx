@@ -1,6 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
+
+/**
+ * Исходные размеры декоративных PNG в /public — у всех трёх одинаковые.
+ * next/image требует их, чтобы зарезервировать место и не дёргать вёрстку.
+ */
+const ACCENT_INTRINSIC_WIDTH = 2816;
+const ACCENT_INTRINSIC_HEIGHT = 1536;
 
 export type PhotoAccent = {
   src: string;
@@ -77,11 +85,23 @@ export function HeroBackdrop({ accents }: { accents: PhotoAccent[] }) {
       />
 
       {accents.map((photo, index) => (
-        <img
+        // next/image, а не обычный <img>: исходники — PNG 2816×1536 весом до
+        // 2 МБ каждый, а показываются шириной максимум 160px. Через голый тег
+        // они уходили посетителю целиком — 4 МБ декоративной графики на
+        // каждый заход на главную. sizes сообщает Next, какие ширины реально
+        // нужны, чтобы он отдал WebP подходящего размера.
+        <Image
           key={index}
           src={photo.src}
           alt={photo.alt}
-          className={`absolute ${photo.size} object-contain drop-shadow-lg ${photo.anim}`}
+          width={ACCENT_INTRINSIC_WIDTH}
+          height={ACCENT_INTRINSIC_HEIGHT}
+          sizes="(min-width: 1024px) 160px, (min-width: 640px) 128px, 96px"
+          // Первый экран: ленивая загрузка тут только вредит — акценты
+          // «выпрыгивали» бы уже после отрисовки хиро. После сжатия все три
+          // весят вместе около 7 КБ, грузить их сразу ничего не стоит.
+          loading="eager"
+          className={`absolute ${photo.size} h-auto object-contain drop-shadow-lg ${photo.anim}`}
           style={{
             top: photo.top,
             left: photo.left,
