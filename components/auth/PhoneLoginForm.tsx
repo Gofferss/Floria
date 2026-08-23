@@ -19,6 +19,38 @@ const RESEND_COOLDOWN_SECONDS = 30;
  * с точки зрения этой формы разницы никакой, как будто SMS отправляет
  * сам Supabase.
  */
+/**
+ * Переводит технические ответы Supabase Auth в человеческий текст.
+ *
+ * Отдельного внимания стоит сбой хука отправки СМС. У HTTP-хуков Supabase не
+ * пробрасывает наружу тело ответа: что бы наш хук ни написал, клиент получит
+ * «Unexpected status code returned from hook: 500». Поэтому объяснять
+ * происходящее приходится здесь.
+ *
+ * Практически за этой ошибкой стоит одна причина: SMS.ru отказывает, потому
+ * что имя отправителя ещё не одобрено ОПЕРАТОРОМ этого номера (одобрение идёт
+ * по каждому оператору отдельно). Человек в этом не виноват и исправить это
+ * не может — значит, надо сразу дать рабочий обходной путь.
+ */
+function humanizeLoginError(message: string): string {
+  if (message === "Invalid phone number") return "Проверьте номер телефона";
+
+  if (/hook/i.test(message)) {
+    return (
+      "Не удалось отправить СМС на этот номер — так бывает у части операторов связи. " +
+      "Получите код в Telegram: напишите боту @floria_flowers_crimea_bot и нажмите " +
+      "«Поделиться номером», затем вернитесь и войдите снова. Или позвоните нам: " +
+      "+7 (978) 240-17-77 — оформим заказ без входа."
+    );
+  }
+
+  if (/rate limit|too many/i.test(message)) {
+    return "Слишком много попыток. Подождите пару минут и попробуйте снова.";
+  }
+
+  return message;
+}
+
 export function PhoneLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -71,7 +103,7 @@ export function PhoneLoginForm() {
 
     if (error) {
       console.error("Ошибка отправки SMS-кода:", error);
-      setErrorMessage(error.message === "Invalid phone number" ? "Проверьте номер телефона" : error.message);
+      setErrorMessage(humanizeLoginError(error.message));
       return;
     }
 
