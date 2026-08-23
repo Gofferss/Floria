@@ -29,14 +29,6 @@ export async function CategoryGrid() {
     // Фон общий для всей главной (.home-canvas), поэтому секция прозрачная —
     // свой градиент здесь давал бы шов на стыке с хиро.
     <section className="relative">
-      {/* Те же «дышащие» пятна, что в хиро, но спокойнее: здесь они фон для
-          карточек, а не главный герой экрана. Без слежения за курсором —
-          интерактивность приберегаем для хиро, чтобы она не приедалась. */}
-      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
-        <div className="absolute -left-1/4 top-[-10%] h-[55%] w-[55%] rounded-full bg-gold-300/20 blur-3xl motion-safe:animate-blob" />
-        <div className="absolute -right-1/4 bottom-[-15%] h-[60%] w-[60%] rounded-full bg-lavender-300/30 blur-3xl motion-safe:animate-blob-reverse" />
-      </div>
-
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
         <div className="mb-6 sm:mb-10 lg:mb-14">
           <span className="inline-flex items-center rounded-full bg-white/70 px-3 py-1 font-display text-[11px] font-semibold uppercase tracking-widest text-gold-700 ring-1 ring-gold-400/30 sm:px-4 sm:py-1.5 sm:text-xs">

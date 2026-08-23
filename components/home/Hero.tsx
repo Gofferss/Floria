@@ -1,7 +1,6 @@
 import { existsSync } from "fs";
 import { join } from "path";
 import { ArrowRightIcon } from "@/components/ui/Icons";
-import { HeroBackdrop } from "@/components/home/HeroBackdrop";
 import { HeroBotanicals } from "@/components/home/HeroBotanicals";
 import { HeroBouquetPhoto } from "@/components/home/HeroBouquetPhoto";
 import { StoriesRail } from "@/components/home/StoriesRail";
@@ -25,8 +24,7 @@ export function Hero() {
   const bouquetExists = fileExists(BOUQUET_PHOTO);
 
   return (
-    <section className="relative overflow-hidden">
-      <HeroBackdrop />
+    <section className="relative">
 
       <HeroBotanicals />
 
