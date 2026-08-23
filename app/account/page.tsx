@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient, getStaffUser } from "@/lib/auth/server";
-import { getPosifloraClientBalance } from "@/lib/posiflora";
-import { syncCustomerWithPosiflora } from "@/lib/customer-sync";
+import { syncCustomerWithPosiflora, refreshCustomerBonusBalance, BONUS_SYNC_STALE_MS } from "@/lib/customer-sync";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { BonusCard } from "@/components/account/BonusCard";
@@ -32,6 +31,8 @@ type AccountCustomer = {
   phone: string | null;
   full_name: string | null;
   posiflora_client_id: string | null;
+  bonus_balance: number | string | null;
+  bonus_balance_synced_at: string | null;
 };
 
 /**
@@ -49,13 +50,34 @@ async function resolveAccountBonusBalance(customer: AccountCustomer | null): Pro
   if (!customer) return 0;
 
   if (customer.posiflora_client_id) {
-    try {
-      const { bonusBalance } = await getPosifloraClientBalance(customer.posiflora_client_id);
-      return bonusBalance;
-    } catch (error) {
-      console.error("Не удалось получить баланс бонусов из Posiflora:", error);
-      return 0;
+    // Кэш баланса живёт в customers.bonus_balance и обновляется не чаще
+    // BONUS_SYNC_STALE_MS. Раньше страница его игнорировала и ходила в
+    // Posiflora на КАЖДОЙ загрузке — это примерно секунда ожидания перед
+    // отрисовкой кабинета, ради числа, которое меняется только после
+    // покупки. Свежий кэш отдаём сразу, в CRM идём только когда он устарел.
+    const syncedAt = customer.bonus_balance_synced_at
+      ? new Date(customer.bonus_balance_synced_at).getTime()
+      : 0;
+
+    if (syncedAt && Date.now() - syncedAt < BONUS_SYNC_STALE_MS) {
+      const cached =
+        typeof customer.bonus_balance === "string"
+          ? Number.parseFloat(customer.bonus_balance)
+          : customer.bonus_balance;
+      if (Number.isFinite(cached)) return cached as number;
     }
+
+    // refreshCustomerBonusBalance не бросает исключений и сам обновляет кэш;
+    // null означает, что Posiflora недоступна — показываем последнее известное
+    // значение, а не ноль (ноль выглядел бы как «бонусы сгорели»).
+    const fresh = await refreshCustomerBonusBalance(customer.id, customer.posiflora_client_id);
+    if (fresh !== null) return fresh;
+
+    const stale =
+      typeof customer.bonus_balance === "string"
+        ? Number.parseFloat(customer.bonus_balance)
+        : customer.bonus_balance;
+    return Number.isFinite(stale) ? (stale as number) : 0;
   }
 
   if (customer.phone) {
@@ -97,7 +119,7 @@ export default async function AccountPage() {
 
   const { data: customer } = await supabase
     .from("customers")
-    .select("id, full_name, phone, posiflora_client_id, created_at")
+    .select("id, full_name, phone, posiflora_client_id, created_at, bonus_balance, bonus_balance_synced_at")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
