@@ -72,6 +72,43 @@ async function sendSmsViaSmsRu(phone: string, otp: string): Promise<void> {
   }
 }
 
+/**
+ * Ошибка в том формате, который Supabase Auth действительно умеет читать:
+ * { error: { http_code, message } }. Раньше мы отдавали { error: "текст" } —
+ * форму, которой в контракте нет, поэтому наш текст терялся, и посетитель
+ * видел служебное «Unexpected status code returned from hook: 500».
+ * См. https://supabase.com/docs/guides/auth/auth-hooks#error-handling
+ */
+function smsHookError(message: string, httpCode = 422): NextResponse {
+  return NextResponse.json({ error: { http_code: httpCode, message } }, { status: httpCode });
+}
+
+/**
+ * SMS.ru отвечает «Вы не подключили данного оператора на данном отправителе»,
+ * пока заявка на имя отправителя не одобрена КОНКРЕТНЫМ оператором связи —
+ * одобрение идёт по каждому оператору отдельно, поэтому на часть номеров код
+ * уходит, а на часть нет. Кодом это не обходится, но человеку нужно объяснить
+ * происходящее и дать рабочий обходной путь, а не показывать номер ошибки.
+ */
+function errorMessageForVisitor(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+
+  if (/не подключили данного оператора|отправител/i.test(text)) {
+    return (
+      "На этот номер СМС пока не доходят: ваш оператор связи ещё не подключён у нашего " +
+      "СМС-провайдера, заявка на рассмотрении. Код можно получить в Telegram: напишите " +
+      "боту @floria_flowers_crimea_bot, нажмите «Поделиться номером» — и повторите вход, " +
+      "код придёт в чат. Или просто позвоните нам: +7 (978) 240-17-77."
+    );
+  }
+
+  return (
+    "Не удалось отправить код на этот номер. Попробуйте ещё раз через минуту, " +
+    "получите код в Telegram-боте @floria_flowers_crimea_bot или позвоните нам: " +
+    "+7 (978) 240-17-77."
+  );
+}
+
 export async function POST(request: Request) {
   let payload: SendSmsHookPayload;
 
@@ -103,7 +140,7 @@ export async function POST(request: Request) {
       console.error("Не удалось отправить SMS через SMS.ru:", error);
       // Возвращаем ошибку намеренно — если промолчать 200-кой, Supabase
       // решит, что код успешно доставлен, а человек его так и не получит.
-      return NextResponse.json({ error: "Не удалось отправить SMS" }, { status: 500 });
+      return smsHookError(errorMessageForVisitor(error));
     }
   }
 
