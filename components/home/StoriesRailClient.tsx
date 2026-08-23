@@ -27,9 +27,12 @@ const ROTATE_MS = 4000;
  * относительных единиц дают подрагивание на границе кадра.
  */
 const LAYOUT = {
-  mobile: { circle: 68, gap: 14, perPage: 4 },
-  tablet: { circle: 76, gap: 18, perPage: 5 },
-  desktop: { circle: 84, gap: 22, perPage: 6 },
+  // Шаг = circle + gap. На мобильном ряд обязан уложиться в 375 - 32 (поля
+  // px-4) = 343px: 4 × (76 + 12) − 12 = 340. Поэтому при укрупнении кружка
+  // зазор пришлось поджать — иначе четвёртый вылезал бы за экран.
+  mobile: { circle: 76, gap: 12, perPage: 4 },
+  tablet: { circle: 88, gap: 16, perPage: 5 },
+  desktop: { circle: 98, gap: 20, perPage: 6 },
 } as const;
 
 type Layout = (typeof LAYOUT)[keyof typeof LAYOUT];

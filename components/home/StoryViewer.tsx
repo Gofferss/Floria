@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Story } from "@/lib/stories";
 import { CloseIcon } from "@/components/ui/Icons";
 
@@ -13,6 +14,9 @@ type StoryViewerProps = {
 };
 
 export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClose }: StoryViewerProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const story = stories[storyIndex];
   const item = story?.items[itemIndex];
 
@@ -63,16 +67,22 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
 
   if (!story || !item) return null;
 
-  return (
+  // До монтирования document нет — на сервере портал строить не из чего.
+  if (!mounted) return null;
+
+  const overlay = (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/90 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/90 p-3 backdrop-blur-sm sm:p-6"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={story.title}
     >
       <div
-        className="relative aspect-[9/16] h-full max-h-[92vh] w-auto max-w-full overflow-hidden rounded-2xl bg-ink sm:h-[92vh]"
+        // 86vh вместо 92vh: при 92 верх окна с крестиком подходил вплотную
+        // к краю экрана, и на десктопе кнопка закрытия оказывалась под
+        // шапкой. Запас по вертикали заодно даёт окну «дышать».
+        className="relative aspect-[9/16] h-full max-h-[82vh] w-auto max-w-full overflow-hidden rounded-2xl bg-ink sm:h-[82vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <img src={item.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -81,7 +91,7 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
         <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-ink/60 to-transparent" aria-hidden="true" />
 
         {/* Прогресс-бар — сегмент на каждый слайд истории */}
-        <div className="absolute inset-x-3 top-3 flex gap-1.5">
+        <div className="absolute inset-x-3 top-3 z-20 flex gap-1.5">
           {story.items.map((slide, i) => (
             <div key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
               <div
@@ -98,7 +108,7 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
           ))}
         </div>
 
-        <div className="absolute left-3 right-12 top-7 font-display text-sm font-semibold text-white drop-shadow">
+        <div className="absolute left-3 right-12 top-7 z-20 font-display text-sm font-semibold text-white drop-shadow">
           {story.title}
         </div>
 
@@ -106,25 +116,34 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
           type="button"
           onClick={onClose}
           aria-label="Закрыть"
-          className="absolute right-3 top-6 flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white transition hover:bg-black/50"
+          className="absolute right-3 top-6 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white transition hover:bg-black/50"
         >
           <CloseIcon className="h-4 w-4" />
         </button>
 
-        {/* Клик по левой трети — назад, по остальному — вперёд */}
+        {/* Клик по левой трети — назад, по остальному — вперёд.
+            z-10 — строго НИЖЕ крестика и заголовка (z-20): зоны листания
+            занимают всё окно и идут в разметке позже, поэтому без явных
+            слоёв они перекрывали кнопку закрытия и та не нажималась. */}
         <button
           type="button"
           onClick={() => goToItem(storyIndex, itemIndex - 1)}
           aria-label="Предыдущий слайд"
-          className="absolute inset-y-0 left-0 w-1/3"
+          className="absolute inset-y-0 left-0 z-10 w-1/3"
         />
         <button
           type="button"
           onClick={() => goToItem(storyIndex, itemIndex + 1)}
           aria-label="Следующий слайд"
-          className="absolute inset-y-0 right-0 w-2/3"
+          className="absolute inset-y-0 right-0 z-10 w-2/3"
         />
       </div>
     </div>
   );
+
+  // Портал в body — обязателен, а не «для чистоты». Окно живёт внутри
+  // хиро, у которого свой слой (z-20), и z-[100] считается ВНУТРИ него:
+  // подняться выше шапки (z-50) оно не могло, из-за чего крестик
+  // оказывался под шапкой и не нажимался. В body слоёв-предков нет.
+  return createPortal(overlay, document.body);
 }
