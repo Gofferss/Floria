@@ -175,7 +175,7 @@ export function ProductForm({ categories, product }: ProductFormProps) {
    * же приём уже использован для цены.
    */
   function updateRecipeQuantity(key: string, value: string) {
-    if (value !== "" && !/^d{0,4}$/.test(value)) return;
+    if (value !== "" && !/^\d{1,4}$/.test(value)) return;
     setRecipeItems((prev) => prev.map((r) => (r.key === key ? { ...r, quantity: value } : r)));
   }
 
@@ -466,14 +466,25 @@ export function ProductForm({ categories, product }: ProductFormProps) {
                   key={item.key}
                   className="flex items-center gap-3 rounded-xl border border-lavender-100 px-4 py-2.5"
                 >
-                  <span className="flex-1 font-body text-sm text-ink">{item.itemName}</span>
+                  <span className="min-w-0 flex-1 font-body text-sm text-ink">{item.itemName}</span>
                   <input
-                    type="number"
+                    // type="text", а не "number": у числового поля браузер
+                    // сам решает, что считать допустимым, и на промежуточных
+                    // состояниях отдаёт пустую строку — с ним поле ведёт себя
+                    // непредсказуемо. inputMode="numeric" всё равно открывает
+                    // цифровую клавиатуру на телефоне, а что можно вводить,
+                    // решает updateRecipeQuantity, и только он.
+                    type="text"
                     inputMode="numeric"
-                    min={1}
                     value={item.quantity}
                     onChange={(e) => updateRecipeQuantity(item.key, e.target.value)}
-                    className={`${inputClass()} w-20 shrink-0`}
+                    // Ширина стилем, а не классом: inputClass() начинается с
+                    // w-full, и какой из двух классов победит, зависит от
+                    // порядка правил в собранном CSS. Из-за этого поле
+                    // растягивалось на всю строку, а название ингредиента
+                    // сжималось в три строки.
+                    style={{ width: 88 }}
+                    className={`${inputClass()} shrink-0 text-center`}
                   />
                   <span className="shrink-0 font-body text-xs text-ink/40">шт</span>
                   <button
