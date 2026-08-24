@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Floria">
+  <title>Floria</title>
+  <defs>
+    <!-- Золото логотипа: светлый блик слева вверху, насыщенный тон справа внизу -->
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FBF0A4"/>
+      <stop offset=".38" stop-color="#F2D64A"/>
+      <stop offset=".72" stop-color="#DFB61E"/>
+      <stop offset="1" stop-color="#B8890A"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="96" fill="#2B1B3E"/>
+
+  <!-- Лепестки: один контур, повёрнутый вокруг общего основания.
+       Толщина линии подобрана так, чтобы мотив читался и на 32 пикселях. -->
+  <g fill="none" stroke="url(#gold)" stroke-width="19" stroke-linejoin="round" stroke-linecap="round">
+    <!-- центральный -->
+    <path d="M256 356 C 232 300 232 214 256 150 C 280 214 280 300 256 356 Z"/>
+
+    <!-- внутренняя пара -->
+    <g transform="rotate(-34 256 356)">
+      <path d="M256 356 C 230 302 228 222 253 162 C 282 220 284 300 256 356 Z"/>
+    </g>
+    <g transform="rotate(34 256 356)">
+      <path d="M256 356 C 230 302 228 222 253 162 C 282 220 284 300 256 356 Z"/>
+    </g>
+
+    <!-- внешняя пара, длиннее и шире -->
+    <g transform="rotate(-64 256 356)">
+      <path d="M256 356 C 222 296 214 208 246 140 C 288 204 296 292 256 356 Z"/>
+    </g>
+    <g transform="rotate(64 256 356)">
+      <path d="M256 356 C 222 296 214 208 246 140 C 288 204 296 292 256 356 Z"/>
+    </g>
+
+    <!-- нижняя пара — самая широкая, задаёт «чашу» цветка -->
+    <g transform="rotate(-88 256 356)">
+      <path d="M256 356 C 214 292 200 190 240 112 C 296 186 308 288 256 356 Z"/>
+    </g>
+    <g transform="rotate(88 256 356)">
+      <path d="M256 356 C 214 292 200 190 240 112 C 296 186 308 288 256 356 Z"/>
+    </g>
+  </g>
+</svg>
