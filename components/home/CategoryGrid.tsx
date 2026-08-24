@@ -35,7 +35,7 @@ export async function CategoryGrid() {
             Цветы и подарки
           </span>
           <h2 className="mt-3 font-display text-2xl font-bold text-ink sm:mt-4 sm:text-3xl lg:text-4xl">
-            Выберите повод
+            Выберите категорию
           </h2>
         </div>
 

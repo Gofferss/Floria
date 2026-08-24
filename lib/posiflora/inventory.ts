@@ -84,3 +84,107 @@ export async function getAllAvailableInventoryItemIds(): Promise<Set<string>> {
 
   return available;
 }
+
+// ================================================================
+// Числовые остатки склада.
+//
+// Зачем понадобилось. getAllAvailableInventoryItemIds выше отвечает лишь
+// на вопрос «позиция вообще есть?», без количества. Из-за этого букет из
+// 101 розы показывался в наличии, когда на складе лежало 96 — цветы есть,
+// но на этот букет их не хватает.
+//
+// Как достаём число. В атрибутах позиции склада баланса нет (проверено по
+// их openapi), зато есть /inventory-items/{id}/warehouse-movement/{store}:
+// список движений с полем qty. Текущий остаток — это СУММА всех qty.
+//
+// Почему сумма, а не поле remainderQty из последнего движения. У самых
+// свежих записей remainderQty приходит пустым — это непроведённые
+// документы. На реальных данных: последний непустой остаток 121 от
+// 23 августа, после него непроведённая продажа на 25 штук, а склад
+// показывает 96. Сумма qty даёт ровно 96, remainderQty — 121.
+//
+// Обязательные параметры filter[startDate] и filter[endDate] в их openapi
+// не описаны — эндпоинт молча отвечает 422 «This value should not be
+// blank», и только в поле source.parameter видно, чего он хочет. Формы
+// startDate=, start_date= и filter в теле не работают, принимается именно
+// filter[startDate].
+// ================================================================
+
+const MOVEMENT_PAGE_SIZE = 200;
+const MOVEMENT_MAX_PAGES = 20;
+
+/** Дата, заведомо более ранняя, чем первое движение по любому складу. */
+const MOVEMENTS_SINCE = "2000-01-01";
+
+type MovementResource = {
+  attributes?: {
+    qty?: number | string | null;
+  };
+};
+
+type StoreResource = { id: string };
+
+async function fetchStoreIds(): Promise<string[]> {
+  const json = (await posifloraFetch("/stores")) as PosifloraListResponse<StoreResource>;
+  return (json.data ?? []).map((s) => s.id);
+}
+
+/** Сумма движений одной позиции по одному складу. */
+async function sumMovements(itemId: string, storeId: string): Promise<number> {
+  // Верхняя граница — «сегодня плюс запас»: у документов будущей датой
+  // (предзаказы) движение уже числится, и отсекать его нельзя.
+  const endDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  let total = 0;
+  for (let page = 1; page <= MOVEMENT_MAX_PAGES; page++) {
+    const params = new URLSearchParams({
+      "filter[startDate]": MOVEMENTS_SINCE,
+      "filter[endDate]": endDate,
+      "page[number]": String(page),
+      "page[size]": String(MOVEMENT_PAGE_SIZE),
+    });
+
+    const json = (await posifloraFetch(
+      `/inventory-items/${itemId}/warehouse-movement/${storeId}?${params.toString()}`
+    )) as PosifloraListResponse<MovementResource>;
+
+    const rows = json.data ?? [];
+    for (const row of rows) total += Number(row.attributes?.qty ?? 0) || 0;
+    if (rows.length < MOVEMENT_PAGE_SIZE) break;
+  }
+
+  return total;
+}
+
+/**
+ * Текущие остатки по списку позиций склада, суммарно по всем складам.
+ *
+ * Запросов получается «позиций × складов», поэтому вызывать это стоит
+ * только для ингредиентов, реально участвующих в рецептах, — их единицы.
+ * Позиция, по которой не удалось получить движения, в результат не
+ * попадает: вызывающий код трактует отсутствие как «неизвестно» и не
+ * делает вид, что остаток нулевой.
+ */
+export async function getInventoryBalances(itemIds: string[]): Promise<Map<string, number>> {
+  const balances = new Map<string, number>();
+  if (itemIds.length === 0) return balances;
+
+  const storeIds = await fetchStoreIds();
+  if (storeIds.length === 0) return balances;
+
+  for (const itemId of itemIds) {
+    let total = 0;
+    let ok = false;
+    for (const storeId of storeIds) {
+      try {
+        total += await sumMovements(itemId, storeId);
+        ok = true;
+      } catch (error) {
+        console.error(`[getInventoryBalances] ${itemId} / ${storeId}:`, error);
+      }
+    }
+    if (ok) balances.set(itemId, total);
+  }
+
+  return balances;
+}

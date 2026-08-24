@@ -6,7 +6,6 @@ import {
   TelegramIcon,
   ArrowRightIcon,
   BouquetIcon,
-  GiftIcon,
   TagIcon,
   StoryRingIcon,
   ChartBarIcon,
@@ -42,12 +41,6 @@ const SECTIONS = [
     icon: BouquetIcon,
     title: "Категории",
     description: "Карточки на главной и фильтр каталога.",
-  },
-  {
-    href: "/admin/occasions",
-    icon: GiftIcon,
-    title: "Поводы",
-    description: "Список поводов для фильтра и формы товара.",
   },
   {
     href: "/admin/stories",

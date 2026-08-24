@@ -13,12 +13,6 @@ import { supabase } from "@/lib/supabase";
 // но не из компонентов с "use client" — те получают товары пропсами.
 // ================================================================
 
-// Раньше был фиксированный список (OCCASIONS), теперь поводы редактируются
-// в /admin/occasions (см. lib/occasions.ts, таблица occasions) — здесь
-// остаётся просто строка, сверка со списком активных поводов происходит
-// там, где он используется (форма товара, фильтр каталога), а не при чтении.
-export type Occasion = string;
-
 export type ProductSize = {
   id: string;
   label: string;
@@ -38,7 +32,6 @@ export type Product = {
   slug: string;
   name: string;
   categorySlug: string;
-  occasions: Occasion[];
   basePrice: number;
   oldPrice?: number;
   composition: string[];
@@ -134,9 +127,6 @@ function parseStringArray(value: unknown): string[] {
   return value.filter((v): v is string => typeof v === "string");
 }
 
-function parseOccasions(attributes: Record<string, unknown>): Occasion[] {
-  return parseStringArray(attributes.occasions);
-}
 
 function parseAvailabilityMode(value: string | null): AvailabilityMode {
   return value === "made_to_order" ? "made_to_order" : "in_stock";
@@ -159,7 +149,6 @@ function mapRow(row: ProductRow): Product {
     slug: row.slug,
     name: row.name,
     categorySlug: category?.slug ?? "",
-    occasions: parseOccasions(attributes),
     basePrice: toNumber(row.price),
     oldPrice,
     composition: parseStringArray(attributes.composition),

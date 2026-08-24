@@ -1,15 +1,11 @@
 import type { Category } from "@/lib/categories";
-import type { OccasionOption } from "@/lib/occasions";
-import type { AvailabilityMode, Occasion } from "@/lib/products";
+import type { AvailabilityMode } from "@/lib/products";
 import { AVAILABILITY_MODES, AVAILABILITY_MODE_LABELS } from "@/lib/products";
 
 type FilterPanelProps = {
   categories: Category[];
-  occasions: OccasionOption[];
   selectedCategories: Set<string>;
   onToggleCategory: (slug: string) => void;
-  selectedOccasions: Set<Occasion>;
-  onToggleOccasion: (occasion: Occasion) => void;
   selectedAvailability: Set<AvailabilityMode>;
   onToggleAvailability: (mode: AvailabilityMode) => void;
   priceFrom: string;
@@ -22,11 +18,8 @@ type FilterPanelProps = {
 
 export function FilterPanel({
   categories,
-  occasions,
   selectedCategories,
   onToggleCategory,
-  selectedOccasions,
-  onToggleOccasion,
   selectedAvailability,
   onToggleAvailability,
   priceFrom,
@@ -115,31 +108,6 @@ export function FilterPanel({
         </div>
       </fieldset>
 
-      {/* Повод */}
-      {occasions.length > 0 && (
-        <fieldset>
-          <legend className="font-display text-sm font-semibold text-ink">Повод</legend>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {occasions.map((occasion) => {
-              const active = selectedOccasions.has(occasion.name);
-              return (
-                <button
-                  key={occasion.id}
-                  type="button"
-                  onClick={() => onToggleOccasion(occasion.name)}
-                  className={`rounded-full border px-3.5 py-1.5 font-body text-sm transition ${
-                    active
-                      ? "border-gold-500 bg-gold-500 text-white"
-                      : "border-lavender-200 bg-white text-ink/70 hover:border-gold-300"
-                  }`}
-                >
-                  {occasion.name}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-      )}
     </div>
   );
 }

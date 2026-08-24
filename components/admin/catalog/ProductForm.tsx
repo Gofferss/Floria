@@ -14,8 +14,7 @@ import {
   type RecipeItemInput,
 } from "@/lib/actions/catalog";
 import { slugify } from "@/lib/blog";
-import type { OccasionOption } from "@/lib/occasions";
-import type { AvailabilityMode, Occasion, PricingMode, ProductSize } from "@/lib/products";
+import type { AvailabilityMode, PricingMode, ProductSize } from "@/lib/products";
 import { FormField } from "@/components/ui/FormField";
 import { inputClass } from "@/components/ui/input-styles";
 import { ArrowRightIcon, CloseIcon } from "@/components/ui/Icons";
@@ -33,12 +32,11 @@ const DEFAULT_SIZE: ProductSize = { id: "std", label: "Стандарт", priceM
 
 type ProductFormProps = {
   categories: AdminCategory[];
-  occasions: OccasionOption[];
   /** Есть — редактируем существующий товар, нет — создаём новый. */
   product?: AdminProductDetail;
 };
 
-export function ProductForm({ categories, occasions, product }: ProductFormProps) {
+export function ProductForm({ categories, product }: ProductFormProps) {
   const router = useRouter();
   const isEditing = !!product;
 
@@ -71,7 +69,6 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
   const [imagesUploading, setImagesUploading] = useState(false);
   const [imagesError, setImagesError] = useState<string | null>(null);
 
-  const [selectedOccasions, setSelectedOccasions] = useState<Set<Occasion>>(new Set(product?.occasions ?? []));
   const [composition, setComposition] = useState<string[]>(
     product?.composition && product.composition.length > 0 ? product.composition : [""]
   );
@@ -131,13 +128,6 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
     setImages((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function toggleOccasion(occasion: Occasion) {
-    setSelectedOccasions((prev) => {
-      const next = new Set(prev);
-      next.has(occasion) ? next.delete(occasion) : next.add(occasion);
-      return next;
-    });
-  }
 
   // Живой поиск позиций склада Posiflora по мере ввода — debounce, чтобы
   // не дёргать API на каждое нажатие клавиши.
@@ -267,7 +257,6 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
       })),
       isActive,
       images,
-      occasions: Array.from(selectedOccasions),
       composition: composition.map((c) => c.trim()).filter(Boolean),
       sizes: sizes
         .filter((s) => s.id.trim() && s.label.trim())
@@ -604,33 +593,6 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
         {imagesError && <p className="mt-2 font-body text-xs text-red-600">{imagesError}</p>}
       </div>
 
-      <div className="rounded-3xl border border-lavender-100 bg-white p-5 sm:p-7">
-        <h2 className="font-display text-base font-semibold text-ink">Повод</h2>
-        {occasions.length === 0 && (
-          <p className="mt-1 font-body text-xs text-ink/50">
-            Поводов ещё нет — добавьте их в /admin/occasions
-          </p>
-        )}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {occasions.map((occasion) => {
-            const active = selectedOccasions.has(occasion.name);
-            return (
-              <button
-                key={occasion.id}
-                type="button"
-                onClick={() => toggleOccasion(occasion.name)}
-                className={`rounded-full border px-3.5 py-1.5 font-body text-sm transition ${
-                  active
-                    ? "border-gold-500 bg-gold-500 text-white"
-                    : "border-lavender-200 bg-white text-ink/70 hover:border-gold-300"
-                }`}
-              >
-                {occasion.name}
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       <div className="rounded-3xl border border-lavender-100 bg-white p-5 sm:p-7">
         <h2 className="font-display text-base font-semibold text-ink">Состав</h2>

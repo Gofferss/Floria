@@ -1,7 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { posifloraFetch } from "./http";
 import { generateProductSlug } from "./slug";
-import { getAllAvailableInventoryItemIds } from "./inventory";
+import { getInventoryBalances } from "./inventory";
 
 // ================================================================
 // Синхронизация каталога (категории + товары) из Posiflora в наш кэш
@@ -204,7 +204,7 @@ async function syncComputedAvailability(errors: string[]): Promise<number> {
   const productIds = recipeProducts.map((p) => p.id);
   const { data: recipeItems, error: itemsError } = await supabaseAdmin
     .from("product_recipe_items")
-    .select("product_id, posiflora_inventory_item_id")
+    .select("product_id, posiflora_inventory_item_id, quantity")
     .in("product_id", productIds);
 
   if (itemsError) {
@@ -212,14 +212,25 @@ async function syncComputedAvailability(errors: string[]): Promise<number> {
     return 0;
   }
 
-  const itemsByProduct = new Map<string, string[]>();
+  const itemsByProduct = new Map<string, { id: string; needed: number }[]>();
   for (const row of recipeItems ?? []) {
     const list = itemsByProduct.get(row.product_id) ?? [];
-    list.push(row.posiflora_inventory_item_id);
+    list.push({
+      id: row.posiflora_inventory_item_id,
+      needed: Math.max(Number(row.quantity) || 0, 0),
+    });
     itemsByProduct.set(row.product_id, list);
   }
 
-  const availableIds = await getAllAvailableInventoryItemIds();
+  // Числовые остатки, а не «позиция есть / позиции нет». Раньше сверялся
+  // только сам факт наличия, из-за чего букет из 101 розы показывался в
+  // наличии при 96 штуках на складе: розы есть, но на этот букет их не
+  // хватает. Спрашиваем остатки один раз на все уникальные ингредиенты —
+  // одна и та же роза встречается в десятке рецептов.
+  const uniqueIngredientIds = [
+    ...new Set((recipeItems ?? []).map((row) => row.posiflora_inventory_item_id as string)),
+  ];
+  const balances = await getInventoryBalances(uniqueIngredientIds);
 
   let checked = 0;
   for (const productId of productIds) {
@@ -228,7 +239,15 @@ async function syncComputedAvailability(errors: string[]): Promise<number> {
     // затираем последний осознанный статус пустым результатом.
     if (!ingredientIds || ingredientIds.length === 0) continue;
 
-    const inStock = ingredientIds.every((id) => availableIds.has(id));
+    // Остаток неизвестен (склад не ответил по этой позиции) — считаем,
+    // что хватает: молча увести букет «под заказ» из-за сбоя связи хуже,
+    // чем показать его доступным лишний раз. Заведомая нехватка — только
+    // когда остаток известен и меньше нужного.
+    const inStock = ingredientIds.every(({ id, needed }) => {
+      const balance = balances.get(id);
+      if (balance === undefined) return true;
+      return balance >= needed;
+    });
     const { error } = await supabaseAdmin
       .from("products")
       .update({ availability_mode: inStock ? "in_stock" : "made_to_order" })
@@ -287,7 +306,7 @@ export async function syncPosifloraCatalog(): Promise<CatalogSyncSummary> {
 
       if (existing) {
         // Обновляем ТОЛЬКО поля, которыми владеет Posiflora. attributes
-        // (наши sizes/occasions/composition) здесь сознательно не
+        // (наши sizes/composition) здесь сознательно не
         // упоминаются — это территория флориста/менеджера, синк её не
         // трогает.
         const { error } = await supabaseAdmin
@@ -326,7 +345,6 @@ export async function syncPosifloraCatalog(): Promise<CatalogSyncSummary> {
         is_active: false,
         attributes: {
           sizes: [{ id: "std", label: "Стандарт", priceModifier: 0 }],
-          occasions: [],
           composition: [],
         },
         synced_at: new Date().toISOString(),

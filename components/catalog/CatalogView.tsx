@@ -6,13 +6,11 @@ import { ProductCard } from "@/components/catalog/ProductCard";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import { CloseIcon } from "@/components/ui/Icons";
 import type { Category } from "@/lib/categories";
-import type { OccasionOption } from "@/lib/occasions";
-import type { Product, Occasion, AvailabilityMode } from "@/lib/products";
+import type { Product, AvailabilityMode } from "@/lib/products";
 
 type CatalogViewProps = {
   products: Product[];
   categories: Category[];
-  occasions: OccasionOption[];
   /** Границы цен считаются на сервере — из клиента к БД не ходим */
   priceBounds: { min: number; max: number };
   initialCategorySlug?: string;
@@ -22,7 +20,6 @@ type CatalogViewProps = {
 export function CatalogView({
   products,
   categories,
-  occasions,
   priceBounds,
   initialCategorySlug,
   initialQuery,
@@ -31,7 +28,6 @@ export function CatalogView({
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(
     () => new Set(initialCategorySlug ? [initialCategorySlug] : [])
   );
-  const [selectedOccasions, setSelectedOccasions] = useState<Set<Occasion>>(new Set());
   const [selectedAvailability, setSelectedAvailability] = useState<Set<AvailabilityMode>>(new Set());
   const [searchQuery, setSearchQuery] = useState(initialQuery ?? "");
 
@@ -60,13 +56,6 @@ export function CatalogView({
     });
   }
 
-  function toggleOccasion(occasion: Occasion) {
-    setSelectedOccasions((prev) => {
-      const next = new Set(prev);
-      next.has(occasion) ? next.delete(occasion) : next.add(occasion);
-      return next;
-    });
-  }
 
   function toggleAvailability(mode: AvailabilityMode) {
     setSelectedAvailability((prev) => {
@@ -78,7 +67,6 @@ export function CatalogView({
 
   function resetFilters() {
     setSelectedCategories(new Set());
-    setSelectedOccasions(new Set());
     setSelectedAvailability(new Set());
     setSearchQuery("");
     setPriceFrom("");
@@ -92,12 +80,6 @@ export function CatalogView({
 
     return products.filter((product) => {
       if (selectedCategories.size > 0 && !selectedCategories.has(product.categorySlug)) {
-        return false;
-      }
-      if (
-        selectedOccasions.size > 0 &&
-        !product.occasions.some((o) => selectedOccasions.has(o))
-      ) {
         return false;
       }
       if (selectedAvailability.size > 0 && !selectedAvailability.has(product.availabilityMode)) {
@@ -120,7 +102,6 @@ export function CatalogView({
   }, [
     products,
     selectedCategories,
-    selectedOccasions,
     selectedAvailability,
     searchQuery,
     priceFrom,
@@ -129,11 +110,8 @@ export function CatalogView({
 
   const filterProps = {
     categories,
-    occasions,
     selectedCategories,
     onToggleCategory: toggleCategory,
-    selectedOccasions,
-    onToggleOccasion: toggleOccasion,
     selectedAvailability,
     onToggleAvailability: toggleAvailability,
     priceFrom,
@@ -177,13 +155,11 @@ export function CatalogView({
         >
           Фильтры
           {(selectedCategories.size > 0 ||
-            selectedOccasions.size > 0 ||
             selectedAvailability.size > 0 ||
             priceFrom ||
             priceTo) && (
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gold-500 text-[11px] font-semibold text-white">
               {selectedCategories.size +
-                selectedOccasions.size +
                 selectedAvailability.size +
                 (priceFrom ? 1 : 0) +
                 (priceTo ? 1 : 0)}

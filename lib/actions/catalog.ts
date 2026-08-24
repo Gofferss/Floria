@@ -5,14 +5,14 @@ import { revalidatePath } from "next/cache";
 import { getStaffUser } from "@/lib/auth/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { searchInventoryItems, type InventoryItemOption } from "@/lib/posiflora";
-import { parsePricingMode, type AvailabilityMode, type Occasion, type PricingMode, type ProductSize } from "@/lib/products";
+import { parsePricingMode, type AvailabilityMode, type PricingMode, type ProductSize } from "@/lib/products";
 
 // ================================================================
 // Server Actions для ручного редактирования каталога в /admin/catalog.
 // Товары, которые приходят из Posiflora (lib/posiflora/catalog.ts),
 // тоже можно редактировать здесь — синк трогает только name/description/
 // price/category_id/is_available и никогда не трогает availability_mode,
-// attributes (sizes/occasions/composition) или images, так что правки
+// attributes (sizes/composition) или images, так что правки
 // куратора переживают следующий синк.
 //
 // Товары, созданные вручную (не из Posiflora), получают
@@ -69,7 +69,6 @@ export type ProductInput = {
   recipeItems: RecipeItemInput[];
   isActive: boolean;
   images: string[];
-  occasions: Occasion[];
   composition: string[];
   sizes: ProductSize[];
 };
@@ -120,10 +119,6 @@ async function replaceRecipeItems(productId: string, items: RecipeItemInput[]): 
 function buildAttributes(input: ProductInput) {
   return {
     sizes: input.sizes,
-    // Список активных поводов теперь в таблице occasions (см.
-    // lib/occasions.ts), а не в хардкоженном наборе — здесь просто
-    // сохраняем то, что отметили в форме, без сверки со списком.
-    occasions: input.occasions.map((o) => o.trim()).filter(Boolean),
     composition: input.composition.map((c) => c.trim()).filter(Boolean),
   };
 }
@@ -302,7 +297,6 @@ export async function getProductForEdit(id: string): Promise<AdminProductDetail 
 
   const attributes = (data.attributes ?? {}) as {
     sizes?: ProductSize[];
-    occasions?: Occasion[];
     composition?: string[];
   };
 
@@ -325,7 +319,6 @@ export async function getProductForEdit(id: string): Promise<AdminProductDetail 
     })),
     isActive: data.is_active,
     images: (data.images as string[]) ?? [],
-    occasions: attributes.occasions ?? [],
     composition: attributes.composition ?? [],
     sizes: attributes.sizes?.length ? attributes.sizes : [{ id: "std", label: "Стандарт", priceModifier: 0 }],
   };

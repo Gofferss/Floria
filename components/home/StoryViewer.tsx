@@ -197,7 +197,7 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
             if (e.detail === 0) goToItem(storyIndex, itemIndex - 1);
           }}
           aria-label="Предыдущий слайд"
-          className="absolute inset-y-0 left-0 z-10 w-1/3 touch-none"
+          className="absolute inset-y-0 left-0 z-10 w-1/3 touch-manipulation"
         />
         <button
           type="button"
@@ -209,7 +209,7 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
             if (e.detail === 0) goToItem(storyIndex, itemIndex + 1);
           }}
           aria-label="Следующий слайд"
-          className="absolute inset-y-0 right-0 z-10 w-2/3 touch-none"
+          className="absolute inset-y-0 right-0 z-10 w-2/3 touch-manipulation"
         />
 
         {/* Кнопка слайда. z-20 — над зонами листания, иначе нажать её было
