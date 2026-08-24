@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { prepareImageForUpload } from "@/lib/prepare-image";
 import { useRouter } from "next/navigation";
 import {
   createCategory,
@@ -59,8 +60,16 @@ export function CategoryForm({ category, nextSortOrder }: CategoryFormProps) {
     setImageUploading(true);
     setImageError(null);
 
+    const ready = await prepareImageForUpload(file);
+    if (!ready.ok) {
+      setImageError(ready.error);
+      setImageUploading(false);
+        return;
+    }
+    const prepared = ready.file;
+
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", prepared);
     const result = await uploadCategoryImage(formData);
     setImageUploading(false);
 
@@ -212,7 +221,7 @@ export function CategoryForm({ category, nextSortOrder }: CategoryFormProps) {
             ref={fileInputRef}
             id="categoryImage"
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif"
             onChange={handleFileChange}
             disabled={imageUploading}
             className="sr-only"

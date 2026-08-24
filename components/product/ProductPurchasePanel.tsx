@@ -49,6 +49,9 @@ export function ProductPurchasePanel({ product }: { product: Product }) {
       <div className="flex items-baseline gap-3">
         <span className="font-display text-3xl font-bold text-ink">
           {currency.format(unitPrice)}
+          {product.pricingMode === "per_stem" && (
+            <span className="font-body text-lg font-normal text-ink/50"> / шт</span>
+          )}
         </span>
         {product.oldPrice && (
           <span className="font-body text-lg text-ink/40 line-through">
@@ -94,7 +97,10 @@ export function ProductPurchasePanel({ product }: { product: Product }) {
           >
             −
           </button>
-          <span className="font-body text-sm text-ink">{quantity}</span>
+          <span className="font-body text-sm text-ink">
+            {quantity}
+            {product.pricingMode === "per_stem" && <span className="text-ink/50"> шт</span>}
+          </span>
           <button
             type="button"
             onClick={() => setQuantity((q) => q + 1)}

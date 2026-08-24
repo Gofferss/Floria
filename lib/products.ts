@@ -46,7 +46,28 @@ export type Product = {
   sizes: ProductSize[];
   images: string[];
   availabilityMode: AvailabilityMode;
+  /** За что назначена цена: за букет целиком или за одну штуку. */
+  pricingMode: PricingMode;
 };
+
+/**
+ * За что назначена цена товара.
+ *
+ * "bouquet" — за собранный букет целиком, как было всегда.
+ * "per_stem" — за одну штуку: так продают поштучную срезку, и покупатель
+ * сам выбирает, сколько взять. На витрине это меняет подпись у цены, а в
+ * корзине количество означает штуки, а не букеты.
+ */
+export type PricingMode = "bouquet" | "per_stem";
+
+export function parsePricingMode(value: string | null | undefined): PricingMode {
+  return value === "per_stem" ? "per_stem" : "bouquet";
+}
+
+/** Подпись к цене: «450 ₽/шт» против просто «4 200 ₽». */
+export function pricingSuffix(mode: PricingMode): string {
+  return mode === "per_stem" ? " / шт" : "";
+}
 
 /** Запасной размер для товаров, у которых в attributes нет ни одного */
 const FALLBACK_SIZE: ProductSize = { id: "std", label: "Стандарт", priceModifier: 0 };
@@ -62,6 +83,7 @@ const PRODUCT_SELECT = `
   attributes,
   images,
   availability_mode,
+  pricing_mode,
   product_categories ( slug )
 `;
 
@@ -75,6 +97,7 @@ type ProductRow = {
   attributes: unknown;
   images: unknown;
   availability_mode: string | null;
+  pricing_mode: string | null;
   // supabase-js типизирует вложенный джойн как объект или массив в
   // зависимости от кардинальности — обрабатываем оба варианта
   product_categories: { slug: string } | { slug: string }[] | null;
@@ -144,6 +167,7 @@ function mapRow(row: ProductRow): Product {
     sizes: parseSizes(attributes),
     images: parseStringArray(row.images),
     availabilityMode: parseAvailabilityMode(row.availability_mode),
+    pricingMode: parsePricingMode(row.pricing_mode),
   };
 }
 

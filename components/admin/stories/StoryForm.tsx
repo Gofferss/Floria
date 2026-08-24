@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { prepareImageForUpload } from "@/lib/prepare-image";
 import { useRouter } from "next/navigation";
 import {
   createStory,
@@ -45,8 +46,15 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
 
     const uploaded: StoryItemInput[] = [];
     for (const file of files) {
+      const ready = await prepareImageForUpload(file);
+      if (!ready.ok) {
+        setUploadError(ready.error);
+        break;
+      }
+      const prepared = ready.file;
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", prepared);
       const result = await uploadStoryImage(formData);
       if (!result.success) {
         setUploadError(result.error);
@@ -260,7 +268,7 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
             ref={fileInputRef}
             id="storyItemUpload"
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif"
             multiple
             onChange={handleFilesChange}
             disabled={uploading}

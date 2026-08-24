@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { prepareImageForUpload } from "@/lib/prepare-image";
 import { sendBroadcast, uploadBroadcastImage, type BroadcastSummary } from "@/lib/actions/broadcast";
 import { FormField } from "@/components/ui/FormField";
 import { inputClass } from "@/components/ui/input-styles";
@@ -27,8 +28,16 @@ export function BroadcastForm() {
     setImageUploading(true);
     setImageError(null);
 
+    const ready = await prepareImageForUpload(file);
+    if (!ready.ok) {
+      setImageError(ready.error);
+      setImageUploading(false);
+      return;
+    }
+    const prepared = ready.file;
+
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", prepared);
     const result = await uploadBroadcastImage(formData);
     setImageUploading(false);
 
@@ -111,7 +120,7 @@ export function BroadcastForm() {
           ref={fileInputRef}
           id="broadcastImage"
           type="file"
-          accept="image/*"
+          accept="image/*,.heic,.heif"
           onChange={handleImageChange}
           disabled={imageUploading}
           className="sr-only"

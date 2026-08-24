@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { prepareImageForUpload } from "@/lib/prepare-image";
 import { useRouter } from "next/navigation";
 import {
   createBlogPost,
@@ -78,8 +79,16 @@ export function BlogPostForm({ post }: BlogPostFormProps) {
     setCoverUploading(true);
     setCoverError(null);
 
+    const ready = await prepareImageForUpload(file);
+    if (!ready.ok) {
+      setCoverError(ready.error);
+      setCoverUploading(false);
+      return;
+    }
+    const prepared = ready.file;
+
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", prepared);
 
     const result = await uploadBlogCover(formData);
     setCoverUploading(false);
@@ -108,8 +117,15 @@ export function BlogPostForm({ post }: BlogPostFormProps) {
     // мере готовности), зато проще откатиться на первой же ошибке.
     const uploaded: string[] = [];
     for (const file of files) {
+      const ready = await prepareImageForUpload(file);
+      if (!ready.ok) {
+        setGalleryError(ready.error);
+        break;
+      }
+      const prepared = ready.file;
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", prepared);
       const result = await uploadBlogImage(formData);
       if (!result.success) {
         setGalleryError(result.error);
@@ -136,8 +152,16 @@ export function BlogPostForm({ post }: BlogPostFormProps) {
     setContentImageUploading(true);
     setContentImageError(null);
 
+    const ready = await prepareImageForUpload(file);
+    if (!ready.ok) {
+      setContentImageError(ready.error);
+      setContentImageUploading(false);
+      return;
+    }
+    const prepared = ready.file;
+
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", prepared);
     const result = await uploadBlogImage(formData);
 
     setContentImageUploading(false);
@@ -299,7 +323,7 @@ export function BlogPostForm({ post }: BlogPostFormProps) {
             ref={fileInputRef}
             id="postCover"
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif"
             onChange={handleFileChange}
             disabled={coverUploading}
             className="sr-only"
@@ -342,7 +366,7 @@ export function BlogPostForm({ post }: BlogPostFormProps) {
             ref={galleryInputRef}
             id="postGallery"
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif"
             multiple
             onChange={handleGalleryFilesChange}
             disabled={galleryUploading}
@@ -372,7 +396,7 @@ export function BlogPostForm({ post }: BlogPostFormProps) {
             ref={contentImageInputRef}
             id="postContentImage"
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif"
             onChange={handleContentImageChange}
             disabled={contentImageUploading}
             className="sr-only"

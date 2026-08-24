@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { prepareImageForUpload } from "@/lib/prepare-image";
 import { useRouter } from "next/navigation";
 import {
   createProduct,
@@ -14,12 +15,15 @@ import {
 } from "@/lib/actions/catalog";
 import { slugify } from "@/lib/blog";
 import type { OccasionOption } from "@/lib/occasions";
-import type { AvailabilityMode, Occasion, ProductSize } from "@/lib/products";
+import type { AvailabilityMode, Occasion, PricingMode, ProductSize } from "@/lib/products";
 import { FormField } from "@/components/ui/FormField";
 import { inputClass } from "@/components/ui/input-styles";
 import { ArrowRightIcon, CloseIcon } from "@/components/ui/Icons";
 
 type Errors = Partial<Record<"name" | "slug" | "categoryId" | "price", string>>;
+
+/** Строка состава в форме: количество держим строкой — см. updateRecipeQuantity. */
+type RecipeRow = Omit<RecipeItemInput, "quantity"> & { quantity: string; key: string };
 
 function randomSizeId(): string {
   return Math.random().toString(36).slice(2, 8);
@@ -46,6 +50,7 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? categories[0]?.id ?? "");
   const [description, setDescription] = useState(product?.description ?? "");
   const [price, setPrice] = useState(product ? String(product.price) : "");
+  const [pricingMode, setPricingMode] = useState<PricingMode>(product?.pricingMode ?? "bouquet");
   const [oldPrice, setOldPrice] = useState(product?.oldPrice != null ? String(product.oldPrice) : "");
   const [stockQuantity, setStockQuantity] = useState(product ? String(product.stockQuantity) : "0");
   const [availabilityMode, setAvailabilityMode] = useState<AvailabilityMode>(
@@ -54,8 +59,8 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
   const [availabilitySource, setAvailabilitySource] = useState<AvailabilitySource>(
     product?.availabilitySource ?? "manual"
   );
-  const [recipeItems, setRecipeItems] = useState<(RecipeItemInput & { key: string })[]>(
-    (product?.recipeItems ?? []).map((r) => ({ ...r, key: randomSizeId() }))
+  const [recipeItems, setRecipeItems] = useState<RecipeRow[]>(
+    (product?.recipeItems ?? []).map((r) => ({ ...r, quantity: String(r.quantity), key: randomSizeId() }))
   );
   const [recipeSearch, setRecipeSearch] = useState("");
   const [recipeSearchResults, setRecipeSearchResults] = useState<{ id: string; title: string }[]>([]);
@@ -100,8 +105,15 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
 
     const uploaded: string[] = [];
     for (const file of files) {
+      const ready = await prepareImageForUpload(file);
+      if (!ready.ok) {
+        setImagesError(ready.error);
+        break;
+      }
+      const prepared = ready.file;
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", prepared);
       const result = await uploadProductImage(formData);
       if (!result.success) {
         setImagesError(result.error);
@@ -156,15 +168,25 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
     if (recipeItems.some((r) => r.posifloraInventoryItemId === item.id)) return;
     setRecipeItems((prev) => [
       ...prev,
-      { posifloraInventoryItemId: item.id, itemName: item.title, quantity: 1, key: randomSizeId() },
+      { posifloraInventoryItemId: item.id, itemName: item.title, quantity: "1", key: randomSizeId() },
     ]);
     setRecipeSearch("");
     setRecipeSearchResults([]);
   }
 
+  /**
+   * Количество хранится СТРОКОЙ, а не числом.
+   *
+   * Раньше значение сразу прогонялось через Number(), а Number("") — это 0,
+   * причём конечный. Поэтому стоило стереть содержимое поля, как в него тут
+   * же возвращался ноль: удалить его было невозможно, и чтобы ввести «12»,
+   * приходилось воевать с полем, получая «012». Пустая строка теперь живёт
+   * в состоянии как есть, а в число превращается только при отправке — тот
+   * же приём уже использован для цены.
+   */
   function updateRecipeQuantity(key: string, value: string) {
-    const quantity = Number(value);
-    setRecipeItems((prev) => prev.map((r) => (r.key === key ? { ...r, quantity: Number.isFinite(quantity) ? quantity : r.quantity } : r)));
+    if (value !== "" && !/^d{0,4}$/.test(value)) return;
+    setRecipeItems((prev) => prev.map((r) => (r.key === key ? { ...r, quantity: value } : r)));
   }
 
   function removeRecipeItem(key: string) {
@@ -230,6 +252,7 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
       categoryId,
       description,
       price: Number(price),
+      pricingMode,
       oldPrice: oldPrice ? Number(oldPrice) : null,
       stockQuantity: Number(stockQuantity) || 0,
       availabilityMode,
@@ -237,7 +260,10 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
       recipeItems: recipeItems.map(({ posifloraInventoryItemId, itemName, quantity }) => ({
         posifloraInventoryItemId,
         itemName,
-        quantity,
+        // Поле оставили пустым — ингредиент всё равно в составе, значит хотя
+        // бы одна штука. Ноль тут означал бы «не нужен», а для этого есть
+        // кнопка «убрать из состава».
+        quantity: Math.max(Number(quantity) || 0, 1),
       })),
       isActive,
       images,
@@ -479,6 +505,38 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
       <div className="rounded-3xl border border-lavender-100 bg-white p-5 sm:p-7">
         <h2 className="font-display text-base font-semibold text-ink">Цена</h2>
 
+        {/* За что назначена цена. Влияет на витрину: у поштучных товаров
+            рядом с ценой появляется «/ шт», а количество в корзине означает
+            штуки, а не букеты. */}
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:gap-3">
+          {([
+            { value: "bouquet", label: "За букет", hint: "цена за готовый букет целиком" },
+            { value: "per_stem", label: "За штуку", hint: "поштучная срезка, количество выбирает покупатель" },
+          ] as const).map((option) => (
+            <label
+              key={option.value}
+              className={`flex flex-1 cursor-pointer flex-col gap-0.5 rounded-2xl border px-4 py-3 transition ${
+                pricingMode === option.value
+                  ? "border-gold-400 bg-gold-50"
+                  : "border-lavender-100 hover:border-lavender-200"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="pricingMode"
+                  value={option.value}
+                  checked={pricingMode === option.value}
+                  onChange={() => setPricingMode(option.value)}
+                  className="accent-gold-500"
+                />
+                <span className="font-display text-sm font-semibold text-ink">{option.label}</span>
+              </span>
+              <span className="pl-6 font-body text-xs text-ink/50">{option.hint}</span>
+            </label>
+          ))}
+        </div>
+
         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Цена, ₽" htmlFor="productPrice" required error={errors.price}>
             <input
@@ -536,7 +594,7 @@ export function ProductForm({ categories, occasions, product }: ProductFormProps
             ref={imagesInputRef}
             id="productImages"
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif"
             multiple
             onChange={handleImagesChange}
             disabled={imagesUploading}

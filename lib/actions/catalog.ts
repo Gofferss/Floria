@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getStaffUser } from "@/lib/auth/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { searchInventoryItems, type InventoryItemOption } from "@/lib/posiflora";
-import type { AvailabilityMode, Occasion, ProductSize } from "@/lib/products";
+import { parsePricingMode, type AvailabilityMode, type Occasion, type PricingMode, type ProductSize } from "@/lib/products";
 
 // ================================================================
 // Server Actions для ручного редактирования каталога в /admin/catalog.
@@ -64,6 +64,7 @@ export type ProductInput = {
   oldPrice: number | null;
   stockQuantity: number;
   availabilityMode: AvailabilityMode;
+  pricingMode: PricingMode;
   availabilitySource: AvailabilitySource;
   recipeItems: RecipeItemInput[];
   isActive: boolean;
@@ -149,6 +150,7 @@ export async function createProduct(
       is_available: true,
       is_active: input.isActive,
       availability_mode: input.availabilityMode,
+      pricing_mode: input.pricingMode,
       availability_source: input.availabilitySource,
       images: input.images,
       attributes: buildAttributes(input),
@@ -201,6 +203,7 @@ export async function updateProduct(
       stock_quantity: input.stockQuantity,
       is_active: input.isActive,
       availability_mode: input.availabilityMode,
+      pricing_mode: input.pricingMode,
       availability_source: input.availabilitySource,
       images: input.images,
       attributes: buildAttributes(input),
@@ -284,7 +287,7 @@ export async function getProductForEdit(id: string): Promise<AdminProductDetail 
   const { data, error } = await supabaseAdmin
     .from("products")
     .select(
-      "id, name, slug, category_id, description, price, old_price, stock_quantity, is_active, availability_mode, availability_source, images, attributes"
+      "id, name, slug, category_id, description, price, old_price, stock_quantity, is_active, availability_mode, availability_source, pricing_mode, images, attributes"
     )
     .eq("id", id)
     .maybeSingle();
@@ -313,6 +316,7 @@ export async function getProductForEdit(id: string): Promise<AdminProductDetail 
     oldPrice: data.old_price === null ? null : Number(data.old_price),
     stockQuantity: data.stock_quantity,
     availabilityMode: data.availability_mode === "made_to_order" ? "made_to_order" : "in_stock",
+    pricingMode: parsePricingMode(data.pricing_mode),
     availabilitySource: data.availability_source === "recipe" ? "recipe" : "manual",
     recipeItems: (recipeRows ?? []).map((r) => ({
       posifloraInventoryItemId: r.posiflora_inventory_item_id,

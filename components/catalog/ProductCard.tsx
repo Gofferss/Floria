@@ -81,6 +81,11 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="mt-auto flex items-baseline gap-2 pt-3">
           <span className="font-display text-base font-semibold text-ink sm:text-lg">
             {currency.format(product.basePrice)}
+            {product.pricingMode === "per_stem" && (
+              // Без этой подписи «450 ₽» у поштучной срезки читалось бы как
+              // цена целого букета — и покупатель удивился бы в корзине.
+              <span className="font-body text-sm font-normal text-ink/50"> / шт</span>
+            )}
           </span>
           {product.oldPrice && (
             <span className="font-body text-sm text-ink/40 line-through">
