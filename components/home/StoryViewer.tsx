@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Story } from "@/lib/stories";
-import { CloseIcon } from "@/components/ui/Icons";
+import { ArrowRightIcon, CloseIcon } from "@/components/ui/Icons";
 
 type StoryViewerProps = {
   stories: Story[];
@@ -79,7 +79,7 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
       aria-label={story.title}
     >
       <div
-        // 86vh вместо 92vh: при 92 верх окна с крестиком подходил вплотную
+        // 82vh вместо 92vh: при 92 верх окна с крестиком подходил вплотную
         // к краю экрана, и на десктопе кнопка закрытия оказывалась под
         // шапкой. Запас по вертикали заодно даёт окну «дышать».
         className="relative aspect-[9/16] h-full max-h-[82vh] w-auto max-w-full overflow-hidden rounded-2xl bg-ink sm:h-[82vh]"
@@ -137,6 +137,27 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
           aria-label="Следующий слайд"
           className="absolute inset-y-0 right-0 z-10 w-2/3"
         />
+
+        {/* Кнопка слайда. z-20 — над зонами листания, иначе нажать её было
+            бы невозможно, ровно как это случилось с крестиком.
+            rel="noopener noreferrer" обязателен: без noopener открытая
+            вкладка получает доступ к window.opener и может подменить нашу
+            страницу. Адрес проверен и в форме, и констрейнтом в БД —
+            javascript: сюда попасть не может. */}
+        {item.linkUrl && (
+          <div className="absolute inset-x-0 bottom-0 z-20 flex justify-center bg-gradient-to-t from-ink/70 to-transparent px-4 pb-6 pt-12">
+            <a
+              href={item.linkUrl}
+              target={item.linkUrl.startsWith("/") ? undefined : "_blank"}
+              rel={item.linkUrl.startsWith("/") ? undefined : "noopener noreferrer"}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex max-w-full items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-center font-display text-sm font-semibold text-ink shadow-lg transition hover:bg-gold-50"
+            >
+              <span className="truncate">{item.linkLabel?.trim() || "Подробнее"}</span>
+              <ArrowRightIcon className="h-3.5 w-3.5 shrink-0" />
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

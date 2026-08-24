@@ -52,7 +52,7 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
         setUploadError(result.error);
         break;
       }
-      uploaded.push({ imageUrl: result.data.url, durationSeconds: DEFAULT_DURATION });
+      uploaded.push({ imageUrl: result.data.url, durationSeconds: DEFAULT_DURATION, linkUrl: "", linkLabel: "" });
     }
 
     if (uploaded.length > 0) setItems((prev) => [...prev, ...uploaded]);
@@ -77,6 +77,10 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
   function updateDuration(index: number, value: string) {
     const seconds = Math.max(1, Number(value) || DEFAULT_DURATION);
     setItems((prev) => prev.map((item, i) => (i === index ? { ...item, durationSeconds: seconds } : item)));
+  }
+
+  function updateLink(index: number, field: "linkUrl" | "linkLabel", value: string) {
+    setItems((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
   }
 
   async function handleSubmit() {
@@ -165,7 +169,8 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
 
         <div className="mt-5 flex flex-col gap-3">
           {items.map((item, index) => (
-            <div key={item.imageUrl + index} className="flex items-center gap-3 rounded-2xl border border-lavender-100 p-3">
+            <div key={item.imageUrl + index} className="flex flex-col gap-3 rounded-2xl border border-lavender-100 p-3">
+              <div className="flex items-center gap-3">
               <img src={item.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
               <div className="flex flex-1 items-center gap-2">
                 <span className="font-body text-xs text-ink/50">Слайд {index + 1}</span>
@@ -205,6 +210,39 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
                 >
                   <CloseIcon className="h-4 w-4" />
                 </button>
+              </div>
+              </div>
+
+              {/* Кнопка на слайде — необязательна. Нужна историям вроде
+                  «Каталог в Telegram» или «Наш бот», чтобы человек мог
+                  перейти, а не только посмотреть картинку. */}
+              <div className="flex flex-col gap-2 border-t border-lavender-100 pt-3 sm:flex-row">
+                <label className="flex flex-1 flex-col gap-1">
+                  <span className="font-body text-xs text-ink/50">
+                    Ссылка кнопки — необязательно
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="url"
+                    value={item.linkUrl}
+                    onChange={(e) => updateLink(index, "linkUrl", e.target.value)}
+                    placeholder="https://t.me/... или /catalog"
+                    className={inputClass()}
+                  />
+                </label>
+                <label className="flex flex-1 flex-col gap-1">
+                  <span className="font-body text-xs text-ink/50">
+                    Надпись на кнопке
+                  </span>
+                  <input
+                    type="text"
+                    value={item.linkLabel}
+                    onChange={(e) => updateLink(index, "linkLabel", e.target.value)}
+                    placeholder="Подробнее"
+                    disabled={!item.linkUrl.trim()}
+                    className={`${inputClass()} disabled:opacity-50`}
+                  />
+                </label>
               </div>
             </div>
           ))}

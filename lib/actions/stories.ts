@@ -13,7 +13,33 @@ async function requireStaff() {
   return staff;
 }
 
-export type StoryItemInput = { imageUrl: string; durationSeconds: number };
+export type StoryItemInput = {
+  imageUrl: string;
+  durationSeconds: number;
+  /** Кнопка на слайде — необязательна. Пустая строка = кнопки нет. */
+  linkUrl: string;
+  linkLabel: string;
+};
+
+/**
+ * Разрешаем только http(s) и внутренние пути.
+ *
+ * Отсекаем прежде всего javascript:-адрес: он выполнил бы код в браузере
+ * посетителя при клике по кнопке. Заодно не пускаем протокол-относительные
+ * "//чужой-сайт" — визуально они похожи на внутренний путь, но уводят с
+ * сайта. Такое же ограничение стоит и в самой БД (миграция 014), здесь оно
+ * ради понятного сообщения об ошибке, а не вместо него.
+ */
+function normalizeStoryLink(raw: string): { ok: true; value: string | null } | { ok: false; error: string } {
+  const value = raw.trim();
+  if (!value) return { ok: true, value: null };
+  if (/^https?:\/\//i.test(value)) return { ok: true, value };
+  if (/^\/[^/]/.test(value)) return { ok: true, value };
+  return {
+    ok: false,
+    error: 'Ссылка должна начинаться с https:// или с / — например, /catalog',
+  };
+}
 
 export type StoryInput = {
   title: string;
@@ -29,6 +55,12 @@ export type AdminStoryDetail = StoryInput & { id: string };
 function validateStoryInput(input: StoryInput): string | null {
   if (!input.title.trim()) return "Укажите название";
   if (input.items.length === 0) return "Добавьте хотя бы одно фото";
+
+  for (const [index, item] of input.items.entries()) {
+    const link = normalizeStoryLink(item.linkUrl ?? "");
+    if (!link.ok) return `Слайд ${index + 1}: ${link.error}`;
+  }
+
   return null;
 }
 
@@ -69,7 +101,7 @@ export async function getStoryForEdit(id: string): Promise<AdminStoryDetail | nu
 
   const { data: items } = await getSupabaseAdmin()
     .from("story_items")
-    .select("image_url, duration_seconds")
+    .select("image_url, duration_seconds, link_url, link_label")
     .eq("story_id", id)
     .order("sort_order", { ascending: true });
 
@@ -79,7 +111,12 @@ export async function getStoryForEdit(id: string): Promise<AdminStoryDetail | nu
     coverImage: story.cover_image,
     sortOrder: story.sort_order,
     isActive: story.is_active,
-    items: (items ?? []).map((item) => ({ imageUrl: item.image_url, durationSeconds: item.duration_seconds })),
+    items: (items ?? []).map((item) => ({
+      imageUrl: item.image_url,
+      durationSeconds: item.duration_seconds,
+      linkUrl: item.link_url ?? "",
+      linkLabel: item.link_label ?? "",
+    })),
   };
 }
 
@@ -88,12 +125,20 @@ async function replaceStoryItems(storyId: string, items: StoryItemInput[]): Prom
   await supabaseAdmin.from("story_items").delete().eq("story_id", storyId);
   if (items.length === 0) return;
 
-  const rows = items.map((item, index) => ({
-    story_id: storyId,
-    image_url: item.imageUrl,
-    duration_seconds: item.durationSeconds,
-    sort_order: index,
-  }));
+  const rows = items.map((item, index) => {
+    const link = normalizeStoryLink(item.linkUrl ?? "");
+    const linkUrl = link.ok ? link.value : null;
+    const linkLabel = item.linkLabel?.trim() || null;
+    return {
+      story_id: storyId,
+      image_url: item.imageUrl,
+      duration_seconds: item.durationSeconds,
+      sort_order: index,
+      link_url: linkUrl,
+      // Подпись без ссылки бессмысленна — не сохраняем висячий текст.
+      link_label: linkUrl ? linkLabel : null,
+    };
+  });
   const { error } = await supabaseAdmin.from("story_items").insert(rows);
   if (error) console.error("[replaceStoryItems]", error.message);
 }

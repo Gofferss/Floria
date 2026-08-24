@@ -10,6 +10,10 @@ import { supabase } from "@/lib/supabase";
 export type StorySlide = {
   imageUrl: string;
   durationSeconds: number;
+  /** Куда ведёт кнопка на слайде. null — кнопки нет. */
+  linkUrl: string | null;
+  /** Надпись на кнопке. Пусто при заданной ссылке — покажем «Подробнее». */
+  linkLabel: string | null;
 };
 
 export type Story = {
@@ -22,7 +26,7 @@ export type Story = {
 export async function getActiveStories(): Promise<Story[]> {
   const { data, error } = await supabase
     .from("stories")
-    .select("id, title, cover_image, story_items ( image_url, duration_seconds, sort_order )")
+    .select("id, title, cover_image, story_items ( image_url, duration_seconds, sort_order, link_url, link_label )")
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
 
@@ -35,7 +39,15 @@ export async function getActiveStories(): Promise<Story[]> {
     id: string;
     title: string;
     cover_image: string | null;
-    story_items: { image_url: string; duration_seconds: number; sort_order: number }[] | null;
+    story_items:
+      | {
+          image_url: string;
+          duration_seconds: number;
+          sort_order: number;
+          link_url: string | null;
+          link_label: string | null;
+        }[]
+      | null;
   };
 
   return ((data ?? []) as unknown as Row[])
@@ -46,7 +58,12 @@ export async function getActiveStories(): Promise<Story[]> {
       items: (row.story_items ?? [])
         .slice()
         .sort((a, b) => a.sort_order - b.sort_order)
-        .map((item) => ({ imageUrl: item.image_url, durationSeconds: item.duration_seconds })),
+        .map((item) => ({
+          imageUrl: item.image_url,
+          durationSeconds: item.duration_seconds,
+          linkUrl: item.link_url,
+          linkLabel: item.link_label,
+        })),
     }))
     // История без фото — нечего показывать, отфильтровываем.
     .filter((story) => story.items.length > 0);
