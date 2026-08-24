@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { linkAuthenticatedCustomerToPhone } from "@/lib/customer-sync";
 import { verifyPhoneOtp } from "@/lib/auth/otp";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { toE164RussianPhone } from "@/lib/phone-mask";
 
 // Использует getSupabaseAdmin() внутри linkAuthenticatedCustomerToPhone —
@@ -21,7 +22,17 @@ export const runtime = "nodejs";
  * номеру телефона (найдено при аудите 2026-08-20). Код отправляется
  * через /api/account/phone/send-code — сюда приходит вместе с ним.
  */
+// Здесь сверяется код из СМС. Свои лимиты есть и у Supabase Auth, но
+// полагаться только на чужие для собственного маршрута не стоит: 10
+// попыток в час с адреса делают перебор четырёхзначного кода
+// бессмысленным, а честному человеку хватает.
+const PHONE_LINK_LIMIT = 10;
+const PHONE_LINK_WINDOW_MS = 60 * 60_000;
+
 export async function POST(request: Request) {
+  const limit = rateLimit(`phone-link:${clientIp(request)}`, PHONE_LINK_LIMIT, PHONE_LINK_WINDOW_MS);
+  if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { validatePromoCode } from "@/lib/promo-codes";
 import { toE164RussianPhone } from "@/lib/phone-mask";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 // Тот же node-рантайм, что и у /api/orders — тут тоже читаем через
 // service-role клиент (lib/promo-codes.ts).
@@ -19,7 +20,17 @@ type ValidateBody = {
  * ("промокод применён, −300 ₽"), результату отсюда сервер при
  * оформлении не доверяет.
  */
+// Промокод — короткая строка, которую можно перебирать. Эндпоинт открыт
+// (человек проверяет код до входа), поэтому единственный сдерживающий
+// фактор — ограничение частоты. 20 попыток в минуту с адреса: живому
+// человеку хватает с запасом, автоматическому перебору — нет.
+const PROMO_LIMIT = 20;
+const PROMO_WINDOW_MS = 60_000;
+
 export async function POST(request: Request) {
+  const limit = rateLimit(`promo:${clientIp(request)}`, PROMO_LIMIT, PROMO_WINDOW_MS);
+  if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
+
   let body: ValidateBody;
   try {
     body = await request.json();

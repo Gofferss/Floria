@@ -43,6 +43,10 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
+  // Не сообщаем каждому запросу, на чём собран сайт: знание версии
+  // фреймворка экономит время тому, кто подбирает известные уязвимости.
+  poweredByHeader: false,
+
   images: {
     remotePatterns: [
       {
