@@ -34,7 +34,22 @@ function mapRow(row: CategoryRow): Category {
   };
 }
 
-/** Активные категории, отсортированные для главной страницы и фильтра каталога. */
+/**
+ * Активные НЕПУСТЫЕ категории — для главной страницы и фильтра каталога.
+ *
+ * Пустые отсеиваются сознательно: витрина не должна обещать раздел, в
+ * котором ничего нет. Раньше на главной висели «Корзинки», «Свадебные
+ * букеты» и «Сезонные букеты» без единого товара — посетитель нажимал и
+ * попадал в никуда. Это же само собой решает и сезонные разделы: закончились
+ * тюльпаны к 8 марта — категория ушла с витрины, завезли — вернулась.
+ *
+ * В админке (/admin/categories) видны ВСЕ категории, включая пустые, со
+ * счётчиком товаров — там прятать нечего, там ими управляют.
+ *
+ * Два запроса вместо соединения: категорий и товаров единицы, а условие
+ * «есть хотя бы один активный товар» через PostgREST-джойн выражается
+ * заметно менее очевидно, чем пересечение множеств здесь.
+ */
 export async function getCategories(): Promise<Category[]> {
   const { data, error } = await supabase
     .from("product_categories")
@@ -46,5 +61,21 @@ export async function getCategories(): Promise<Category[]> {
     console.error("[getCategories]", error.message);
     return [];
   }
-  return (data as CategoryRow[]).map(mapRow);
+
+  const { data: productRows, error: productsError } = await supabase
+    .from("products")
+    .select("category_id")
+    .eq("is_active", true)
+    .not("category_id", "is", null);
+
+  if (productsError) {
+    // Не смогли выяснить наполнение — показываем всё, как раньше. Лишняя
+    // пустая карточка не так плоха, как внезапно исчезнувшая витрина.
+    console.error("[getCategories] наполнение категорий:", productsError.message);
+    return (data as CategoryRow[]).map(mapRow);
+  }
+
+  const непустые = new Set((productRows ?? []).map((row) => row.category_id as string));
+
+  return (data as CategoryRow[]).filter((row) => непустые.has(row.id)).map(mapRow);
 }

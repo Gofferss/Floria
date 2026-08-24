@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Story } from "@/lib/stories";
 import { ArrowRightIcon, CloseIcon } from "@/components/ui/Icons";
@@ -16,6 +16,38 @@ type StoryViewerProps = {
 export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClose }: StoryViewerProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // Пауза по удержанию — как в Instagram: прижал палец, история замерла.
+  const [paused, setPaused] = useState(false);
+  const remainingRef = useRef(0);
+  const startedAtRef = useRef(0);
+  const pressedAtRef = useRef(0);
+
+  /**
+   * Отличаем короткое касание от удержания.
+   *
+   * Нажатие ВСЕГДА ставит на паузу — так удержание срабатывает мгновенно,
+   * без задержки на «а вдруг это тап». А вот листаем только если отпустили
+   * быстрее порога: иначе человек, задержавший палец, чтобы рассмотреть
+   * кадр, при отпускании перескочил бы на следующий.
+   */
+  const HOLD_MS = 220;
+
+  function handlePressStart() {
+    pressedAtRef.current = Date.now();
+    setPaused(true);
+  }
+
+  function handlePressEnd(direction: -1 | 1) {
+    const held = Date.now() - pressedAtRef.current;
+    setPaused(false);
+    if (held < HOLD_MS) goToItem(storyIndex, itemIndex + direction);
+  }
+
+  /** Палец ушёл за пределы зоны или жест прерван — снимаем паузу, но не листаем. */
+  function handlePressCancel() {
+    setPaused(false);
+  }
 
   const story = stories[storyIndex];
   const item = story?.items[itemIndex];
@@ -44,15 +76,34 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
     onNavigate(story, item);
   }
 
-  // Автопереход — фото, поэтому просто таймер на длительность слайда.
+  // Новый слайд — полный запас времени. Эффект объявлен ВЫШЕ таймера
+  // намеренно: React сначала выполняет все уборки, потом все тела по
+  // порядку объявления. При смене слайда уборка таймера успевает записать
+  // сюда остаток от предыдущего кадра, и этот эффект перетирает его полной
+  // длительностью нового — иначе новый слайд унаследовал бы чужой хвост.
   useEffect(() => {
-    if (!item) return;
-    const timeoutId = window.setTimeout(() => {
-      goToItem(storyIndex, itemIndex + 1);
-    }, item.durationSeconds * 1000);
-    return () => window.clearTimeout(timeoutId);
+    if (item) remainingRef.current = item.durationSeconds * 1000;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storyIndex, itemIndex]);
+
+  // Автопереход с возможностью паузы. Таймер не просто «ставится на
+  // длительность»: при паузе он снимается, а несписанный остаток
+  // сохраняется, чтобы после отпускания досчитать ровно его, а не
+  // начинать кадр заново.
+  useEffect(() => {
+    if (!item || paused) return;
+
+    startedAtRef.current = Date.now();
+    const timeoutId = window.setTimeout(() => {
+      goToItem(storyIndex, itemIndex + 1);
+    }, remainingRef.current);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      remainingRef.current = Math.max(remainingRef.current - (Date.now() - startedAtRef.current), 0);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyIndex, itemIndex, paused]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -102,7 +153,16 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
                     ? "h-full w-0 bg-white motion-safe:animate-story-progress motion-reduce:w-full"
                     : "h-full w-0 bg-white"
                 }
-                style={i === itemIndex ? { animationDuration: `${slide.durationSeconds}s` } : undefined}
+                style={
+                  i === itemIndex
+                    ? {
+                        animationDuration: `${slide.durationSeconds}s`,
+                        // Полоска замирает вместе с таймером — иначе она
+                        // добежала бы до конца, пока история стоит на паузе.
+                        animationPlayState: paused ? "paused" : "running",
+                      }
+                    : undefined
+                }
               />
             </div>
           ))}
@@ -127,15 +187,29 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
             слоёв они перекрывали кнопку закрытия и та не нажималась. */}
         <button
           type="button"
-          onClick={() => goToItem(storyIndex, itemIndex - 1)}
+          onPointerDown={handlePressStart}
+          onPointerUp={() => handlePressEnd(-1)}
+          onPointerLeave={handlePressCancel}
+          onPointerCancel={handlePressCancel}
+          // Клавиатура сюда тоже приходит — но не через указатель, поэтому
+          // onClick остаётся: без него кнопка была бы недоступна с Enter.
+          onClick={(e) => {
+            if (e.detail === 0) goToItem(storyIndex, itemIndex - 1);
+          }}
           aria-label="Предыдущий слайд"
-          className="absolute inset-y-0 left-0 z-10 w-1/3"
+          className="absolute inset-y-0 left-0 z-10 w-1/3 touch-none"
         />
         <button
           type="button"
-          onClick={() => goToItem(storyIndex, itemIndex + 1)}
+          onPointerDown={handlePressStart}
+          onPointerUp={() => handlePressEnd(1)}
+          onPointerLeave={handlePressCancel}
+          onPointerCancel={handlePressCancel}
+          onClick={(e) => {
+            if (e.detail === 0) goToItem(storyIndex, itemIndex + 1);
+          }}
           aria-label="Следующий слайд"
-          className="absolute inset-y-0 right-0 z-10 w-2/3"
+          className="absolute inset-y-0 right-0 z-10 w-2/3 touch-none"
         />
 
         {/* Кнопка слайда. z-20 — над зонами листания, иначе нажать её было
