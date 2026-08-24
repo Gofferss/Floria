@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RepeatOrderButton } from "@/components/account/RepeatOrderButton";
 import { BloomMark } from "@/components/ui/BloomMark";
 import { ArrowRightIcon, PackageIcon } from "@/components/ui/Icons";
 
@@ -100,15 +101,21 @@ export function OrderHistoryList({ orders }: { orders: AccountOrder[] }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-4 sm:justify-end">
-            <span
-              className={`rounded-full px-3 py-1 font-display text-xs font-semibold ${STATUS_CLASS[order.status]}`}
-            >
-              {STATUS_LABEL[order.status]}
-            </span>
-            <span className="font-display text-sm font-semibold text-ink">
-              {currency.format(toNumber(order.total_amount))}
-            </span>
+          <div className="flex flex-col items-start gap-3 sm:items-end">
+            <div className="flex items-center justify-between gap-4 sm:justify-end">
+              <span
+                className={`rounded-full px-3 py-1 font-display text-xs font-semibold ${STATUS_CLASS[order.status]}`}
+              >
+                {STATUS_LABEL[order.status]}
+              </span>
+              <span className="font-display text-sm font-semibold text-ink">
+                {currency.format(toNumber(order.total_amount))}
+              </span>
+            </div>
+
+            {/* Самая дешёвая продажа — повторная: тот же получатель, тот же
+                повод, тот же букет. Одно нажатие вместо трёх минут. */}
+            <RepeatOrderButton orderId={order.id} />
           </div>
         </li>
       ))}

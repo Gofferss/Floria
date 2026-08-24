@@ -5,6 +5,7 @@ import { requireStaffUser } from "@/lib/auth/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { OrderStatusControl } from "@/components/admin/orders/OrderStatusControl";
 import { FloristAcceptedCheckbox } from "@/components/admin/orders/FloristAcceptedCheckbox";
+import { AssembledPhoto } from "@/components/admin/orders/AssembledPhoto";
 import type { OrderStatus } from "@/lib/actions/orders";
 
 export const metadata: Metadata = {
@@ -18,6 +19,9 @@ type OrderDetail = {
   id: string;
   order_number: string;
   status: OrderStatus;
+  /** Фото собранного букета для клиента — см. AssembledPhoto. */
+  assembled_photo_url: string | null;
+  assembled_photo_sent_at: string | null;
   payment_status: string;
   customer_name: string;
   customer_phone: string;
@@ -166,6 +170,12 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
           )}
         </section>
       </div>
+
+      <AssembledPhoto
+        orderId={detail.id}
+        photoUrl={detail.assembled_photo_url ?? null}
+        sentAt={detail.assembled_photo_sent_at ?? null}
+      />
 
       <section className="mt-6 rounded-3xl border border-lavender-100 bg-white p-6">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-ink/50">Состав заказа</h2>

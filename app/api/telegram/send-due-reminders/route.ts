@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { askForReview, findOrdersAwaitingReview, markReviewRequested } from "@/lib/telegram/order-notify";
 import crypto from "node:crypto";
 import { sendMessage, TelegramApiError } from "@/lib/telegram/bot";
 import { findDueReminders, markNotified, markBotUserBlocked } from "@/lib/telegram/reminders";
@@ -21,6 +22,26 @@ function isValidSecret(received: string | null, expected: string): boolean {
   const b = Buffer.from(expected);
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
+}
+
+/**
+ * Просьбы об отзыве едут тем же расписанием, что и напоминания: обе задачи
+ * «раз в сутки пробежаться и написать кому надо», отдельный планировщик
+ * заводить незачем.
+ */
+async function sendReviewRequests(): Promise<{ asked: number }> {
+  const orders = await findOrdersAwaitingReview();
+  let asked = 0;
+
+  for (const orderId of orders) {
+    const ok = await askForReview(orderId);
+    // Помечаем в любом случае: если бота у клиента нет, он не появится
+    // задним числом, и перебирать этот заказ каждый прогон бессмысленно.
+    await markReviewRequested(orderId);
+    if (ok) asked += 1;
+  }
+
+  return { asked };
 }
 
 export async function POST(request: Request) {
@@ -61,5 +82,7 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ checked: due.length, sent, failed });
+  const reviews = await sendReviewRequests();
+
+  return NextResponse.json({ checked: due.length, sent, failed, reviewsAsked: reviews.asked });
 }
