@@ -18,6 +18,6 @@ export {
   type PosifloraOrderResult,
 } from "./orders";
 
-export { syncPosifloraCatalog, type CatalogSyncSummary } from "./catalog";
+export { syncPosifloraCatalog, recomputeProductAvailability, type CatalogSyncSummary } from "./catalog";
 
 export { searchInventoryItems, getAllAvailableInventoryItemIds, type InventoryItemOption } from "./inventory";

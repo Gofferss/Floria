@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { getStaffUser } from "@/lib/auth/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { searchInventoryItems, type InventoryItemOption } from "@/lib/posiflora";
+import { searchInventoryItems, recomputeProductAvailability, type InventoryItemOption } from "@/lib/posiflora";
 import { parsePricingMode, type AvailabilityMode, type PricingMode, type ProductSize } from "@/lib/products";
 
 // ================================================================
@@ -164,6 +164,12 @@ export async function createProduct(
   const recipeError = await replaceRecipeItems(product.id, input.recipeItems);
   if (recipeError) return { success: false, error: recipeError };
 
+  // Статус наличия пересчитываем СРАЗУ, а не ждём следующей полной
+  // синхронизации каталога: иначе куратор указывает в составе 101 розу при
+  // 97 на складе, сохраняет — и видит прежнее «в наличии», не понимая,
+  // почему. Функция сама ничего не делает, если наличие ведут вручную.
+  await recomputeProductAvailability(product.id);
+
   revalidatePath("/admin/catalog");
   revalidatePath("/catalog");
   if (input.isActive) revalidatePath(`/catalog/${product.slug}`);
@@ -217,6 +223,12 @@ export async function updateProduct(
 
   const recipeError = await replaceRecipeItems(product.id, input.recipeItems);
   if (recipeError) return { success: false, error: recipeError };
+
+  // Статус наличия пересчитываем СРАЗУ, а не ждём следующей полной
+  // синхронизации каталога: иначе куратор указывает в составе 101 розу при
+  // 97 на складе, сохраняет — и видит прежнее «в наличии», не понимая,
+  // почему. Функция сама ничего не делает, если наличие ведут вручную.
+  await recomputeProductAvailability(product.id);
 
   revalidatePath("/admin/catalog");
   revalidatePath("/catalog");

@@ -395,3 +395,57 @@ export async function syncPosifloraCatalog(): Promise<CatalogSyncSummary> {
 
   return summary;
 }
+
+/**
+ * Пересчёт наличия ОДНОГО товара — сразу после сохранения в админке.
+ *
+ * Зачем отдельно от syncComputedAvailability. Тот пересчитывает всё разом
+ * и живёт внутри полной синхронизации каталога, которую запускают редко.
+ * Из-за этого получалось странное: куратор указывает в составе 101 розу
+ * при 97 на складе, сохраняет — а товар как висел «в наличии», так и
+ * висит, потому что пересчёт произойдёт неизвестно когда. Теперь статус
+ * обновляется в тот же момент, что и сам рецепт.
+ *
+ * Ошибки намеренно не пробрасываются наверх: товар уже сохранён, и ронять
+ * из-за недоступного склада всю операцию нельзя. В худшем случае статус
+ * останется прежним до следующей полной синхронизации.
+ */
+export async function recomputeProductAvailability(productId: string): Promise<void> {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: product } = await supabaseAdmin
+    .from("products")
+    .select("availability_source")
+    .eq("id", productId)
+    .maybeSingle();
+
+  // Наличие ведут вручную — трогать его нельзя, это осознанный выбор куратора.
+  if (!product || product.availability_source !== "recipe") return;
+
+  const { data: recipeItems } = await supabaseAdmin
+    .from("product_recipe_items")
+    .select("posiflora_inventory_item_id, quantity")
+    .eq("product_id", productId);
+
+  // Состав ещё не заполнен — не затираем последний осознанный статус.
+  if (!recipeItems || recipeItems.length === 0) return;
+
+  try {
+    const balances = await getInventoryBalances(
+      recipeItems.map((row) => row.posiflora_inventory_item_id as string)
+    );
+
+    const inStock = recipeItems.every((row) => {
+      const balance = balances.get(row.posiflora_inventory_item_id as string);
+      if (balance === undefined) return true; // остаток неизвестен — не паникуем
+      return balance >= (Number(row.quantity) || 0);
+    });
+
+    await supabaseAdmin
+      .from("products")
+      .update({ availability_mode: inStock ? "in_stock" : "made_to_order" })
+      .eq("id", productId);
+  } catch (error) {
+    console.error(`[recomputeProductAvailability] ${productId}:`, error);
+  }
+}
