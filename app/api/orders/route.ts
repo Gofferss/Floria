@@ -257,29 +257,18 @@ export async function POST(request: Request) {
   // --- Posiflora (мок) ---
   // Вызываем до записи в Supabase, чтобы сразу сохранить posiflora_order_id
   // и bonus_earned одним insert'ом, без промежуточного update.
-  let posifloraResult: { posifloraOrderId: string | null; bonusEarned: number; bonusBalanceAfter: number };
-  try {
-    posifloraResult = await createPosifloraOrder({
-      orderNumber,
-      posifloraClientId,
-      customerName: payload.customerName,
-      customerPhone: payload.customerPhone,
-      items: resolvedItems,
-      bonusUsed,
-      currentBonusBalance,
-    });
-  } catch (error) {
-    console.error("Ошибка интеграции с Posiflora:", error);
-    // Не блокируем оформление заказа из-за сбоя кассы — заказ уходит в
-    // статус 'new' без posiflora_order_id, менеджер обработает вручную.
-    // Баланс всё равно уменьшаем локально на использованные бонусы, чтобы
-    // их нельзя было списать повторно на следующем заказе.
-    posifloraResult = {
-      posifloraOrderId: null,
-      bonusEarned: 0,
-      bonusBalanceAfter: Math.max(0, currentBonusBalance - bonusUsed),
-    };
-  }
+  // Заказ в Posiflora заводит флорист руками: их API не позволяет привязать
+  // состав к заказу (см. lib/posiflora/orders.ts). Здесь остаётся точка
+  // подключения на будущее — сейчас она ничего не отправляет.
+  const posifloraResult = await createPosifloraOrder({
+    orderNumber,
+    posifloraClientId,
+    customerName: payload.customerName,
+    customerPhone: payload.customerPhone,
+    items: resolvedItems,
+    bonusUsed,
+    currentBonusBalance,
+  });
 
   // --- Supabase: запись заказа ---
   const supabaseAdmin = getSupabaseAdmin();
@@ -333,17 +322,18 @@ export async function POST(request: Request) {
   // Best-effort — заказ уже создан, сбой здесь не должен превращаться в
   // ошибку оформления, просто на следующей загрузке /account баланс может
   // на секунду отстать (там дальше живой запрос в Posiflora всё равно всё поправит).
+  // Кэш баланса СБРАСЫВАЕМ, а не переписываем расчётным числом: сколько
+  // бонусов у клиента на самом деле, знает только Posiflora, и начислит их
+  // она, когда флорист проведёт заказ. Обнулённая отметка заставит
+  // следующий показ /account спросить живой баланс вместо устаревшего.
   if (customerId) {
     const { error: bonusUpdateError } = await supabaseAdmin
       .from("customers")
-      .update({
-        bonus_balance: posifloraResult.bonusBalanceAfter,
-        bonus_balance_synced_at: new Date().toISOString(),
-      })
+      .update({ bonus_balance_synced_at: null })
       .eq("id", customerId);
 
     if (bonusUpdateError) {
-      console.error("Не удалось обновить баланс бонусов после заказа:", bonusUpdateError);
+      console.error("Не удалось сбросить кэш баланса бонусов после заказа:", bonusUpdateError);
     }
   }
 

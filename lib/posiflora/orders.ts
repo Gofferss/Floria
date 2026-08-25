@@ -1,20 +1,34 @@
 // ================================================================
-// Заказы — ПОКА ОСТАЮТСЯ МОКОМ. Не входили в сегодняшний план (там
-// были только задачи 1-3: поиск/создание клиента и синхронизация
-// бонусов, всё это — про Customers API). Реальная интеграция заказов
-// требует ещё одной вещи, которой у нас пока нет: наш каталог
-// (lib/products.ts) не синхронизирован с реальными inventory-items
-// Posiflora, а без их ID нельзя собрать order-lines в формате, который
-// ожидает POST /v1/orders. Это отдельная задача синхронизации каталога,
-// не просто ещё одна функция здесь.
+// Заказы и бонусы: почему здесь НЕТ обращения к Posiflora.
+//
+// Раньше в этом файле жила заглушка, которая делала вид, что заказ ушёл
+// в кассу: выдавала выдуманный posifloraOrderId и начисляла «условные 5%»
+// от суммы. Начисленное записывалось в наш customers.bonus_balance — и
+// сайт показывал баланс, которого в Posiflora не существовало. Именно
+// так и получилось расхождение 1373 у нас против 123 у них.
+//
+// Почему заказ нельзя отправить в Posiflora по-настоящему: их публичный
+// API не позволяет привязать состав к заказу. POST /v1/orders создаёт
+// пустую оболочку, POST /v1/bouquets — букет без связи с заказом, а
+// единственный эндпоинт «заказ ↔ букет» умеет только УБИРАТЬ букет из
+// заказа. Проверено по их официальной спецификации. Это ограничение
+// Posiflora, а не пробел в нашем коде.
+//
+// Поэтому порядок работы такой:
+//   1. Клиент оформляет заказ на сайте, при желании списывает бонусы;
+//   2. заказ появляется в /admin/orders и в Telegram у флориста;
+//   3. флорист проводит его в Posiflora руками — и НАЧИСЛЯЕТ бонусы там;
+//   4. сайт просто показывает баланс, который отдаёт Posiflora.
+//
+// Процент начисления живёт в настройках лояльности Posiflora, а не в
+// коде сайта: начисляет она, значит и правило должно быть у неё. Иначе
+// два места считали бы одно и то же и неизбежно разошлись.
+//
+// Списание бонусов мы фиксируем в самом заказе (orders.bonus_used) и
+// показываем флористу в карточке — чтобы он применил ту же скидку,
+// проводя заказ. Локальный баланс при этом НЕ переписываем: сколько
+// бонусов у клиента на самом деле, знает только Posiflora.
 // ================================================================
-
-type MockClientRecord = {
-  posifloraClientId: string;
-  bonusBalance: number;
-};
-
-const mockClientStore = new Map<string, MockClientRecord>();
 
 export type PosifloraOrderItemInput = {
   name: string;
@@ -29,47 +43,25 @@ export type PosifloraOrderInput = {
   customerPhone: string;
   items: PosifloraOrderItemInput[];
   bonusUsed: number;
-  /** Наш кэш баланса на момент заказа — точка отсчёта для мок-арифметики */
   currentBonusBalance: number;
 };
 
 export type PosifloraOrderResult = {
-  posifloraOrderId: string | null;
-  bonusEarned: number;
-  /** Баланс клиента в Posiflora ПОСЛЕ проведения заказа (списание + начисление) */
-  bonusBalanceAfter: number;
+  /** Всегда null: заказ в Posiflora заводит флорист руками, см. заголовок. */
+  posifloraOrderId: null;
+  /** Всегда 0: начисляет Posiflora при проведении заказа, не мы. */
+  bonusEarned: 0;
 };
 
 /**
- * Мок интеграции с Posiflora. Имитирует создание заказа в кассовой системе,
- * списание использованных бонусов и начисление новых (условные 5% от суммы
- * товаров).
+ * Ничего не отправляет и ничего не выдумывает.
+ *
+ * Функция оставлена, чтобы вызывающий код (app/api/orders/route.ts) читался
+ * как раньше и чтобы точка подключения настоящей интеграции была очевидна,
+ * когда Posiflora дорастит свой API.
  */
 export async function createPosifloraOrder(
-  input: PosifloraOrderInput
+  _input: PosifloraOrderInput
 ): Promise<PosifloraOrderResult> {
-  await simulateNetworkDelay();
-
-  const itemsTotal = input.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const bonusEarned = Math.round(itemsTotal * 0.05);
-  const bonusBalanceAfter = Math.max(0, input.currentBonusBalance - input.bonusUsed + bonusEarned);
-
-  if (input.posifloraClientId) {
-    for (const [key, record] of mockClientStore) {
-      if (record.posifloraClientId === input.posifloraClientId) {
-        mockClientStore.set(key, { ...record, bonusBalance: bonusBalanceAfter });
-        break;
-      }
-    }
-  }
-
-  return {
-    posifloraOrderId: `POSI-${Date.now().toString(36).toUpperCase()}`,
-    bonusEarned,
-    bonusBalanceAfter,
-  };
-}
-
-function simulateNetworkDelay(ms = 400): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return { posifloraOrderId: null, bonusEarned: 0 };
 }
