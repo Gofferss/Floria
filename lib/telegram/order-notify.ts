@@ -176,3 +176,41 @@ export async function markReviewRequested(orderId: string): Promise<void> {
 
   if (error) console.error(`[markReviewRequested] заказ ${orderId}:`, error.message);
 }
+
+/**
+ * Подтверждение сразу после оформления.
+ *
+ * До этого клиент не получал НИЧЕГО: уведомление уходило только флористам,
+ * а человек, оставивший заказ, узнавал о его судьбе, лишь когда кто-то
+ * вручную менял статус. Между «нажал оформить» и первым ответом могли
+ * пройти часы — и это ровно то время, когда сомневаются и звонят «а вы
+ * получили мой заказ?».
+ *
+ * Вызывается после записи заказа в базу, ошибку наверх не пробрасывает:
+ * заказ уже принят, и сорвавшееся сообщение не повод показывать клиенту
+ * ошибку оформления.
+ */
+export async function confirmOrderToCustomer(
+  orderId: string,
+  details: { deliveryDate: string; timeLabel: string; total: number; isPickup: boolean }
+): Promise<void> {
+  try {
+    const target = await findChatIdForOrder(orderId);
+    if (!target) return;
+
+    const when = new Date(details.deliveryDate).toLocaleDateString("ru-RU", {
+      day: "numeric",
+      month: "long",
+    });
+
+    await sendMessage(
+      target.chatId,
+      `Спасибо! Мы приняли заказ <b>${target.orderNumber}</b>.\n\n` +
+        `${details.isPickup ? "🏪 Самовывоз" : "🚗 Доставка"}: ${when}, ${details.timeLabel}\n` +
+        `💰 К оплате: ${details.total} ₽\n\n` +
+        `Скоро свяжемся, чтобы подтвердить детали. Здесь же пришлём фото собранного букета до выезда курьера.`
+    );
+  } catch (error) {
+    console.error(`[confirmOrderToCustomer] заказ ${orderId}:`, error);
+  }
+}

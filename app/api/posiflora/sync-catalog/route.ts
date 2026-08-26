@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { syncPosifloraCatalog } from "@/lib/posiflora";
+import { reportHealth } from "@/lib/health-report";
 
 // Node-рантайм ради crypto.timingSafeEqual и обычного supabase-js
 // service-role клиента (та же причина, что у остальных внутренних
@@ -40,14 +41,30 @@ export async function POST(request: Request) {
 
     if (summary.errors.length > 0) {
       // Не 500 — часть каталога вполне могла синхронизироваться успешно,
-      // это не полный отказ. Ошибки видны и в теле ответа (для n8n), и
-      // в логах сервера.
+      // это не полный отказ. Ошибки видны и в теле ответа, и в логах.
       console.error("Синхронизация каталога завершилась с ошибками:", summary.errors);
     }
+
+    // Задача идёт каждые 15 минут, поэтому порог в 3 сбоя — это 45 минут
+    // тишины перед сообщением: разовую сетевую заминку переживём молча.
+    await reportHealth({
+      key: "catalog-sync",
+      title: "Синхронизация каталога и наличия",
+      ok: summary.errors.length === 0,
+      errorText: summary.errors.join("; "),
+      failThreshold: 3,
+    });
 
     return NextResponse.json({ ok: true, durationMs, ...summary });
   } catch (error) {
     console.error("Синхронизация каталога полностью упала:", error);
+    await reportHealth({
+      key: "catalog-sync",
+      title: "Синхронизация каталога и наличия",
+      ok: false,
+      errorText: error instanceof Error ? error.message : "Неизвестная ошибка",
+      failThreshold: 3,
+    });
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Неизвестная ошибка" },
       { status: 500 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { reportHealth } from "@/lib/health-report";
 import { askForReview, findOrdersAwaitingReview, markReviewRequested } from "@/lib/telegram/order-notify";
 import crypto from "node:crypto";
 import { sendMessage, TelegramApiError } from "@/lib/telegram/bot";
@@ -83,6 +84,16 @@ export async function POST(request: Request) {
   }
 
   const reviews = await sendReviewRequests();
+
+  // Задача суточная, поэтому порог 1: ждать три дня, прежде чем сказать,
+  // что напоминания не уходят, — значит потерять три дня поводов.
+  await reportHealth({
+    key: "daily-reminders",
+    title: "Напоминания о датах и просьбы об отзыве",
+    ok: failed === 0,
+    errorText: `не удалось отправить напоминаний: ${failed}`,
+    failThreshold: 1,
+  });
 
   return NextResponse.json({ checked: due.length, sent, failed, reviewsAsked: reviews.asked });
 }

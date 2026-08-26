@@ -7,6 +7,7 @@ import { resolveOrCreateCustomerByPhone, refreshCustomerBonusBalance } from "@/l
 import { toE164RussianPhone } from "@/lib/phone-mask";
 import { notifyN8n, notifyStaffTelegram } from "@/lib/n8n";
 import { escapeTelegramHtml } from "@/lib/telegram/bot";
+import { confirmOrderToCustomer } from "@/lib/telegram/order-notify";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import {
@@ -21,6 +22,9 @@ import {
 // Используем service-role ключ Supabase и Node-совместимые API — нужен
 // node-рантайм, не edge.
 export const runtime = "nodejs";
+
+/** Потолок количества одной позиции в заказе — см. проверку в validatePayload. */
+const MAX_ITEM_QUANTITY = 500;
 
 type ValidationResult =
   | { valid: true; data: CheckoutPayload }
@@ -84,10 +88,26 @@ function validatePayload(body: unknown): ValidationResult {
       typeof item.name !== "string" ||
       typeof item.price !== "number" ||
       typeof item.quantity !== "number" ||
-      item.price < 0 ||
-      item.quantity < 1
+      item.price < 0
     ) {
       return { valid: false, error: "Некорректный состав заказа" };
+    }
+
+    // Количество: целое и в разумных пределах.
+    //
+    // Раньше проверялось только «число и не меньше 1», поэтому проходили
+    // и 1.5 штуки (итог считался с копейками, а собрать полтора букета
+    // нельзя), и 999999 штук. Пока оплаты нет, это лишь мусорный заказ,
+    // который флорист отменит вручную. С появлением оплаты цена ошибки
+    // вырастет, поэтому закрываем заранее.
+    //
+    // Верхняя граница щедрая: поштучную срезку берут и по 101 цветку,
+    // а вот 500 — это уже не розничный заказ, а опечатка или перебор.
+    if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > MAX_ITEM_QUANTITY) {
+      return {
+        valid: false,
+        error: `Количество должно быть целым числом от 1 до ${MAX_ITEM_QUANTITY}. Нужно больше — позвоните нам, оформим отдельно.`,
+      };
     }
   }
 
@@ -401,6 +421,16 @@ export async function POST(request: Request) {
   const itemsLines = resolvedItems
     .map((item) => `• ${escapeTelegramHtml(item.name)} × ${item.quantity} — ${item.price * item.quantity} ₽`)
     .join("\n");
+
+  // Клиенту — сразу, а не когда кто-то вспомнит сменить статус. Между
+  // «нажал оформить» и первым ответом человек как раз и сомневается,
+  // получили ли его заказ вообще.
+  void confirmOrderToCustomer(order.id, {
+    deliveryDate: payload.deliveryDate,
+    timeLabel: timeSlot?.label ?? "время уточним",
+    total: totalAmount,
+    isPickup: payload.isPickup,
+  });
 
   notifyStaffTelegram(
     `🌸 <b>Новый заказ ${escapeTelegramHtml(order.order_number)}</b>\n\n` +
