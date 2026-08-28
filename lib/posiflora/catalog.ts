@@ -166,13 +166,31 @@ function toPrice(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
+// ================================================================
+// Две группы ошибок намеренно РАЗДЕЛЕНЫ, а не свалены в один список.
+//
+// Импорт каталога из Posiflora и пересчёт наличия по рецептам — задачи
+// разной важности. Пересчёт не даёт продать цветы, которых нет на
+// складе; его поломка бьёт по деньгам и по клиенту сразу. Импорт же
+// давно падает не по нашей вине: их GET /categories устойчиво отвечает
+// 500, и починить это с нашей стороны нельзя.
+//
+// Пока список был общий, контроль здоровья считал сбоем ЛЮБУЮ ошибку —
+// и на 66-м прогоне подряд рапортовал о поломке задачи, которая на
+// самом деле делала главное исправно. Так тревога перестаёт что-либо
+// значить: на неё привыкают не смотреть, а вместе с ней пропускают
+// настоящую. Разделение возвращает сообщениям смысл.
+// ================================================================
 export type CatalogSyncSummary = {
   categoriesProcessed: number;
   productsCreated: number;
   productsUpdated: number;
   productsDeactivated: number;
   recipeProductsChecked: number;
-  errors: string[];
+  /** Сбои пересчёта наличия — критично, тревожим быстро. */
+  availabilityErrors: string[];
+  /** Сбои импорта каталога — чаще всего внешние, терпим дольше. */
+  catalogErrors: string[];
 };
 
 /**
@@ -271,7 +289,8 @@ export async function syncPosifloraCatalog(): Promise<CatalogSyncSummary> {
     productsUpdated: 0,
     productsDeactivated: 0,
     recipeProductsChecked: 0,
-    errors: [],
+    availabilityErrors: [],
+    catalogErrors: [],
   };
 
   // Категории/товары и проверка наличия по рецепту читают Posiflora
@@ -322,7 +341,7 @@ export async function syncPosifloraCatalog(): Promise<CatalogSyncSummary> {
           .eq("id", existing.id);
 
         if (error) {
-          summary.errors.push(`Обновление "${title}" (${item.id}): ${error.message}`);
+          summary.catalogErrors.push(`Обновление "${title}" (${item.id}): ${error.message}`);
         } else {
           summary.productsUpdated++;
         }
@@ -351,7 +370,7 @@ export async function syncPosifloraCatalog(): Promise<CatalogSyncSummary> {
       });
 
       if (error) {
-        summary.errors.push(`Создание "${title}" (${item.id}): ${error.message}`);
+        summary.catalogErrors.push(`Создание "${title}" (${item.id}): ${error.message}`);
       } else {
         summary.productsCreated++;
       }
@@ -380,18 +399,18 @@ export async function syncPosifloraCatalog(): Promise<CatalogSyncSummary> {
         .in("id", toDeactivate);
 
       if (error) {
-        summary.errors.push(`Деактивация пропавших товаров: ${error.message}`);
+        summary.catalogErrors.push(`Деактивация пропавших товаров: ${error.message}`);
       } else {
         summary.productsDeactivated = toDeactivate.length;
       }
     }
   } catch (error) {
-    summary.errors.push(
+    summary.catalogErrors.push(
       `Синхронизация категорий/товаров полностью упала: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 
-  summary.recipeProductsChecked = await syncComputedAvailability(summary.errors);
+  summary.recipeProductsChecked = await syncComputedAvailability(summary.availabilityErrors);
 
   return summary;
 }

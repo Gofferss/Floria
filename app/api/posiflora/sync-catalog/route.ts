@@ -39,28 +39,55 @@ export async function POST(request: Request) {
     const summary = await syncPosifloraCatalog();
     const durationMs = Date.now() - startedAt;
 
-    if (summary.errors.length > 0) {
+    if (summary.availabilityErrors.length > 0 || summary.catalogErrors.length > 0) {
       // Не 500 — часть каталога вполне могла синхронизироваться успешно,
       // это не полный отказ. Ошибки видны и в теле ответа, и в логах.
-      console.error("Синхронизация каталога завершилась с ошибками:", summary.errors);
+      console.error("Синхронизация каталога завершилась с ошибками:", {
+        наличие: summary.availabilityErrors,
+        каталог: summary.catalogErrors,
+      });
     }
 
-    // Задача идёт каждые 15 минут, поэтому порог в 3 сбоя — это 45 минут
-    // тишины перед сообщением: разовую сетевую заминку переживём молча.
+    // ================================================================
+    // Две отдельные проверки здоровья вместо одной общей.
+    //
+    // Раньше тревога поднималась на ЛЮБУЮ ошибку, и из-за вечно
+    // падающего /categories у Posiflora счётчик добрался до 66 сбоев
+    // подряд. Сообщение при этом было неправдой: пересчёт наличия —
+    // то, ради чего задача вообще нужна, — всё это время работал.
+    //
+    // Тревога, которая горит вторые сутки и на которую нельзя
+    // повлиять, хуже отсутствия тревоги: на неё перестают смотреть, а
+    // заодно и на соседние. Поэтому теперь:
+    //   наличие — порог 3 (45 минут), это наши деньги и наш клиент;
+    //   каталог — порог 96 (сутки), поломка чаще всего внешняя, и
+    //             сообщать о ней чаще раза в сутки бессмысленно.
+    // ================================================================
     await reportHealth({
-      key: "catalog-sync",
-      title: "Синхронизация каталога и наличия",
-      ok: summary.errors.length === 0,
-      errorText: summary.errors.join("; "),
+      key: "catalog-availability",
+      title: "Пересчёт наличия по составу букетов",
+      ok: summary.availabilityErrors.length === 0,
+      errorText: summary.availabilityErrors.join("; "),
       failThreshold: 3,
+    });
+
+    await reportHealth({
+      key: "catalog-import",
+      title: "Импорт товаров из Posiflora",
+      ok: summary.catalogErrors.length === 0,
+      errorText: summary.catalogErrors.join("; "),
+      failThreshold: 96,
     });
 
     return NextResponse.json({ ok: true, durationMs, ...summary });
   } catch (error) {
     console.error("Синхронизация каталога полностью упала:", error);
+    // Полное падение — значит и пересчёт наличия не отработал, поэтому
+    // отчитываемся по критичному ключу с его быстрым порогом, а не по
+    // терпеливому импортному.
     await reportHealth({
-      key: "catalog-sync",
-      title: "Синхронизация каталога и наличия",
+      key: "catalog-availability",
+      title: "Пересчёт наличия по составу букетов",
       ok: false,
       errorText: error instanceof Error ? error.message : "Неизвестная ошибка",
       failThreshold: 3,
