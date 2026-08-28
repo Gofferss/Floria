@@ -20,19 +20,46 @@ function staffChatIds(): number[] {
     .filter((id) => Number.isFinite(id));
 }
 
-/** Fire-and-forget, как и notifyN8n — сбой уведомления не должен ломать оформление заказа/заявки. */
-export function notifyStaffTelegram(text: string): void {
+/**
+ * Отправляет сотрудникам и ГОВОРИТ, дошло ли.
+ *
+ * Раньше функция была fire-and-forget и возвращала void: сбой писался в
+ * console.error и на этом заканчивался. Для заказа это значило, что клиент
+ * видит «спасибо, скоро свяжемся», а студия не знает о заказе вовсе —
+ * узнать об этом можно было, только открыв логи, чего никто не делает.
+ *
+ * Возвращаемое значение — «дошло хотя бы до одного получателя». Именно
+ * хотя бы до одного, а не до всех: если из двух сотрудников сообщение
+ * получил один, заказ не потерян, и дёргать тревогу не за чем. А вот ноль
+ * получателей — это молчаливая потеря, и вызывающий код обязан её
+ * зафиксировать (orders.staff_notified_at / contact_requests.staff_notified_at),
+ * чтобы задача добора потом доотправила.
+ *
+ * Ошибку по-прежнему НЕ пробрасываем: оформление заказа не должно падать
+ * из-за недоступности Telegram. Разница в том, что теперь о сбое узнают.
+ */
+export async function notifyStaffTelegram(text: string): Promise<boolean> {
   const chatIds = staffChatIds();
   if (chatIds.length === 0) {
-    console.warn("STAFF_TELEGRAM_CHAT_IDS не задан — уведомление сотрудникам в Telegram пропущено");
-    return;
+    console.error(
+      "[notifyStaffTelegram] STAFF_TELEGRAM_CHAT_IDS не задан — сообщать некому, уведомление потеряно"
+    );
+    return false;
   }
 
-  for (const chatId of chatIds) {
-    sendMessage(chatId, text).catch((error) => {
-      console.error(`Не удалось отправить уведомление в Telegram (chat ${chatId}):`, error);
-    });
-  }
+  const results = await Promise.all(
+    chatIds.map(async (chatId) => {
+      try {
+        await sendMessage(chatId, text);
+        return true;
+      } catch (error) {
+        console.error(`[notifyStaffTelegram] чат ${chatId}:`, error);
+        return false;
+      }
+    })
+  );
+
+  return results.some(Boolean);
 }
 
 export type N8nEvent =

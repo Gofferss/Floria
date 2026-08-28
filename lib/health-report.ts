@@ -62,7 +62,7 @@ export async function reportHealth(options: {
       // Сообщаем о восстановлении только если раньше жаловались — иначе
       // каждый успешный прогон превращался бы в уведомление.
       if (before.alerted_at) {
-        notifyStaffTelegram(
+        await notifyStaffTelegram(
           `✅ <b>${escapeTelegramHtml(title)}</b> снова работает.\n\n` +
             `Задача отработала успешно после ${before.consecutive_failures} сбоев подряд.`
         );
@@ -84,7 +84,7 @@ export async function reportHealth(options: {
     const shouldAlert = failures >= failThreshold && alertedAgo >= REALERT_AFTER_MS;
 
     if (shouldAlert) {
-      notifyStaffTelegram(
+      await notifyStaffTelegram(
         `⚠️ <b>${escapeTelegramHtml(title)}</b> не работает.\n\n` +
           `Сбоев подряд: ${failures}\n` +
           `Причина: ${escapeTelegramHtml((errorText ?? "неизвестна").slice(0, 400))}\n\n` +

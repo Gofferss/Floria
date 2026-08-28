@@ -3,6 +3,7 @@ import { toE164RussianPhone } from "@/lib/phone-mask";
 import { notifyN8n, notifyStaffTelegram } from "@/lib/n8n";
 import { escapeTelegramHtml } from "@/lib/telegram/bot";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 // Тот же node-рантайм, что и у /api/orders — консистентность важнее, чем
 // экономия на edge для такого редкого и лёгкого запроса.
@@ -59,14 +60,57 @@ export async function POST(request: Request) {
   const name = payload.name.trim().slice(0, MAX_NAME_LENGTH);
   const message = (payload.message?.trim() ?? "").slice(0, MAX_MESSAGE_LENGTH);
 
+  // ================================================================
+  // СНАЧАЛА записываем, ПОТОМ уведомляем — порядок здесь принципиален.
+  //
+  // Раньше обращение вообще нигде не сохранялось: единственным его следом
+  // было сообщение в Telegram, отправленное «вдогонку». Не ушло — и вопрос
+  // клиента исчезал совсем, притом что человек видел «спасибо, свяжемся».
+  //
+  // Теперь запись в базе появляется до всякой отправки. Сбой уведомления
+  // перестал быть потерей: обращение лежит в /admin, а задача добора
+  // (app/api/telegram/send-due-reminders) доотправит его и поднимет
+  // тревогу, если Telegram не отвечает раз за разом.
+  // ================================================================
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: saved, error: saveError } = await supabaseAdmin
+    .from("contact_requests")
+    .insert({ name, phone, message })
+    .select("id")
+    .single();
+
+  if (saveError) {
+    // Вот это — единственный случай, когда клиенту нужно сказать «не
+    // получилось»: записать не смогли, а значит и вернуться к обращению
+    // будет неоткуда. Лучше честная ошибка и повторная отправка, чем
+    // бодрое «спасибо» над пустотой.
+    console.error("[contact] не удалось сохранить обращение:", saveError.message);
+    return NextResponse.json(
+      { error: "Не получилось отправить заявку. Попробуйте ещё раз или позвоните нам." },
+      { status: 500 }
+    );
+  }
+
   notifyN8n({ event: "contact.created", name, phone, message });
   // Экранируем ввод клиента — без этого через поле "Сообщение" в HTML-
   // уведомление сотруднику можно было бы вставить кликабельную ссылку.
-  notifyStaffTelegram(
+  const delivered = await notifyStaffTelegram(
     `📞 <b>Заявка на обратный звонок</b>\n\nИмя: ${escapeTelegramHtml(name)}\nТелефон: ${escapeTelegramHtml(
       phone
     )}\nСообщение: ${message ? escapeTelegramHtml(message) : "—"}`
   );
+
+  if (delivered) {
+    await supabaseAdmin
+      .from("contact_requests")
+      .update({ staff_notified_at: new Date().toISOString(), notify_attempts: 1 })
+      .eq("id", saved.id);
+  } else {
+    // Не сообщаем клиенту: для него заявка принята, и это правда — она
+    // записана. Проблема наша, и решать её нам, а не ему.
+    console.error(`[contact] обращение ${saved.id} сохранено, но сотрудникам не доставлено`);
+    await supabaseAdmin.from("contact_requests").update({ notify_attempts: 1 }).eq("id", saved.id);
+  }
 
   return NextResponse.json({ success: true });
 }

@@ -10,6 +10,7 @@ import {
   StoryRingIcon,
   ChartBarIcon,
   TruckIcon,
+  PhoneIcon,
 } from "@/components/ui/Icons";
 
 export const metadata: Metadata = {
@@ -23,6 +24,14 @@ const SECTIONS = [
     icon: TruckIcon,
     title: "Заказы",
     description: "Заказы с сайта: состав, адрес, статус и отметка «принят в работу».",
+  },
+  // Обращения сразу за заказами: если Telegram недоступен, это
+  // единственное место, где заявку с сайта вообще можно увидеть.
+  {
+    href: "/admin/contact-requests",
+    icon: PhoneIcon,
+    title: "Обращения",
+    description: "Заявки на обратный звонок с сайта: кто написал и о чём.",
   },
   {
     href: "/admin/blog",

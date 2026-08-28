@@ -432,7 +432,12 @@ export async function POST(request: Request) {
     isPickup: payload.isPickup,
   });
 
-  notifyStaffTelegram(
+  // Ждём результат, а не бросаем вдогонку: заказ уже лежит в базе, и
+  // единственное, что нам нужно узнать, — сообщили о нём студии или нет.
+  // Если нет, ставим отметку «не сообщили», и задача добора доотправит.
+  // Без этой отметки заказ выглядел бы точно так же, как обычный, а
+  // флорист просто никогда бы о нём не узнал.
+  const staffNotified = await notifyStaffTelegram(
     `🌸 <b>Новый заказ ${escapeTelegramHtml(order.order_number)}</b>\n\n` +
       `Клиент: ${escapeTelegramHtml(payload.customerName)}, ${escapeTelegramHtml(payload.customerPhone)}\n` +
       `Получатель: ${escapeTelegramHtml(recipientName)}, ${escapeTelegramHtml(recipientPhone)}\n` +
@@ -444,6 +449,15 @@ export async function POST(request: Request) {
       (discountAmount > 0 ? `\nСкидка по промокоду: −${discountAmount} ₽` : "") +
       `\nСумма: ${totalAmount} ₽`
   );
+
+  if (staffNotified) {
+    await supabaseAdmin
+      .from("orders")
+      .update({ staff_notified_at: new Date().toISOString() })
+      .eq("id", order.id);
+  } else {
+    console.error(`[orders] заказ ${order.order_number} создан, но студии о нём не сообщили`);
+  }
 
   return NextResponse.json({
     orderId: order.id,
