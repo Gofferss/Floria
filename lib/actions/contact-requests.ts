@@ -30,6 +30,9 @@ export type AdminContactRequest = {
   staffNotifiedAt: string | null;
   handledAt: string | null;
   createdAt: string;
+  /** form — заявка с сайта, bot_review — ответ на просьбу об отзыве в боте. */
+  source: string;
+  orderNumber: string | null;
 };
 
 export async function listContactRequests(): Promise<AdminContactRequest[]> {
@@ -37,7 +40,7 @@ export async function listContactRequests(): Promise<AdminContactRequest[]> {
 
   const { data, error } = await getSupabaseAdmin()
     .from("contact_requests")
-    .select("id, name, phone, message, staff_notified_at, handled_at, created_at")
+    .select("id, name, phone, message, staff_notified_at, handled_at, created_at, source, orders(order_number)")
     // Необработанные сверху, среди них — свежие первыми.
     .order("handled_at", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: false })
@@ -56,6 +59,11 @@ export async function listContactRequests(): Promise<AdminContactRequest[]> {
     staffNotifiedAt: row.staff_notified_at,
     handledAt: row.handled_at,
     createdAt: row.created_at,
+    source: row.source ?? "form",
+    // Supabase отдаёт связанную запись объектом или массивом в
+    // зависимости от кардинальности связи — приводим к одному виду.
+    orderNumber:
+      (Array.isArray(row.orders) ? row.orders[0]?.order_number : (row.orders as { order_number?: string } | null)?.order_number) ?? null,
   }));
 }
 

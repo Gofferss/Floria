@@ -160,7 +160,13 @@ export type BotSessionState =
   | "awaiting_edit"
   | "awaiting_remind_days"
   | "awaiting_phone"
-  | "awaiting_otp_code";
+  | "awaiting_otp_code"
+  // Ждём ответ на просьбу об отзыве. Ставится в askForReview, снимается
+  // первым же сообщением клиента. Нужно ровно затем, чтобы отличить
+  // «человек отвечает на наш вопрос» от «человек тыкает в бота»: раньше
+  // ответ на «расскажите, что не так» проваливался в общую ветку и бот
+  // выдавал на жалобу меню «Выберите действие:».
+  | "awaiting_review_reply";
 
 export type BotSession = {
   state: BotSessionState;

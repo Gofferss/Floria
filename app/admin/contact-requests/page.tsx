@@ -65,7 +65,17 @@ export default async function AdminContactRequestsPage() {
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="font-display text-base font-semibold text-ink">{request.name}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-display text-base font-semibold text-ink">{request.name}</p>
+                    {/* Отзыв о заказе — это не «заявка на звонок»: человек уже
+                        купил, и написал он потому, что мы сами спросили. Ошибиться
+                        приоритетом здесь дороже, поэтому метка заметная. */}
+                    {request.source === "bot_review" && (
+                      <span className="rounded-full bg-gold-100 px-2.5 py-0.5 font-display text-xs font-semibold text-gold-800">
+                        Отзыв о заказе{request.orderNumber ? ` ${request.orderNumber}` : ""}
+                      </span>
+                    )}
+                  </div>
                   <a
                     href={`tel:${request.phone}`}
                     className="font-body text-sm text-gold-700 underline-offset-2 hover:underline"

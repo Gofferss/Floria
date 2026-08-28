@@ -1,7 +1,9 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { sendMessage, sendPhoto } from "@/lib/telegram/bot";
+import { sendMessage, sendPhoto, escapeTelegramHtml } from "@/lib/telegram/bot";
 import { toE164RussianPhone } from "@/lib/phone-mask";
 import { CONTACTS } from "@/lib/contacts";
+import { setSession } from "@/lib/telegram/reminders";
+import { notifyStaffTelegram } from "@/lib/n8n";
 
 // ================================================================
 // Сообщения КЛИЕНТУ о его заказе.
@@ -129,11 +131,85 @@ export async function askForReview(orderId: string): Promise<boolean> {
         `Если да — нам очень поможет ваш отзыв на Яндекс.Картах: ${CONTACTS.yandexReviewUrl}\n\n` +
         `Если что-то не так — просто ответьте на это сообщение, разберёмся.`
     );
+
+    // Обещание «ответьте — разберёмся» надо чем-то обеспечить. Без этой
+    // отметки ответ клиента проваливался в общую ветку обработчика, и
+    // на жалобу бот отвечал меню «Выберите действие:», а сам текст не
+    // сохранялся и никому не уходил. Состояние снимается первым же
+    // сообщением — см. вебхук, ветка awaiting_review_reply.
+    await setSession(target.chatId, "awaiting_review_reply", {
+      orderId,
+      orderNumber: target.orderNumber,
+    });
+
     return true;
   } catch (error) {
     console.error(`[askForReview] заказ ${orderId}:`, error);
     return false;
   }
+}
+
+/**
+ * Ответ клиента на просьбу об отзыве: сохранить и передать студии.
+ *
+ * Кладём в contact_requests, а не в отдельную таблицу: по сути это то же
+ * самое — сообщение клиента, которое обязан прочитать человек. Заодно
+ * бесплатно достаётся вся вчерашняя обвязка: раздел в админке, добор
+ * недоставленных уведомлений и контроль здоровья.
+ *
+ * Сохраняем ДО отправки, как и везде: если Telegram недоступен, жалоба
+ * всё равно останется в базе и будет видна. Возвращаем признак «дошло до
+ * студии сразу» только для того, чтобы проставить staff_notified_at, —
+ * клиенту в любом случае отвечаем, что приняли.
+ */
+export async function saveOrderFeedback(
+  orderId: string,
+  orderNumber: string,
+  text: string
+): Promise<boolean> {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: order } = await supabaseAdmin
+    .from("orders")
+    .select("customer_name, customer_phone")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  const { data: saved, error: saveError } = await supabaseAdmin
+    .from("contact_requests")
+    .insert({
+      name: order?.customer_name ?? "Клиент",
+      phone: order?.customer_phone ?? "—",
+      message: text,
+      source: "bot_review",
+      order_id: orderId,
+    })
+    .select("id")
+    .single();
+
+  if (saveError) {
+    console.error(`[saveOrderFeedback] заказ ${orderNumber}:`, saveError.message);
+    return false;
+  }
+
+  const delivered = await notifyStaffTelegram(
+    `💬 <b>Отзыв о заказе ${escapeTelegramHtml(orderNumber)}</b>\n\n` +
+      `Клиент: ${escapeTelegramHtml(order?.customer_name ?? "—")}, ` +
+      `${escapeTelegramHtml(order?.customer_phone ?? "—")}\n\n` +
+      `${escapeTelegramHtml(text)}\n\n` +
+      `Человек ответил на нашу просьбу рассказать, как всё прошло. Стоит связаться.`
+  );
+
+  if (delivered) {
+    await supabaseAdmin
+      .from("contact_requests")
+      .update({ staff_notified_at: new Date().toISOString(), notify_attempts: 1 })
+      .eq("id", saved.id);
+  } else {
+    await supabaseAdmin.from("contact_requests").update({ notify_attempts: 1 }).eq("id", saved.id);
+  }
+
+  return delivered;
 }
 
 /**

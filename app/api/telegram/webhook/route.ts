@@ -11,6 +11,7 @@ import {
 } from "@/lib/telegram/bot";
 import { parseReminderDate, formatDayMonth } from "@/lib/telegram/date-parse";
 import { CONTACTS } from "@/lib/contacts";
+import { saveOrderFeedback } from "@/lib/telegram/order-notify";
 import { toE164RussianPhone } from "@/lib/phone-mask";
 import { sendPhoneOtp, verifyPhoneOtp } from "@/lib/auth/otp";
 import { findPosifloraClientByPhone } from "@/lib/posiflora";
@@ -681,6 +682,38 @@ async function handleMessage(message: NonNullable<TelegramUpdate["message"]>): P
       return;
     }
     await handleBonusOtpSubmitted(chatId, text, phone, menuMessageId);
+    return;
+  }
+
+  // ================================================================
+  // Ответ на просьбу об отзыве.
+  //
+  // Раньше этой ветки не было, и текст проваливался ниже — в общий
+  // ответ «Выберите действие:». То есть на «букет привезли мятым» бот
+  // показывал меню, а написанное не сохранялось и никому не уходило.
+  // Причём именно у недовольных: довольные уходили на Яндекс.Карты по
+  // ссылке, а этих мы сами позвали написать нам и обещали разобраться.
+  //
+  // Отвечаем по-человечески и без кнопок: человек только что рассказал
+  // о проблеме, подсовывать ему меню в этот момент — издевательство.
+  // ================================================================
+  if (session.state === "awaiting_review_reply") {
+    const orderId = session.pending.orderId as string | undefined;
+    const orderNumber = (session.pending.orderNumber as string | undefined) ?? "—";
+
+    if (orderId) {
+      await saveOrderFeedback(orderId, orderNumber, text);
+    } else {
+      console.error(`[webhook] отзыв по чату ${chatId} без orderId в сессии — не сохранён`);
+    }
+
+    // Благодарим независимо от того, дошло ли до студии прямо сейчас:
+    // для клиента его сообщение принято, и это правда — оно в базе.
+    await sendMessage(
+      chatId,
+      "Спасибо, что написали. Передал вашу заявку — с вами свяжутся, разберёмся."
+    );
+    await setSession(chatId, "idle", {});
     return;
   }
 
