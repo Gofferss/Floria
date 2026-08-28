@@ -168,8 +168,25 @@ const LINK_PHONE_KEYBOARD: ReplyKeyboardMarkup = {
 };
 
 const LINK_PHONE_SUCCESS_TEXT = "Готово! Теперь код для входа на сайт будет приходить сюда. 🎉";
-const LINK_PHONE_WRONG_CONTACT_TEXT = "Нужен именно ваш номер — воспользуйтесь кнопкой ниже 🙏";
-const LINK_PHONE_INVALID_PHONE_TEXT = "Не получилось распознать номер — попробуйте ещё раз.";
+
+// Тексты отказов не заканчиваются тупиком: после каждого человек попадает
+// либо на ввод номера с подтверждением кодом, либо в главное меню.
+const LINK_PHONE_WRONG_CONTACT_TEXT =
+  "Это визитка другого человека — привязать её к вашему чату нельзя 🙏\n\n" +
+  "Давайте иначе: введите свой номер, и я пришлю на него код для подтверждения.";
+
+const LINK_PHONE_NO_USER_ID_TEXT =
+  "Telegram не передал подтверждение, что номер ваш — так бывает при некоторых " +
+  "настройках приватности.\n\nНичего страшного: введите номер, и я пришлю на него код.";
+
+const LINK_PHONE_BY_CODE_PROMPT =
+  "Введите свой номер телефона — пришлю на него код для подтверждения.\n\n" +
+  "После этого код для входа на сайт будет приходить сюда, в Telegram.\n\n" +
+  "Например: +7 978 123-45-67";
+
+const LINK_PHONE_INVALID_PHONE_TEXT =
+  "Пока я умею работать только с российскими номерами (+7) — доставка и бонусы " +
+  "у нас завязаны на них.\n\nЕсли у вас российский номер, напишите нам, разберёмся.";
 
 function formatPhoneForDisplay(e164: string): string {
   // +79781234567 → +7 978 123-45-67
@@ -280,6 +297,20 @@ async function startAddFlow(chatId: number, mode: RenderMode): Promise<void> {
 
 async function startBonusFlow(chatId: number, mode: RenderMode): Promise<void> {
   const newId = await render(chatId, mode, BONUS_PHONE_PROMPT, CANCEL_KEYBOARD);
+  await setSession(chatId, "awaiting_phone", { menuMessageId: newId });
+}
+
+/**
+ * Тот же путь, что и у проверки баланса (состояние awaiting_phone,
+ * подтверждение кодом), но с другим приглашением: сюда человек попадает не
+ * за бонусами, а потому что кнопка «Поделиться номером» не сработала.
+ * Спрашивать его про баланс в этот момент — сбивать с толку.
+ *
+ * Номер по итогам всё равно привяжется: handleBonusOtpSubmitted после
+ * верного кода делает и revealBonusBalance, и linkBotUserPhone.
+ */
+async function startPhoneLinkByCode(chatId: number, mode: RenderMode): Promise<void> {
+  const newId = await render(chatId, mode, LINK_PHONE_BY_CODE_PROMPT, CANCEL_KEYBOARD);
   await setSession(chatId, "awaiting_phone", { menuMessageId: newId });
 }
 
@@ -466,8 +497,23 @@ async function handleBonusOtpSubmitted(chatId: number, code: string, phone: stri
  * Контакт пришёл либо по кнопке request_contact, либо (реже) человек
  * вручную прикрепил визитку из списка контактов Telegram — во втором
  * случае это может быть ЧУЖОЙ номер, а бот его привяжет к ЭТОМУ чату.
- * contact.user_id у настоящего "поделиться своим номером" всегда равен
- * id отправителя; если это не так — отклоняем, не привязываем.
+ * contact.user_id у настоящего "поделиться своим номером" равен id
+ * отправителя; если там ДРУГОЙ id — это чужая визитка, не привязываем.
+ *
+ * Про тупик, который здесь был (жалоба 2026-08-29). Раньше любой отказ
+ * отвечал сообщением и ТОЙ ЖЕ кнопкой «Поделиться номером». Человек жал
+ * её снова, получал тот же отказ, снова ту же кнопку — и так по кругу,
+ * без единого способа выйти и без единой строчки в журнале, почему его
+ * не пускают. Поэтому теперь:
+ *
+ *   1. каждый отказ пишется в журнал — иначе следующий такой случай опять
+ *      будет невоспроизводим;
+ *   2. из отказа всегда есть выход — предлагаем ввести номер руками, с
+ *      подтверждением кодом. Это НЕ дыра: код приходит на сам номер, так
+ *      что доказательство владения не слабее, чем у визитки Telegram;
+ *   3. отсутствие user_id больше не считается подделкой. Поле в Bot API
+ *      необязательное, и блокировать из-за него живого человека нельзя —
+ *      просто уводим его на путь с кодом, где номер всё равно проверяется.
  */
 async function handleContactShared(
   chatId: number,
@@ -475,14 +521,41 @@ async function handleContactShared(
   fromId: number | undefined,
   oldMessageId: number | null
 ): Promise<void> {
-  if (!fromId || contact.user_id !== fromId) {
-    await sendMessage(chatId, LINK_PHONE_WRONG_CONTACT_TEXT, LINK_PHONE_KEYBOARD);
+  const freshMode: RenderMode = { kind: "fresh", oldMessageId };
+
+  // Чужая визитка: id есть, но не наш. Единственный случай, где отказ по сути.
+  if (fromId && contact.user_id && contact.user_id !== fromId) {
+    console.warn(
+      `[handleContactShared] чат ${chatId}: прислана чужая визитка ` +
+        `(contact.user_id=${contact.user_id}, from.id=${fromId}) — не привязываем`
+    );
+    await sendMessage(chatId, LINK_PHONE_WRONG_CONTACT_TEXT, { remove_keyboard: true });
+    await startPhoneLinkByCode(chatId, freshMode);
+    return;
+  }
+
+  // user_id не пришёл — не отказ, а неизвестность. Уводим на путь с кодом.
+  if (!fromId || !contact.user_id) {
+    console.warn(
+      `[handleContactShared] чат ${chatId}: у контакта нет user_id ` +
+        `(from.id=${fromId ?? "нет"}) — отправляем на подтверждение кодом`
+    );
+    await sendMessage(chatId, LINK_PHONE_NO_USER_ID_TEXT, { remove_keyboard: true });
+    await startPhoneLinkByCode(chatId, freshMode);
     return;
   }
 
   const phone = toE164RussianPhone(contact.phone_number);
   if (!phone) {
-    await sendMessage(chatId, LINK_PHONE_INVALID_PHONE_TEXT, LINK_PHONE_KEYBOARD);
+    // Чаще всего это не сбой, а нероссийский номер: нормализатор принимает
+    // только 10 цифр после 7/8. Так и говорим — «не получилось распознать»
+    // человека с +380 отправляло жать ту же кнопку до бесконечности.
+    console.warn(
+      `[handleContactShared] чат ${chatId}: номер не приводится к российскому формату ` +
+        `(длина ${contact.phone_number.replace(/\D/g, "").length} цифр)`
+    );
+    await sendMessage(chatId, LINK_PHONE_INVALID_PHONE_TEXT, { remove_keyboard: true });
+    await showMainMenu(chatId, freshMode);
     return;
   }
 
