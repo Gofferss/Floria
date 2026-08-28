@@ -3,6 +3,39 @@
 const isDev = process.env.NODE_ENV === "development";
 
 // ================================================================
+// Адрес базы берём из переменной, а НЕ вписываем руками.
+//
+// Раньше здесь стоял literal https://*.supabase.co в двух местах — в CSP
+// и в remotePatterns. При переезде базы на свой сервер (август 2026) сайт
+// начал звать api.floria-simferopol.ru, а браузер блокировал КАЖДЫЙ такой
+// запрос ещё до отправки: адреса не было в connect-src. Снаружи это
+// выглядело как «Failed to fetch» в форме входа, причём в журнале шлюза
+// не было вообще никаких следов — запрос до сервера не долетал. Картинки
+// молча ломались по той же причине (img-src).
+//
+// Теперь оба списка выводятся из NEXT_PUBLIC_SUPABASE_URL, и следующий
+// переезд не потребует правки этого файла. Если переменной нет — валим
+// сборку: тихо выкатить сайт с CSP, режущим собственную базу, хуже, чем
+// не выкатить его вовсе.
+// ================================================================
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+let supabaseOrigin = "";
+let supabaseHostname = "";
+
+try {
+  const parsed = new URL(supabaseUrl);
+  supabaseOrigin = parsed.origin;
+  supabaseHostname = parsed.hostname;
+} catch {
+  if (!isDev) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL не задан или не является адресом. " +
+        "Без него CSP запретит браузеру обращаться к базе, и сайт молча сломается."
+    );
+  }
+}
+
+// ================================================================
 // Заголовки безопасности. Раньше не было ни одного — браузер не получал
 // никаких ограничений сверх дефолтных.
 //
@@ -19,12 +52,12 @@ const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  // Картинки товаров лежат в Supabase Storage; data:/blob: нужны
+  // Картинки товаров лежат в хранилище Supabase; data:/blob: нужны
   // next/image и предпросмотру загружаемых файлов в админке.
-  "img-src 'self' data: blob: https://*.supabase.co",
+  `img-src 'self' data: blob:${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
   "font-src 'self' data:",
   // Supabase Auth/PostgREST дергается прямо из браузера анонимным ключом.
-  "connect-src 'self' https://*.supabase.co",
+  `connect-src 'self'${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
   // Виджет Яндекс.Карт на /contacts.
   "frame-src https://yandex.ru https://*.yandex.ru",
   "object-src 'none'",
@@ -62,16 +95,18 @@ const nextConfig = {
   },
 
   images: {
-    remotePatterns: [
-      {
-        // Обложки блога из bucket blog-images (миграция 008). Wildcard
-        // вместо конкретного project ref — работает для любого проекта
-        // Supabase без правки при смене окружения (dev/prod).
-        protocol: "https",
-        hostname: "*.supabase.co",
-        pathname: "/storage/v1/object/public/**",
-      },
-    ],
+    // Хост тот же, что в CSP выше, и по той же причине — из переменной,
+    // а не вписанный руками. next/image отказывается оптимизировать
+    // картинку с хоста, которого нет в этом списке.
+    remotePatterns: supabaseHostname
+      ? [
+          {
+            protocol: "https",
+            hostname: supabaseHostname,
+            pathname: "/storage/v1/object/public/**",
+          },
+        ]
+      : [],
   },
   async headers() {
     return [
