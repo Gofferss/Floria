@@ -851,6 +851,13 @@ export async function POST(request: Request) {
 
   // Всегда отвечаем 200, даже если внутри что-то упало — иначе Telegram
   // будет бесконечно ретраить один и тот же update.
+  //
+  // Но 200 в ответ Telegram'у — это не ответ ЧЕЛОВЕКУ. Раньше падение
+  // обработчика заканчивалось строкой в логе, и с той стороны бот просто
+  // замолкал: ни ошибки, ни объяснения, ни подсказки, что делать. Со
+  // стороны это неотличимо от «бот сломался» — именно так выглядела
+  // жалоба на зависшую привязку номера. Теперь человек хотя бы знает,
+  // что его услышали и что дело в нас.
   try {
     if (update.message) {
       await handleMessage(update.message);
@@ -859,6 +866,21 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     console.error("[telegram webhook]", error);
+
+    const chatId = update.message?.chat.id ?? update.callback_query?.message?.chat.id;
+    if (chatId) {
+      // Своя обёртка: если упала именно отправка в Telegram, это
+      // сообщение тоже не уйдёт — и ронять на нём обработчик незачем.
+      try {
+        await sendMessage(
+          chatId,
+          "Что-то пошло не так с моей стороны 🙈 Попробуйте ещё раз или напишите /start, " +
+            "чтобы начать заново. Если повторится — позвоните нам, мы поможем."
+        );
+      } catch (sendError) {
+        console.error("[telegram webhook] не удалось даже извиниться:", sendError);
+      }
+    }
   }
 
   return new NextResponse(null, { status: 200 });
