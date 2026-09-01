@@ -432,32 +432,33 @@ export async function POST(request: Request) {
     isPickup: payload.isPickup,
   });
 
-  // Ждём результат, а не бросаем вдогонку: заказ уже лежит в базе, и
-  // единственное, что нам нужно узнать, — сообщили о нём студии или нет.
-  // Если нет, ставим отметку «не сообщили», и задача добора доотправит.
-  // Без этой отметки заказ выглядел бы точно так же, как обычный, а
-  // флорист просто никогда бы о нём не узнал.
-  const staffNotified = await notifyStaffTelegram(
-    `🌸 <b>Новый заказ ${escapeTelegramHtml(order.order_number)}</b>\n\n` +
-      `Клиент: ${escapeTelegramHtml(payload.customerName)}, ${escapeTelegramHtml(payload.customerPhone)}\n` +
-      `Получатель: ${escapeTelegramHtml(recipientName)}, ${escapeTelegramHtml(recipientPhone)}\n` +
-      `${payload.isPickup ? "🏪 <b>САМОВЫВОЗ</b>" : "🚚 Доставка"}: ${escapeTelegramHtml(payload.deliveryDate)}, ${escapeTelegramHtml(deliveryTimeLabel)}\n` +
-      `${payload.isPickup ? "Заберут из студии" : `Адрес: ${escapeTelegramHtml(address)}`}\n\n` +
-      `<b>Состав:</b>\n${itemsLines}\n` +
-      (payload.cardText ? `\n<b>Текст открытки:</b> ${escapeTelegramHtml(payload.cardText)}\n` : "") +
-      (payload.courierComment ? `\n<b>Комментарий курьеру:</b> ${escapeTelegramHtml(payload.courierComment)}\n` : "") +
-      (discountAmount > 0 ? `\nСкидка по промокоду: −${discountAmount} ₽` : "") +
-      `\nСумма: ${totalAmount} ₽`
-  );
+  // ================================================================
+  // Студии сообщаем НЕ здесь, а после оплаты — см. lib/payments/confirm.ts.
+  //
+  // При обязательной онлайн-оплате неоплаченный заказ это не задача
+  // флористу, а брошенная корзина: человек дошёл до формы и передумал.
+  // Сообщать о таких — значит за неделю приучить не читать уведомления,
+  // а потом пропустить настоящий заказ среди них.
+  //
+  // Сам заказ при этом в базе есть и виден в админке: если человек
+  // передумал на полпути и позвонил, его найдут по номеру.
+  //
+  // Полный состав с адресом и открыткой уходит в том же сообщении об
+  // оплате — собран здесь, чтобы не тянуть заново из базы.
+  // ================================================================
+  const detailsForStaff =
+    `Получатель: ${escapeTelegramHtml(recipientName)}, ${escapeTelegramHtml(recipientPhone)}\n` +
+    `${payload.isPickup ? "🏪 <b>САМОВЫВОЗ</b>" : "🚚 Доставка"}: ${escapeTelegramHtml(payload.deliveryDate)}, ${escapeTelegramHtml(deliveryTimeLabel)}\n` +
+    `${payload.isPickup ? "Заберут из студии" : `Адрес: ${escapeTelegramHtml(address)}`}\n\n` +
+    `<b>Состав:</b>\n${itemsLines}\n` +
+    (payload.cardText ? `\n<b>Текст открытки:</b> ${escapeTelegramHtml(payload.cardText)}\n` : "") +
+    (payload.courierComment ? `\n<b>Комментарий курьеру:</b> ${escapeTelegramHtml(payload.courierComment)}\n` : "") +
+    (discountAmount > 0 ? `\nСкидка по промокоду: −${discountAmount} ₽` : "");
 
-  if (staffNotified) {
-    await supabaseAdmin
-      .from("orders")
-      .update({ staff_notified_at: new Date().toISOString() })
-      .eq("id", order.id);
-  } else {
-    console.error(`[orders] заказ ${order.order_number} создан, но студии о нём не сообщили`);
-  }
+  await supabaseAdmin
+    .from("orders")
+    .update({ staff_notify_details: detailsForStaff })
+    .eq("id", order.id);
 
   return NextResponse.json({
     orderId: order.id,

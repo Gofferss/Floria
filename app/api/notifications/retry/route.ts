@@ -53,6 +53,10 @@ async function retryOrders(cutoff: string): Promise<Outcome> {
     .from("orders")
     .select("id, order_number, customer_name, customer_phone, delivery_date, total_amount, is_pickup")
     .is("staff_notified_at", null)
+    // Только оплаченные: при обязательной онлайн-оплате неоплаченный заказ —
+    // брошенная корзина, и досылать о ней уведомления значит спамить студию
+    // каждой недодуманной покупкой.
+    .eq("payment_status", "paid")
     .lt("created_at", cutoff)
     .order("created_at", { ascending: true })
     .limit(BATCH);

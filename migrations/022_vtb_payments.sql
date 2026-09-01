@@ -20,7 +20,11 @@ alter table orders
   add column if not exists payment_url text,
   add column if not exists payment_expires_at timestamptz,
   -- Когда последний раз спрашивали у шлюза, что с этим платежом.
-  add column if not exists payment_checked_at timestamptz;
+  add column if not exists payment_checked_at timestamptz,
+  -- Готовый текст для флориста: состав, адрес, открытка, комментарий курьеру.
+  -- Складывается при оформлении, а отправляется после оплаты — собирать его
+  -- заново пришлось бы из пяти таблиц, причём в момент, когда важна скорость.
+  add column if not exists staff_notify_details text;
 
 comment on column orders.payment_url is
   'Ссылка на оплату (СБП/форма ВТБ). Нужна, чтобы клиент мог вернуться и доплатить.';
