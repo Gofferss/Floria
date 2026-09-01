@@ -61,6 +61,9 @@ export function CheckoutView() {
   const [promoError, setPromoError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<"form" | "submitting" | "success">("form");
+  // Заказ создан, а ссылку на оплату получить не удалось — редкий, но
+  // возможный случай (банк недоступен). Экран успеха должен сказать об этом.
+  const [paymentFailed, setPaymentFailed] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -267,7 +270,35 @@ export function CheckoutView() {
       }
 
       setOrderNumber(result?.orderNumber ?? "");
+
+      // ================================================================
+      // Заказ создан — уводим на оплату.
+      //
+      // Корзину чистим ДО перехода: человек уходит на сайт банка и может
+      // вернуться кнопкой «назад». Если корзина останется полной, он
+      // увидит те же букеты и оформит второй такой же заказ.
+      //
+      // Сбой создания платежа НЕ откатывает заказ: он уже в базе, и
+      // правильнее показать «оплатите по ссылке», чем стереть всё, что
+      // человек заполнял пять минут.
+      // ================================================================
       clear();
+
+      const payResponse = await fetch("/api/payments/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: result?.orderId }),
+      });
+
+      const payResult = await payResponse.json().catch(() => null);
+
+      if (payResponse.ok && payResult?.paymentUrl) {
+        window.location.href = payResult.paymentUrl as string;
+        return;
+      }
+
+      console.error("Не удалось создать оплату:", payResult?.error);
+      setPaymentFailed(true);
       setStatus("success");
     } catch (error) {
       console.error("Ошибка оформления заказа:", error);
@@ -288,10 +319,21 @@ export function CheckoutView() {
         <h1 className="mt-6 font-display text-2xl font-bold text-ink sm:text-3xl">
           Заказ {orderNumber} принят
         </h1>
-        <p className="mt-3 font-body text-base leading-relaxed text-ink/60">
-          Мы свяжемся с вами по телефону {customerPhone} в ближайшее время, чтобы
-          подтвердить детали и оплату. Спасибо, что выбрали Floria!
-        </p>
+        {paymentFailed ? (
+          // Сюда попадают, только если заказ создался, а платёж — нет.
+          // Не делаем вид, что всё хорошо: человек ждёт оплаты, и молчание
+          // про неё обернётся звонком «а вы мой заказ получили?».
+          <p className="mt-3 font-body text-base leading-relaxed text-ink/60">
+            Заказ сохранён, но открыть оплату не получилось. Мы позвоним вам на{" "}
+            {customerPhone} и поможем оплатить — или наберите нас сами, номер внизу
+            страницы.
+          </p>
+        ) : (
+          <p className="mt-3 font-body text-base leading-relaxed text-ink/60">
+            Мы свяжемся с вами по телефону {customerPhone} в ближайшее время, чтобы
+            подтвердить детали. Спасибо, что выбрали Floria!
+          </p>
+        )}
         <Link
           href="/catalog"
           className="mt-8 inline-flex items-center gap-2 rounded-full bg-gold-500 px-8 py-4 font-display text-sm font-semibold uppercase tracking-wide text-white transition hover:bg-gold-600"

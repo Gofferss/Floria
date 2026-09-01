@@ -50,6 +50,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Интеграция ещё не настроена — молча выходим, НЕ трогая контроль
+  // здоровья. Иначе задача, заведённая заранее, каждые пять минут
+  // рапортовала бы о поломке того, чего пока просто нет, и приучила бы
+  // не смотреть на тревоги ещё до первого настоящего платежа.
+  if (!process.env.VTB_CLIENT_ID) {
+    return NextResponse.json({ ok: true, пропущено: "ВТБ не настроен" });
+  }
+
   const supabaseAdmin = getSupabaseAdmin();
   const since = new Date(Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
