@@ -135,6 +135,15 @@ export function Footer() {
             >
               Публичная оферта
             </Link>
+            {/* Требование банка к витрине интернет-магазина: порядок оплаты,
+                меры безопасности и процедура возврата должны быть доступны
+                с любой страницы. */}
+            <Link
+              href="/payment"
+              className="font-body text-xs text-lavender-100/50 transition hover:text-gold-400"
+            >
+              Оплата и возврат
+            </Link>
             <Link
               href="/contacts"
               className="font-body text-xs text-lavender-100/50 transition hover:text-gold-400"

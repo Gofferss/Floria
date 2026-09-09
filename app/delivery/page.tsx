@@ -186,6 +186,18 @@ export default function DeliveryPage() {
             />
           </div>
 
+          <p className="mt-5 font-body text-sm leading-relaxed text-ink/60">
+            Как проходит оплата картой, как защищены платежи и в каком порядке возвращаются
+            деньги при отмене заказа —{" "}
+            <Link
+              href="/payment"
+              className="text-gold-600 underline underline-offset-2 hover:text-gold-700"
+            >
+              на отдельной странице
+            </Link>
+            .
+          </p>
+
           <div className="mt-6 rounded-3xl border border-lavender-100 bg-white p-5 sm:p-6">
             <h3 className="font-display text-base font-semibold text-ink">Про бонусы</h3>
             <p className="mt-2 font-body text-sm leading-relaxed text-ink/70">
