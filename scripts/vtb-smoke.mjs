@@ -94,13 +94,17 @@ const createResponse = await fetch(`${base}/v1/orders`, {
     customer: { customerId: orderId, phone: "79780000000", email: "test@floria-simferopol.ru" },
     bundle: {
       fiscalInfo: { clientEmail: "test@floria-simferopol.ru" },
+      // price и amount здесь ЧИСЛА, в отличие от суммы заказа выше —
+      // так требует шлюз. Ставка берётся из той же переменной, что и в
+      // боевом коде, иначе проверка проверяла бы не то, что работает.
       items: [
         {
           positionId: 1,
           name: "Проверка связи",
-          price: { value: 1, code: "RUB" },
+          price: 1,
           quantity: 1,
-          amount: { value: 1, code: "RUB" },
+          amount: 1,
+          taxParams: { taxType: process.env.VTB_TAX_TYPE?.trim() || "none" },
         },
       ],
     },

@@ -160,6 +160,40 @@ function money(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/**
+ * Ставка НДС для фискального чека.
+ *
+ * Что принимает шлюз (список получен от него же, запросом):
+ *   none, vat0, vat5, vat7, vat10, vat20, vat22,
+ *   vat105, vat107, vat110, vat120, vat122
+ *
+ * По умолчанию "none" — «без НДС», как и положено ИП на упрощённой системе
+ * с оборотом ниже порога обязательного НДС. Значения vat5 и vat7 в списке
+ * появились как раз для упрощенцев, перешагнувших этот порог.
+ *
+ * Ставка вынесена в переменную окружения намеренно: она определяется
+ * системой налогообложения, а не кодом, и меняется росчерком бухгалтера,
+ * а не выкаткой. Ошибка здесь — это неверный чек у покупателя и вопросы
+ * от налоговой, поэтому значение проверяем по списку: опечатка вроде
+ * "vat-20" должна упасть сразу, а не всплыть на первом платеже.
+ */
+const ALLOWED_TAX_TYPES = new Set([
+  "none", "vat0", "vat5", "vat7", "vat10", "vat20", "vat22",
+  "vat105", "vat107", "vat110", "vat120", "vat122",
+]);
+
+function taxType(): string {
+  const configured = process.env.VTB_TAX_TYPE?.trim();
+  if (!configured) return "none";
+  if (!ALLOWED_TAX_TYPES.has(configured)) {
+    throw new Error(
+      `VTB_TAX_TYPE="${configured}" — недопустимая ставка НДС. ` +
+        `Разрешены: ${[...ALLOWED_TAX_TYPES].join(", ")}`
+    );
+  }
+  return configured;
+}
+
 export async function createPaymentOrder(input: CreatePaymentInput): Promise<CreatePaymentResult> {
   const lifetime = input.lifetimeMinutes ?? 30;
   // Формат ВТБ: ровно три знака миллисекунд и зона Z. toISOString() уже даёт
@@ -186,15 +220,21 @@ export async function createPaymentOrder(input: CreatePaymentInput): Promise<Cre
   // Товарная корзина нужна для фискального чека (54-ФЗ). Без email покупателя
   // ОФД отправит чек на адрес из настроек мерчанта — чек будет выбит в любом
   // случае, но клиент его не увидит.
+  //
+  // Внимание на формат: в позициях корзины price и amount — ЧИСЛА, хотя
+  // сумма заказа выше передаётся объектом {value, code}. Несовпадение не
+  // наша прихоть, так требует шлюз: на объект он отвечает 422. Проверено
+  // запросами к песочнице (scripts/vtb-probe-bundle.mjs).
   if (input.customerEmail) {
     body.bundle = {
       fiscalInfo: { clientEmail: input.customerEmail },
       items: input.items.map((item, index) => ({
         positionId: index + 1,
         name: item.name.slice(0, 128),
-        price: { value: money(item.price), code: "RUB" },
+        price: money(item.price),
         quantity: item.quantity,
-        amount: { value: money(item.price * item.quantity), code: "RUB" },
+        amount: money(item.price * item.quantity),
+        taxParams: { taxType: taxType() },
       })),
     };
   }
