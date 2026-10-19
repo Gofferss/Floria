@@ -6,10 +6,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      // /hero-preview — черновая страница выбора главного блока. На ней
-      // же лежит noindex, но запрет здесь экономит обход: без него робот
-      // всё равно скачает страницу, чтобы прочитать запрет внутри.
-      disallow: ["/admin", "/admin/", "/account", "/api", "/hero-preview"],
+      disallow: ["/admin", "/admin/", "/account", "/api"],
     },
     sitemap: `${CONTACTS.siteUrl}/sitemap.xml`,
   };
