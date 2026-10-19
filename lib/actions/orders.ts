@@ -131,6 +131,24 @@ export async function uploadAssembledPhoto(
     return { success: false, error: "Максимальный размер файла — 8 МБ" };
   }
 
+  // Набор читаем ДО загрузки: иначе отказ по лимиту оставил бы файл в
+  // хранилище, на который никто не ссылается.
+  const { data: current, error: readError } = await getSupabaseAdmin()
+    .from("orders")
+    .select("assembled_photos")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (readError || !current) {
+    console.error("[uploadAssembledPhoto] чтение заказа", readError?.message ?? "нет строки");
+    return { success: false, error: "Заказ не найден" };
+  }
+
+  const existing = (current.assembled_photos as string[] | null) ?? [];
+  if (existing.length >= MAX_ORDER_PHOTOS) {
+    return { success: false, error: `Больше ${MAX_ORDER_PHOTOS} фотографий к заказу не прикрепить` };
+  }
+
   const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
   const path = `orders/${orderId}/${randomUUID()}.${ext}`;
 
@@ -149,22 +167,7 @@ export async function uploadAssembledPhoto(
 
   // Снимок ДОБАВЛЯЕТСЯ к набору, а не заменяет его: в заказе может быть
   // несколько букетов, и каждый нужно показать клиенту отдельно.
-  const { data: current, error: readError } = await getSupabaseAdmin()
-    .from("orders")
-    .select("assembled_photos")
-    .eq("id", orderId)
-    .maybeSingle();
-
-  if (readError || !current) {
-    console.error("[uploadAssembledPhoto] чтение заказа", readError?.message ?? "нет строки");
-    return { success: false, error: "Фото загрузилось, но заказ не нашёлся" };
-  }
-
-  const photos = [...((current.assembled_photos as string[] | null) ?? []), publicUrl];
-
-  if (photos.length > MAX_ORDER_PHOTOS) {
-    return { success: false, error: `Больше ${MAX_ORDER_PHOTOS} фотографий к заказу не прикрепить` };
-  }
+  const photos = [...existing, publicUrl];
 
   // Изменение набора сбрасывает отметку об отправке: этот набор клиент
   // ещё не видел, и кнопка «Отправить» должна стать доступной снова.
