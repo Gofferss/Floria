@@ -32,3 +32,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Отчёты, собранные для владельца — не код проекта
+*.pdf
