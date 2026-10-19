@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { RepeatOrderButton } from "@/components/account/RepeatOrderButton";
+import { PayOrderButton } from "@/components/account/PayOrderButton";
 import { BloomMark } from "@/components/ui/BloomMark";
 import { ArrowRightIcon, PackageIcon } from "@/components/ui/Icons";
 
@@ -19,6 +20,8 @@ export type AccountOrder = {
   total_amount: number | string;
   delivery_date: string;
   created_at: string;
+  /** pending — заказ ждёт оплаты, можно показать кнопку «Оплатить». */
+  payment_status: string | null;
 };
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -113,9 +116,16 @@ export function OrderHistoryList({ orders }: { orders: AccountOrder[] }) {
               </span>
             </div>
 
-            {/* Самая дешёвая продажа — повторная: тот же получатель, тот же
-                повод, тот же букет. Одно нажатие вместо трёх минут. */}
-            <RepeatOrderButton orderId={order.id} />
+            {/* Неоплаченный заказ — не повод предлагать повторить его:
+                сначала надо довести до конца этот. Поэтому кнопки
+                взаимоисключающие, а не стоят рядом. */}
+            {order.payment_status === "pending" && order.status !== "cancelled" ? (
+              <PayOrderButton orderId={order.id} />
+            ) : (
+              /* Самая дешёвая продажа — повторная: тот же получатель, тот же
+                 повод, тот же букет. Одно нажатие вместо трёх минут. */
+              <RepeatOrderButton orderId={order.id} />
+            )}
           </div>
         </li>
       ))}

@@ -19,6 +19,7 @@ import {
   studioNow,
   SAME_DAY_CUTOFF_HOUR,
   isValidPhone,
+  isValidEmail,
   type CheckoutPayload,
 } from "@/lib/checkout";
 
@@ -26,6 +27,7 @@ type FormErrors = Partial<
   Record<
     | "customerName"
     | "customerPhone"
+    | "customerEmail"
     | "recipientName"
     | "recipientPhone"
     | "deliveryDate"
@@ -41,6 +43,7 @@ export function CheckoutView() {
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [isRecipientSelf, setIsRecipientSelf] = useState(true);
   const [recipientName, setRecipientName] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
@@ -210,6 +213,8 @@ export function CheckoutView() {
     const next: FormErrors = {};
     if (!customerName.trim()) next.customerName = "Укажите имя";
     if (!isValidPhone(customerPhone)) next.customerPhone = "Проверьте номер телефона";
+    if (!customerEmail.trim()) next.customerEmail = "Укажите почту — на неё придёт чек";
+    else if (!isValidEmail(customerEmail)) next.customerEmail = "Проверьте адрес почты";
     if (!isRecipientSelf) {
       if (!recipientName.trim()) next.recipientName = "Укажите имя получателя";
       if (!isValidPhone(recipientPhone)) next.recipientPhone = "Проверьте номер телефона";
@@ -238,6 +243,7 @@ export function CheckoutView() {
     const payload: CheckoutPayload = {
       customerName,
       customerPhone,
+      customerEmail: customerEmail.trim(),
       isRecipientSelf,
       recipientName: isRecipientSelf ? customerName : recipientName,
       recipientPhone: isRecipientSelf ? customerPhone : recipientPhone,
@@ -408,9 +414,15 @@ export function CheckoutView() {
           <ContactFields
             name={customerName}
             phone={customerPhone}
+            email={customerEmail}
             onNameChange={setCustomerName}
             onPhoneChange={setCustomerPhone}
-            errors={{ name: errors.customerName, phone: errors.customerPhone }}
+            onEmailChange={setCustomerEmail}
+            errors={{
+              name: errors.customerName,
+              phone: errors.customerPhone,
+              email: errors.customerEmail,
+            }}
           />
           <RecipientFields
             isSelf={isRecipientSelf}

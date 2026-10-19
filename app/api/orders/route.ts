@@ -17,6 +17,7 @@ import {
   MADE_TO_ORDER_LEAD_DAYS,
   SAME_DAY_CUTOFF_HOUR,
   type CheckoutPayload,
+  isValidEmail,
 } from "@/lib/checkout";
 
 // Используем service-role ключ Supabase и Node-совместимые API — нужен
@@ -52,6 +53,19 @@ function validatePayload(body: unknown): ValidationResult {
     return { valid: false, error: "Некорректный телефон заказчика" };
   }
   payload.customerPhone = normalizedCustomerPhone;
+
+  // Почта обязательна: на неё ОФД отправляет фискальный чек после оплаты
+  // (54-ФЗ). Проверяем на сервере, а не только в форме, — форму можно
+  // обойти, а заказ без адреса оставил бы покупателя без чека и нас без
+  // выполненного требования закона.
+  const email = payload.customerEmail?.trim() ?? "";
+  if (!email) {
+    return { valid: false, error: "Не указана электронная почта — на неё придёт чек" };
+  }
+  if (!isValidEmail(email)) {
+    return { valid: false, error: "Проверьте адрес электронной почты" };
+  }
+  payload.customerEmail = email;
 
   if (!payload.isRecipientSelf) {
     if (!payload.recipientName?.trim()) {
@@ -149,7 +163,7 @@ export async function POST(request: Request) {
   // Раньше здесь пересчитывалась только СУММА (payload.items.reduce),
   // но цену за штуку клиент по-прежнему присылал сам и она шла прямиком
   // в БД и в Posiflora без проверки.
-  type ResolvedItem = { name: string; size: string; price: number; quantity: number };
+  type ResolvedItem = { productId: string; name: string; size: string; price: number; quantity: number };
   const resolvedItems: ResolvedItem[] = [];
   let hasMadeToOrder = false;
   for (const item of payload.items) {
@@ -163,6 +177,7 @@ export async function POST(request: Request) {
     if (product.availabilityMode === "made_to_order") hasMadeToOrder = true;
     const size = product.sizes.find((s) => s.label === item.size) ?? product.sizes[0];
     resolvedItems.push({
+      productId: product.id,
       name: product.name,
       size: size.label,
       price: product.basePrice + size.priceModifier,
@@ -302,6 +317,7 @@ export async function POST(request: Request) {
 
       customer_name: payload.customerName,
       customer_phone: payload.customerPhone,
+      customer_email: payload.customerEmail,
 
       recipient_name: payload.isRecipientSelf ? payload.customerName : payload.recipientName,
       recipient_phone: payload.isRecipientSelf ? payload.customerPhone : payload.recipientPhone,
@@ -363,11 +379,20 @@ export async function POST(request: Request) {
   }
 
   // --- Supabase: состав заказа ---
-  // product_id не заполняем — каталог из lib/products.ts пока не
-  // синхронизирован с таблицей products (это отдельная задача по
-  // подключению реальной выгрузки из Posiflora).
+  //
+  // product_id заполняем. Старый комментарий здесь утверждал, что каталог
+  // «ещё не синхронизирован с таблицей products» — это давно не так:
+  // lib/products.ts читает ту же самую таблицу, а сервер и без того
+  // поднимает каждый товар целиком, чтобы проверить цену.
+  //
+  // Название и цену всё равно дублируем строками: товар могут
+  // переименовать, подорожать или снять с публикации, а в истории заказа
+  // должно остаться то, что человек покупал. Ссылка нужна для другого —
+  // чтобы знать, КАКОЙ товар продан: без неё не построить ни списание
+  // со склада, ни честную статистику продаж.
   const orderItemsRows = resolvedItems.map((item) => ({
     order_id: order.id,
+    product_id: item.productId,
     product_name: item.name,
     unit_price: item.price,
     quantity: item.quantity,

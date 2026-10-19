@@ -5,16 +5,20 @@ import { formatRussianPhoneInput } from "@/lib/phone-mask";
 type ContactFieldsProps = {
   name: string;
   phone: string;
+  email: string;
   onNameChange: (value: string) => void;
   onPhoneChange: (value: string) => void;
-  errors: { name?: string; phone?: string };
+  onEmailChange: (value: string) => void;
+  errors: { name?: string; phone?: string; email?: string };
 };
 
 export function ContactFields({
   name,
   phone,
+  email,
   onNameChange,
   onPhoneChange,
+  onEmailChange,
   errors,
 }: ContactFieldsProps) {
   return (
@@ -43,6 +47,34 @@ export function ContactFields({
             className={inputClass(!!errors.phone)}
           />
         </FormField>
+      </div>
+
+      {/*
+        Почта обязательна с появлением онлайн-оплаты: по 54-ФЗ на неё
+        уходит фискальный чек, который выбивает оператор фискальных данных
+        через платёжный шлюз. Без адреса чек всё равно будет создан, но
+        придёт не покупателю, а на адрес студии из настроек эквайринга —
+        то есть человек останется без документа о покупке.
+
+        Подпись под полем объясняет это прямо: поле, которое просит данные
+        без причины, люди заполняют неохотно и неверно.
+      */}
+      <div className="mt-4">
+        <FormField label="Электронная почта" htmlFor="customerEmail" required error={errors.email}>
+          <input
+            id="customerEmail"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => onEmailChange(e.target.value)}
+            placeholder="name@example.com"
+            className={inputClass(!!errors.email)}
+          />
+        </FormField>
+        <p className="mt-1.5 font-body text-xs leading-relaxed text-ink/50">
+          Пришлём на неё кассовый чек после оплаты. Рекламой не беспокоим.
+        </p>
       </div>
     </section>
   );

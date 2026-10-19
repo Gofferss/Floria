@@ -86,6 +86,8 @@ export type CheckoutItem = {
 export type CheckoutPayload = {
   customerName: string;
   customerPhone: string;
+  /** Нужна для фискального чека по 54-ФЗ — ОФД отправляет его именно сюда. */
+  customerEmail: string;
   isRecipientSelf: boolean;
   recipientName: string;
   recipientPhone: string;
@@ -108,4 +110,17 @@ export type CheckoutPayload = {
 
 export function isValidPhone(value: string): boolean {
   return value.replace(/\D/g, "").length >= 10;
+}
+
+/**
+ * Проверка почты намеренно мягкая: есть имя, собака, домен с точкой и
+ * без пробелов. Полноценная проверка адреса по RFC — задача без решения,
+ * а форма заказа не место для спора о том, бывает ли адрес с двумя
+ * собаками. Грубые опечатки ловим здесь, настоящую проверку делает
+ * почтовый сервер, когда оператор фискальных данных шлёт чек.
+ */
+export function isValidEmail(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 254) return false;
+  return /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(trimmed);
 }

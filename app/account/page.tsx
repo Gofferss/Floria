@@ -131,7 +131,7 @@ export default async function AccountPage() {
     customer
       ? supabase
           .from("orders")
-          .select("id, order_number, status, total_amount, delivery_date, created_at")
+          .select("id, order_number, status, total_amount, delivery_date, created_at, payment_status")
           .eq("customer_id", customer.id)
           .order("created_at", { ascending: false })
           .limit(10)
