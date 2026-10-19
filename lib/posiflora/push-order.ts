@@ -22,6 +22,25 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 // неделями), заказ всё равно остаётся подтверждённым у нас. Отправку
 // повторит фоновая задача: признак «не отправлен» — пустой
 // orders.posiflora_order_id.
+//
+// Форматы полей сняты с живых данных кассы и проверены пробным заказом,
+// а не угаданы:
+//   date             — «2026-08-10», БЕЗ времени (полный ISO даёт 400)
+//   dueTime, delivery
+//   TimeFrom/TimeTo  — полная метка времени
+//   totalAmount      — ТОЛЬКО ЧТЕНИЕ. Касса считает его по позициям; PATCH
+//                      проходит с кодом 200 и ничего не меняет. Позиции же
+//                      через API не привязать. Поэтому сумма у заказа с
+//                      сайта в кассе остаётся нулём, и настоящая сумма
+//                      едет в budget и текстом в description.
+//   paymentsAmount   — тоже остаётся нулём: оплата живёт отдельным
+//                      ресурсом /payments, привязанным к смене и фискальному
+//                      регистратору. Мы его не трогаем, поэтому в описании
+//                      прямо предупреждаем кассира не брать деньги повторно.
+//
+// Про часовой пояс. Касса ОТБРАСЫВАЕТ присланное смещение: на «14:00+03:00»
+// она сохраняет «14:00+00:00». Значит в эти поля едет местное время студии,
+// помеченное нулевым смещением — что пошлём, то и сохранится.
 // ================================================================
 
 /** Точка продаж «Флория» — склад (второй store) для заказов не используется. */
@@ -29,6 +48,16 @@ const STORE_ID = "5be91e82-40fd-4a86-9ea0-67aa17be54f0";
 
 /** Источник заказа «Сайт» — заведён в Posiflora, отличает нас от продаж за прилавком. */
 const SOURCE_SITE_ID = "f128f295-5f2a-41b5-b63d-e6e1d6dbd4d5";
+
+/** Крым круглый год на UTC+3: переходов на летнее время в России нет. */
+const STUDIO_TZ = "Europe/Simferopol";
+
+/**
+ * Нулевое смещение здесь не ошибка: касса отбрасывает присланное смещение и
+ * сохраняет сами цифры (проверено пробным заказом). Поэтому мы кладём в эти
+ * поля местное время студии и помечаем его так же, как помечает сама касса.
+ */
+const STUDIO_OFFSET = "+00:00";
 
 type OrderForPush = {
   id: string;
@@ -42,16 +71,38 @@ type OrderForPush = {
   delivery_time_to: string | null;
   delivery_city: string | null;
   delivery_address: string | null;
+  delivery_entrance: string | null;
+  delivery_floor: string | null;
   delivery_apartment: string | null;
+  delivery_intercom_code: string | null;
   courier_comment: string | null;
   card_text: string | null;
   is_pickup: boolean | null;
   total_amount: number | string | null;
 };
 
-/** Телефон для Posiflora — только цифры. */
-function digits(phone: string | null): string {
-  return (phone ?? "").replace(/\D/g, "");
+/** Сегодняшняя дата по студии, а не по UTC: заказ в час ночи иначе уехал бы на вчера. */
+function todayAtStudio(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: STUDIO_TZ }).format(new Date());
+}
+
+/** Дата «2026-10-20» и время «14:00:00» — в метку времени, которую ждёт касса. */
+function studioInstant(date: string, time: string | null): string {
+  const t = (time ?? "00:00:00").slice(0, 8);
+  return `${date}T${t.length === 5 ? `${t}:00` : t}${STUDIO_OFFSET}`;
+}
+
+/**
+ * Телефон разбиваем на код страны и номер — в кассе это отдельные поля.
+ * Российский номер в любом виде (+7, 8, без кода) приводим к «7» + 10 цифр.
+ */
+function splitPhone(phone: string | null): { code: string; number: string } {
+  const d = (phone ?? "").replace(/\D/g, "");
+  if (d.length === 11 && (d.startsWith("7") || d.startsWith("8"))) {
+    return { code: "7", number: d.slice(1) };
+  }
+  if (d.length === 10) return { code: "7", number: d };
+  return { code: "", number: d };
 }
 
 /**
@@ -60,7 +111,19 @@ function digits(phone: string | null): string {
  * привязать (см. заголовок файла).
  */
 function buildDescription(order: OrderForPush, items: { product_name: string; quantity: number }[]): string {
-  const lines: string[] = [`Заказ с сайта ${order.order_number}`];
+  const amount = Number(order.total_amount ?? 0);
+
+  // Сумма идёт ТЕКСТОМ, и это не дублирование: поле totalAmount касса
+  // считает сама по позициям, а позиции через API не привязать — у заказа
+  // с сайта сумма в кассе так и останется нулём. Если не написать её здесь,
+  // флорист увидит заказ «за 0 ₽» и может собрать букет не того уровня.
+  // Вторая половина строки — защита от повторного списания: оплату касса
+  // тоже не видит (paymentsAmount = 0), и без предупреждения кассир
+  // способен взять деньги с уже заплатившего клиента.
+  const lines: string[] = [
+    `Заказ с сайта ${order.order_number}`,
+    `ОПЛАЧЕНО ОНЛАЙН: ${amount} ₽ — повторно деньги не брать`,
+  ];
 
   if (items.length) {
     lines.push("", "Состав:");
@@ -70,15 +133,25 @@ function buildDescription(order: OrderForPush, items: { product_name: string; qu
   if (order.card_text?.trim()) {
     lines.push("", `Открытка: ${order.card_text.trim()}`);
   }
-  if (order.courier_comment?.trim()) {
-    lines.push("", `Курьеру: ${order.courier_comment.trim()}`);
-  }
   if (order.is_pickup) {
     lines.push("", "САМОВЫВОЗ — клиент заберёт из студии");
   }
 
-  lines.push("", "Оплачено онлайн.");
   return lines.join("\n").slice(0, 2000);
+}
+
+/**
+ * Подъезд, этаж и код домофона собственных полей в кассе не имеют. Молча их
+ * потерять нельзя — без кода домофона курьер стоит у двери. Поэтому они
+ * едут в комментарий к доставке вместе с пожеланиями клиента.
+ */
+function buildDeliveryComments(order: OrderForPush): string {
+  const parts: string[] = [];
+  if (order.delivery_entrance?.trim()) parts.push(`подъезд ${order.delivery_entrance.trim()}`);
+  if (order.delivery_floor?.trim()) parts.push(`этаж ${order.delivery_floor.trim()}`);
+  if (order.delivery_intercom_code?.trim()) parts.push(`домофон ${order.delivery_intercom_code.trim()}`);
+  if (order.courier_comment?.trim()) parts.push(order.courier_comment.trim());
+  return parts.join(", ").slice(0, 500);
 }
 
 /**
@@ -95,7 +168,8 @@ export async function pushOrderToPosiflora(orderId: string): Promise<string | nu
     .select(
       "id, order_number, customer_name, customer_phone, recipient_name, recipient_phone, " +
         "delivery_date, delivery_time_from, delivery_time_to, delivery_city, delivery_address, " +
-        "delivery_apartment, courier_comment, card_text, is_pickup, total_amount, posiflora_order_id"
+        "delivery_entrance, delivery_floor, delivery_apartment, delivery_intercom_code, " +
+        "courier_comment, card_text, is_pickup, total_amount, posiflora_order_id"
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -116,15 +190,11 @@ export async function pushOrderToPosiflora(orderId: string): Promise<string | nu
     .select("product_name, quantity")
     .eq("order_id", orderId);
 
-  const address = [typed.delivery_city, typed.delivery_address, typed.delivery_apartment]
-    .filter((p) => p && String(p).trim())
-    .join(", ");
-
   const attributes: Record<string, unknown> = {
     // Номер документа берём свой: подстраиваться под их нумерацию значило бы
     // угадывать следующий номер и однажды столкнуться с кассиром.
     docNo: typed.order_number,
-    date: new Date().toISOString(),
+    date: todayAtStudio(),
     description: buildDescription(typed, items ?? []),
     totalAmount: Number(typed.total_amount ?? 0),
     budget: Number(typed.total_amount ?? 0),
@@ -134,15 +204,27 @@ export async function pushOrderToPosiflora(orderId: string): Promise<string | nu
   };
 
   if (!typed.is_pickup) {
-    attributes.deliveryStreet = address || null;
-    attributes.deliveryComments = typed.courier_comment ?? null;
-    attributes.deliveryContact = typed.recipient_name ?? typed.customer_name ?? null;
-    attributes.deliveryPhoneNumber = digits(typed.recipient_phone ?? typed.customer_phone);
-    if (typed.delivery_time_from) attributes.deliveryTimeFrom = typed.delivery_time_from;
-    if (typed.delivery_time_to) attributes.deliveryTimeTo = typed.delivery_time_to;
+    const phone = splitPhone(typed.recipient_phone ?? typed.customer_phone);
+    attributes.deliveryCity = typed.delivery_city ?? "";
+    attributes.deliveryStreet = typed.delivery_address ?? "";
+    attributes.deliveryApartment = typed.delivery_apartment ?? "";
+    attributes.deliveryComments = buildDeliveryComments(typed);
+    attributes.deliveryContact = typed.recipient_name ?? typed.customer_name ?? "";
+    attributes.deliveryPhoneCode = phone.code;
+    attributes.deliveryPhoneNumber = phone.number;
+
+    if (typed.delivery_date && typed.delivery_time_from) {
+      attributes.deliveryTimeFrom = studioInstant(typed.delivery_date, typed.delivery_time_from);
+    }
+    if (typed.delivery_date && typed.delivery_time_to) {
+      attributes.deliveryTimeTo = studioInstant(typed.delivery_date, typed.delivery_time_to);
+    }
   }
 
-  if (typed.delivery_date) attributes.dueTime = typed.delivery_date;
+  // Срок готовности — к началу интервала доставки, а при самовывозе к дате.
+  if (typed.delivery_date) {
+    attributes.dueTime = studioInstant(typed.delivery_date, typed.delivery_time_from);
+  }
 
   try {
     const created = (await posifloraFetch("/orders", {
