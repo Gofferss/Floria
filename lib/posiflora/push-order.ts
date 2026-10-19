@@ -41,6 +41,14 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 // Про часовой пояс. Касса ОТБРАСЫВАЕТ присланное смещение: на «14:00+03:00»
 // она сохраняет «14:00+00:00». Значит в эти поля едет местное время студии,
 // помеченное нулевым смещением — что пошлём, то и сохранится.
+//
+// Про статус, и это главное. Заказ, созданный извне, касса по умолчанию
+// кладёт в статус «не принят» (notAccepted). В студии в этот список не
+// смотрит никто: до нашего первого пробного заказа счётчик там стоял на
+// нуле за всю историю. То есть оплаченный заказ доехал бы до кассы и остался
+// невидимым — ровно тот сорт тихой потери, из-за которого здесь уже горело.
+// Поэтому заказ сразу ставится в рабочую очередь «новый», и результат
+// перечитывается: касса умеет отвечать «200 OK», ничего не изменив.
 // ================================================================
 
 /** Точка продаж «Флория» — склад (второй store) для заказов не используется. */
@@ -48,6 +56,9 @@ const STORE_ID = "5be91e82-40fd-4a86-9ea0-67aa17be54f0";
 
 /** Источник заказа «Сайт» — заведён в Posiflora, отличает нас от продаж за прилавком. */
 const SOURCE_SITE_ID = "f128f295-5f2a-41b5-b63d-e6e1d6dbd4d5";
+
+/** Рабочая очередь флориста. Не «не принят», куда касса кладёт внешние заказы сама. */
+const WORK_QUEUE_STATUS = "new";
 
 /** Крым круглый год на UTC+3: переходов на летнее время в России нет. */
 const STUDIO_TZ = "Europe/Simferopol";
@@ -155,6 +166,39 @@ function buildDeliveryComments(order: OrderForPush): string {
 }
 
 /**
+ * Переставляет заказ в рабочую очередь, если касса не приняла статус сразу.
+ *
+ * Отдельной функцией, потому что проверка тут важнее самой правки: эта касса
+ * умеет отвечать «200 OK» и не менять ничего (так ведёт себя totalAmount).
+ * Поэтому мало отправить — надо перечитать и убедиться.
+ */
+async function ensureInWorkQueue(posifloraId: string, orderNumber: string, statusAfterCreate: unknown): Promise<void> {
+  if (statusAfterCreate === WORK_QUEUE_STATUS) return;
+
+  try {
+    const patched = (await posifloraFetch(`/orders/${posifloraId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        data: { type: "orders", id: posifloraId, attributes: { status: WORK_QUEUE_STATUS } },
+      }),
+    })) as { data?: { attributes?: { status?: string } } };
+
+    if (patched?.data?.attributes?.status === WORK_QUEUE_STATUS) return;
+
+    console.error(
+      `[pushOrderToPosiflora] заказ ${orderNumber}: касса оставила статус ` +
+        `«${patched?.data?.attributes?.status ?? "неизвестно"}» вместо «${WORK_QUEUE_STATUS}». ` +
+        `В кассе он лежит в «не принятых» — там его не ищут. Состав и адрес у студии есть в Telegram.`
+    );
+  } catch (err) {
+    console.error(
+      `[pushOrderToPosiflora] заказ ${orderNumber}: не удалось поставить в работу —`,
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+}
+
+/**
  * Создаёт заказ в Posiflora. Возвращает её идентификатор заказа или null,
  * если отправить не удалось — вызывающий код решает, что с этим делать.
  * Исключения наружу НЕ бросаем: сбой кассы не должен ломать подтверждение
@@ -201,6 +245,7 @@ export async function pushOrderToPosiflora(orderId: string): Promise<string | nu
     isExternal: true,
     externalId: typed.order_number,
     delivery: !typed.is_pickup,
+    status: WORK_QUEUE_STATUS,
   };
 
   if (!typed.is_pickup) {
@@ -239,7 +284,7 @@ export async function pushOrderToPosiflora(orderId: string): Promise<string | nu
           },
         },
       }),
-    })) as { data?: { id?: string } };
+    })) as { data?: { id?: string; attributes?: { status?: string } } };
 
     const posifloraId = created?.data?.id;
     if (!posifloraId) {
@@ -247,10 +292,14 @@ export async function pushOrderToPosiflora(orderId: string): Promise<string | nu
       return null;
     }
 
+    // Идентификатор запоминаем ДО возни со статусом: заказ в кассе уже есть,
+    // и если дальше что-то сорвётся, повтор не должен создать второй.
     await supabaseAdmin
       .from("orders")
       .update({ posiflora_order_id: posifloraId })
       .eq("id", orderId);
+
+    await ensureInWorkQueue(posifloraId, typed.order_number, created?.data?.attributes?.status);
 
     return posifloraId;
   } catch (err) {
