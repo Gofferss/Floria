@@ -2,6 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { notifyStaffTelegram } from "@/lib/n8n";
 import { escapeTelegramHtml } from "@/lib/telegram/bot";
 import { notifyCustomerAboutStatus } from "@/lib/telegram/order-notify";
+import { pushOrderToPosiflora } from "@/lib/posiflora/push-order";
 
 // ================================================================
 // Перевод заказа в «оплачен» — единственное место, где это происходит.
@@ -107,4 +108,10 @@ export async function confirmPaidOrder(orderNumber: string, paidAmount: number):
 
   // Клиенту — что оплата прошла и заказ взят в работу.
   await notifyCustomerAboutStatus(order.id, "confirmed");
+
+  // И в кассу — чтобы флорист не перенабирал адрес руками. Сбой отправки
+  // здесь ничего не отменяет: деньги приняты, заказ подтверждён, студия
+  // уведомлена. Неотправленный заказ узнаётся по пустому
+  // posiflora_order_id, и его подберёт сверка.
+  await pushOrderToPosiflora(order.id);
 }
