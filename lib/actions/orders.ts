@@ -95,6 +95,25 @@ export async function setOrderFloristAccepted(orderId: string, accepted: boolean
 const ORDER_PHOTO_BUCKET = "product-images";
 const MAX_ORDER_PHOTO_SIZE = 8 * 1024 * 1024;
 
+/** Потолок на заказ. Двадцать букетов в одном заказе — это уже не розница. */
+const MAX_ORDER_PHOTOS = 20;
+
+/**
+ * Из публичной ссылки обратно в путь внутри бакета.
+ *
+ * Разбираем ссылку, а не храним путь отдельной колонкой: пути в массиве
+ * и ссылки в массиве пришлось бы держать синхронными, и они однажды
+ * разъехались бы. Если ссылка не нашего вида — возвращаем null, и файл
+ * просто останется в хранилище.
+ */
+function storagePathFromPublicUrl(publicUrl: string): string | null {
+  const marker = `/storage/v1/object/public/${ORDER_PHOTO_BUCKET}/`;
+  const at = publicUrl.indexOf(marker);
+  if (at === -1) return null;
+  const path = publicUrl.slice(at + marker.length).split("?")[0];
+  return path || null;
+}
+
 export async function uploadAssembledPhoto(
   orderId: string,
   formData: FormData
@@ -128,11 +147,30 @@ export async function uploadAssembledPhoto(
     data: { publicUrl },
   } = getSupabaseAdmin().storage.from(ORDER_PHOTO_BUCKET).getPublicUrl(path);
 
-  // Новый снимок сбрасывает отметку об отправке: переснятое фото клиент
+  // Снимок ДОБАВЛЯЕТСЯ к набору, а не заменяет его: в заказе может быть
+  // несколько букетов, и каждый нужно показать клиенту отдельно.
+  const { data: current, error: readError } = await getSupabaseAdmin()
+    .from("orders")
+    .select("assembled_photos")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (readError || !current) {
+    console.error("[uploadAssembledPhoto] чтение заказа", readError?.message ?? "нет строки");
+    return { success: false, error: "Фото загрузилось, но заказ не нашёлся" };
+  }
+
+  const photos = [...((current.assembled_photos as string[] | null) ?? []), publicUrl];
+
+  if (photos.length > MAX_ORDER_PHOTOS) {
+    return { success: false, error: `Больше ${MAX_ORDER_PHOTOS} фотографий к заказу не прикрепить` };
+  }
+
+  // Изменение набора сбрасывает отметку об отправке: этот набор клиент
   // ещё не видел, и кнопка «Отправить» должна стать доступной снова.
   const { error } = await getSupabaseAdmin()
     .from("orders")
-    .update({ assembled_photo_url: publicUrl, assembled_photo_sent_at: null })
+    .update({ assembled_photos: photos, assembled_photo_sent_at: null })
     .eq("id", orderId);
 
   if (error) {
@@ -144,20 +182,69 @@ export async function uploadAssembledPhoto(
   return { success: true };
 }
 
+/**
+ * Убирает один снимок из набора — флорист переснял букет или добавил лишнее.
+ *
+ * Файл из хранилища тоже удаляем: иначе за год накопится гора снимков,
+ * на которые никто не ссылается. Если удалить файл не вышло, ссылку из
+ * заказа всё равно убираем — для флориста важен набор, а осиротевший файл
+ * это мусор, а не поломка.
+ */
+export async function removeAssembledPhoto(orderId: string, photoUrl: string): Promise<ActionResult> {
+  await requireStaff();
+
+  const { data: current, error: readError } = await getSupabaseAdmin()
+    .from("orders")
+    .select("assembled_photos")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (readError || !current) {
+    console.error("[removeAssembledPhoto] чтение заказа", readError?.message ?? "нет строки");
+    return { success: false, error: "Заказ не найден" };
+  }
+
+  const photos = ((current.assembled_photos as string[] | null) ?? []).filter((u) => u !== photoUrl);
+
+  const { error } = await getSupabaseAdmin()
+    .from("orders")
+    .update({ assembled_photos: photos, assembled_photo_sent_at: null })
+    .eq("id", orderId);
+
+  if (error) {
+    console.error("[removeAssembledPhoto] запись в заказ", error.message);
+    return { success: false, error: "Не удалось убрать фото" };
+  }
+
+  const path = storagePathFromPublicUrl(photoUrl);
+  if (path) {
+    const { error: removeError } = await getSupabaseAdmin()
+      .storage.from(ORDER_PHOTO_BUCKET)
+      .remove([path]);
+    if (removeError) {
+      console.error("[removeAssembledPhoto] файл остался в хранилище:", removeError.message);
+    }
+  }
+
+  revalidatePath(`/admin/orders/${orderId}`);
+  return { success: true };
+}
+
 export async function sendAssembledPhoto(orderId: string): Promise<ActionResult> {
   await requireStaff();
 
   const { data: order } = await getSupabaseAdmin()
     .from("orders")
-    .select("assembled_photo_url")
+    .select("assembled_photos")
     .eq("id", orderId)
     .maybeSingle();
 
-  if (!order?.assembled_photo_url) {
+  const photos = (order?.assembled_photos as string[] | null) ?? [];
+  if (photos.length === 0) {
     return { success: false, error: "Сначала загрузите фото" };
   }
 
-  const result = await sendAssembledPhotoToCustomer(orderId, order.assembled_photo_url);
+  const result = await sendAssembledPhotoToCustomer(orderId, photos);
   if (!result.ok) return { success: false, error: result.reason };
 
   await getSupabaseAdmin()

@@ -1,5 +1,11 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { sendMessage, sendPhoto, escapeTelegramHtml } from "@/lib/telegram/bot";
+import {
+  sendMessage,
+  sendPhoto,
+  sendMediaGroup,
+  MEDIA_GROUP_LIMIT,
+  escapeTelegramHtml,
+} from "@/lib/telegram/bot";
 import { toE164RussianPhone } from "@/lib/phone-mask";
 import { CONTACTS } from "@/lib/contacts";
 import { setSession } from "@/lib/telegram/reminders";
@@ -83,8 +89,12 @@ export async function notifyCustomerAboutStatus(orderId: string, status: string)
 /** Фото собранного букета — то, ради чего клиент и подключает бота. */
 export async function sendAssembledPhotoToCustomer(
   orderId: string,
-  photoUrl: string
+  photoUrls: string[]
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (photoUrls.length === 0) {
+    return { ok: false, reason: "Нечего отправлять — фотографий нет" };
+  }
+
   let target: { chatId: number; orderNumber: string } | null = null;
 
   try {
@@ -98,13 +108,32 @@ export async function sendAssembledPhotoToCustomer(
     return { ok: false, reason: "Клиент не подключил Telegram-бота — отправить некуда" };
   }
 
+  const many = photoUrls.length > 1;
+  const caption =
+    `💐 ${many ? "Ваши букеты" : "Ваш букет"} по заказу <b>${target.orderNumber}</b> ` +
+    `${many ? "готовы" : "готов"}!\n\n` +
+    `Если что-то хочется поправить — напишите нам до выезда курьера: ${CONTACTS.phone}`;
+
   try {
-    await sendPhoto(
-      target.chatId,
-      photoUrl,
-      `💐 Ваш букет по заказу <b>${target.orderNumber}</b> готов!\n\n` +
-        `Если что-то хочется поправить — напишите нам до выезда курьера: ${CONTACTS.phone}`
-    );
+    if (!many) {
+      await sendPhoto(target.chatId, photoUrls[0], caption);
+      return { ok: true };
+    }
+
+    // Альбомов может понадобиться несколько: больше десяти снимков в один
+    // Telegram не примет. Подпись ставим только на первый — иначе клиент
+    // получит один и тот же текст несколько раз подряд.
+    for (let i = 0; i < photoUrls.length; i += MEDIA_GROUP_LIMIT) {
+      const chunk = photoUrls.slice(i, i + MEDIA_GROUP_LIMIT);
+
+      // Остаток ровно в одну фотографию альбомом не отправить — у Telegram
+      // минимум два снимка. Такой хвост уходит обычным sendPhoto.
+      if (chunk.length === 1) {
+        await sendPhoto(target.chatId, chunk[0], i === 0 ? caption : undefined);
+      } else {
+        await sendMediaGroup(target.chatId, chunk, i === 0 ? caption : undefined);
+      }
+    }
     return { ok: true };
   } catch (error) {
     console.error(`[sendAssembledPhotoToCustomer] отправка, заказ ${orderId}:`, error);

@@ -144,6 +144,34 @@ export async function sendPhoto(
   });
 }
 
+/** Telegram принимает в одном альбоме от 2 до 10 фотографий. */
+export const MEDIA_GROUP_LIMIT = 10;
+
+/**
+ * Альбом фотографий — одним сообщением, а не пачкой отдельных.
+ *
+ * Подпись Telegram показывает только у ПЕРВОГО снимка альбома, поэтому
+ * она и ставится туда. Кнопок (reply_markup) у альбома не бывает вовсе —
+ * это ограничение Telegram, а не наше упрощение.
+ *
+ * Вызывающий код обязан прислать от 2 до 10 ссылок: на одной Telegram
+ * отвечает ошибкой, и для единственного фото есть sendPhoto.
+ */
+export async function sendMediaGroup(
+  chatId: number,
+  photoUrls: string[],
+  caption?: string
+): Promise<Array<{ message_id: number }>> {
+  return callTelegramApi("sendMediaGroup", {
+    chat_id: chatId,
+    media: photoUrls.map((url, i) => ({
+      type: "photo",
+      media: url,
+      ...(i === 0 && caption ? { caption, parse_mode: "HTML" } : {}),
+    })),
+  });
+}
+
 export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
   await callTelegramApi("answerCallbackQuery", { callback_query_id: callbackQueryId, text });
 }

@@ -19,8 +19,8 @@ type OrderDetail = {
   id: string;
   order_number: string;
   status: OrderStatus;
-  /** Фото собранного букета для клиента — см. AssembledPhoto. */
-  assembled_photo_url: string | null;
+  /** Фотографии собранных букетов для клиента — см. AssembledPhoto. */
+  assembled_photos: string[] | null;
   assembled_photo_sent_at: string | null;
   payment_status: string;
   customer_name: string;
@@ -173,7 +173,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
 
       <AssembledPhoto
         orderId={detail.id}
-        photoUrl={detail.assembled_photo_url ?? null}
+        photoUrls={detail.assembled_photos ?? []}
         sentAt={detail.assembled_photo_sent_at ?? null}
       />
 
