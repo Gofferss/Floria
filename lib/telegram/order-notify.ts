@@ -27,21 +27,18 @@ import { notifyStaffTelegram } from "@/lib/n8n";
 // ================================================================
 
 /** Кому пишем: chat_id привязанного бота или null. */
-async function findChatIdForOrder(orderId: string): Promise<{ chatId: number; orderNumber: string } | null> {
-  const supabaseAdmin = getSupabaseAdmin();
+/**
+ * Чат клиента по его телефону — единственная связь между заказом на сайте
+ * и перепиской в боте. Номер приводим к одному виду: в заказе он может
+ * быть записан как угодно, а в bot_users лежит строго в формате E.164.
+ */
+export async function findChatIdByPhone(rawPhone: string | null): Promise<number | null> {
+  if (!rawPhone) return null;
 
-  const { data: order } = await supabaseAdmin
-    .from("orders")
-    .select("order_number, customer_phone")
-    .eq("id", orderId)
-    .maybeSingle();
-
-  if (!order?.customer_phone) return null;
-
-  const phone = toE164RussianPhone(order.customer_phone);
+  const phone = toE164RussianPhone(rawPhone);
   if (!phone) return null;
 
-  const { data } = await supabaseAdmin
+  const { data } = await getSupabaseAdmin()
     .from("bot_users")
     .select("chat_id")
     .eq("phone", phone)
@@ -49,7 +46,20 @@ async function findChatIdForOrder(orderId: string): Promise<{ chatId: number; or
     .limit(1);
 
   const chatId = data?.[0]?.chat_id;
-  if (typeof chatId !== "number") return null;
+  return typeof chatId === "number" ? chatId : null;
+}
+
+async function findChatIdForOrder(orderId: string): Promise<{ chatId: number; orderNumber: string } | null> {
+  const { data: order } = await getSupabaseAdmin()
+    .from("orders")
+    .select("order_number, customer_phone")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (!order?.customer_phone) return null;
+
+  const chatId = await findChatIdByPhone(order.customer_phone as string);
+  if (chatId === null) return null;
 
   return { chatId, orderNumber: order.order_number as string };
 }

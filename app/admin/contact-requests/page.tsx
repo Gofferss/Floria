@@ -2,6 +2,12 @@ import type { Metadata } from "next";
 import { requireStaffUser } from "@/lib/auth/server";
 import { listContactRequests } from "@/lib/actions/contact-requests";
 import { MarkHandledButton } from "@/components/admin/contact/MarkHandledButton";
+import { ReplyInTelegram } from "@/components/admin/contact/ReplyInTelegram";
+
+/** Номер для ссылок в мессенджеры — только цифры. */
+function digits(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
 
 export const metadata: Metadata = {
   title: "Обращения — Админка Floria",
@@ -76,12 +82,25 @@ export default async function AdminContactRequestsPage() {
                       </span>
                     )}
                   </div>
-                  <a
-                    href={`tel:${request.phone}`}
-                    className="font-body text-sm text-gold-700 underline-offset-2 hover:underline"
-                  >
-                    {request.phone}
-                  </a>
+                  {/* Телефон ссылкой работает только с телефона: на
+                      компьютере tel: обычно никуда не ведёт. Поэтому рядом
+                      WhatsApp — он открывается и там, и там. */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <a
+                      href={`tel:${request.phone}`}
+                      className="font-body text-sm text-gold-700 underline-offset-2 hover:underline"
+                    >
+                      {request.phone}
+                    </a>
+                    <a
+                      href={`https://wa.me/${digits(request.phone)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-body text-xs text-ink/50 underline underline-offset-2 transition hover:text-ink"
+                    >
+                      WhatsApp
+                    </a>
+                  </div>
                   <p className="mt-1 font-body text-xs text-ink/50">
                     {dateFormatter.format(new Date(request.createdAt))}
                     {!request.staffNotifiedAt && " · не дошло в Telegram"}
@@ -97,6 +116,20 @@ export default async function AdminContactRequestsPage() {
                   {request.message}
                 </p>
               )}
+
+              {/* Ответ идёт под сообщением и во всю ширину карточки: в узкой
+                  колонке с кнопками поле для текста было бы в два слова. */}
+              {!request.handledAt &&
+                (request.telegramReachable ? (
+                  <div className="mt-4">
+                    <ReplyInTelegram id={request.id} name={request.name} />
+                  </div>
+                ) : (
+                  <p className="mt-3 font-body text-xs text-ink/40">
+                    Бот у этого номера не подключён — ответить можно звонком или
+                    в WhatsApp.
+                  </p>
+                ))}
             </li>
           ))}
         </ul>
