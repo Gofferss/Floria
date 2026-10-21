@@ -3,7 +3,11 @@
 // используется и на сервере, и в браузере.
 // ================================================================
 
+/** Документы, которые заводят руками на складе. */
 export type DocType = "opening" | "receipt" | "writeoff" | "inventory";
+/** Документы, которые создаёт касса: продажа, сборка и разборка букета, возврат. */
+export type PosDocType = "sale" | "assembly" | "disassembly" | "return";
+export type AnyDocType = DocType | PosDocType;
 export type DocStatus = "draft" | "posted" | "reversed";
 export type GroupKind =
   | "flower"
@@ -19,12 +23,23 @@ export type PaymentMethod = "cash" | "card" | "transfer" | "unpaid" | "other";
 
 export const DOC_TYPES: DocType[] = ["receipt", "writeoff", "inventory", "opening"];
 
-export const DOC_TYPE_LABEL: Record<DocType, string> = {
+export const DOC_TYPE_LABEL: Record<AnyDocType, string> = {
   receipt: "Приход",
   writeoff: "Списание",
   inventory: "Инвентаризация",
   opening: "Начальный остаток",
+  sale: "Продажа",
+  assembly: "Сборка букета",
+  disassembly: "Разборка букета",
+  return: "Возврат",
 };
+
+/** Все виды — для фильтра журнала. */
+export const ALL_DOC_TYPES: AnyDocType[] = [...DOC_TYPES, "sale", "assembly", "disassembly", "return"];
+
+export function isPosDocType(t: string): t is PosDocType {
+  return t === "sale" || t === "assembly" || t === "disassembly" || t === "return";
+}
 
 /** Что делает документ — для подсказки на форме. */
 export const DOC_TYPE_HINT: Record<DocType, string> = {

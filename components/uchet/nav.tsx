@@ -35,11 +35,11 @@ export type NavItem = {
 };
 
 export const WORK_NAV: NavItem[] = [
-  { href: "/uchet/kassa", label: "Касса", icon: BanknoteIcon, ready: false },
+  { href: "/uchet/kassa", label: "Касса", icon: BanknoteIcon, ready: true },
   { href: "/uchet/zakazy", label: "Заказы", icon: TruckIcon, ready: false },
-  { href: "/uchet/vitrina", label: "Витрина", icon: BouquetIcon, ready: false },
+  { href: "/uchet/vitrina", label: "Витрина", icon: BouquetIcon, ready: true },
   { href: "/uchet/sklad", label: "Склад", icon: PackageIcon, ready: true },
-  { href: "/uchet/smena", label: "Смена", icon: ClockIcon, ready: false },
+  { href: "/uchet/smena", label: "Смена", icon: ClockIcon, ready: true },
 ];
 
 export const OWNER_NAV: NavItem[] = [
@@ -47,6 +47,9 @@ export const OWNER_NAV: NavItem[] = [
   { href: "/uchet/katalog", label: "Каталог", icon: TagIcon, ready: false, ownerOnly: true },
   { href: "/uchet/dengi", label: "Деньги", icon: CardIcon, ready: false, ownerOnly: true },
   { href: "/uchet/klienty", label: "Клиенты", icon: UserIcon, ready: false, ownerOnly: true },
-  { href: "/uchet/lyudi", label: "Сотрудники", icon: StarIcon, ready: false, ownerOnly: true },
+  { href: "/uchet/lyudi", label: "Сотрудники", icon: StarIcon, ready: true, ownerOnly: true },
   { href: "/uchet/nastroiki", label: "Настройки", icon: EditIcon, ready: false, ownerOnly: true },
 ];
+
+/** Курьеру — только его раздел: доставки, адреса, статусы. */
+export const COURIER_NAV: NavItem[] = [{ href: "/uchet/dostavki", label: "Доставки", icon: TruckIcon, ready: true }];

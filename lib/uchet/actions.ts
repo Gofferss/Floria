@@ -1,9 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getStaffUser } from "@/lib/auth/server";
+import { requireStaffAction } from "@/lib/auth/server";
+import { canUseUchetWork } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { canPostOpening, canSeeCosts } from "@/lib/uchet/access";
+import { actorFor } from "@/lib/uchet/employee";
+import { guessGroupIcon, isGroupIconKey } from "@/components/uchet/GroupIcon";
 import { KINDS, PAYMENT_METHODS, type DocType, type GroupKind, type PaymentMethod } from "@/lib/uchet/format";
 
 // ================================================================
@@ -21,9 +24,17 @@ import { KINDS, PAYMENT_METHODS, type DocType, type GroupKind, type PaymentMetho
 type Result<T = undefined> = { success: true; data: T } | { success: false; error: string };
 
 async function requireStaff() {
-  const staff = await getStaffUser();
-  if (!staff) throw new Error("Доступ только для сотрудников");
-  return staff;
+  return requireStaffAction(canUseUchetWork);
+}
+
+/**
+ * Кто делает: учётная запись и человек за планшетом. На общей учётной
+ * записи магазина без выбранного человека действие не выполняется — иначе
+ * в журнале остались бы документы «ничьи». Ошибку возвращаем значением, а
+ * не исключением: текст исключения сервер в браузер не передаёт.
+ */
+async function requireActor() {
+  return actorFor(await requireStaff());
 }
 
 function dbMessage(error: { message?: string } | null | undefined, fallback: string): string {
@@ -134,7 +145,9 @@ function validateDraft(input: DraftInput): string | null {
 }
 
 export async function saveDraft(input: DraftInput): Promise<Result<{ id: string }>> {
-  const staff = await requireStaff();
+  const who = await requireActor();
+  if (!who.ok) return { success: false, error: who.error };
+  const { staff, employee } = who.actor;
 
   if (input.docType === "opening" && !canPostOpening(staff.role)) {
     return { success: false, error: "Начальный остаток вводит только владелец" };
@@ -162,6 +175,11 @@ export async function saveDraft(input: DraftInput): Promise<Result<{ id: string 
 
   if (error || !data) return { success: false, error: dbMessage(error, "Не удалось сохранить документ") };
 
+  // Человек за планшетом — отдельной записью: черновик ещё можно менять.
+  if (employee) {
+    await getSupabaseAdmin().from("inv_documents").update({ employee_id: employee.id }).eq("id", data as string).eq("status", "draft");
+  }
+
   revalidateSklad();
   return { success: true, data: { id: data as string } };
 }
@@ -181,7 +199,9 @@ export async function saveAndPost(input: DraftInput): Promise<Result<{ id: strin
 }
 
 export async function postDocument(id: string): Promise<Result> {
-  const staff = await requireStaff();
+  const who = await requireActor();
+  if (!who.ok) return { success: false, error: who.error };
+  const { staff } = who.actor;
   const admin = getSupabaseAdmin();
 
   const { data: doc } = await admin.from("inv_documents").select("doc_type").eq("id", id).maybeSingle();
@@ -197,7 +217,9 @@ export async function postDocument(id: string): Promise<Result> {
 }
 
 export async function reverseDocument(id: string, comment: string): Promise<Result<{ id: string }>> {
-  const staff = await requireStaff();
+  const who = await requireActor();
+  if (!who.ok) return { success: false, error: who.error };
+  const { staff } = who.actor;
 
   const { data, error } = await getSupabaseAdmin().rpc("inv_reverse_document", {
     p_doc: id,
@@ -230,16 +252,20 @@ export async function deleteDraft(id: string): Promise<Result> {
 // Справочники
 // ---------------------------------------------------------------
 
-export type GroupInput = { id?: string; title: string; kind: GroupKind; isActive: boolean };
+export type GroupInput = { id?: string; title: string; kind: GroupKind; icon?: string | null; isActive: boolean };
 
 export async function saveGroup(input: GroupInput): Promise<Result<{ id: string }>> {
   await requireStaff();
   const title = input.title.replace(/\s+/g, " ").trim();
   if (!title) return { success: false, error: "Укажите название группы" };
   if (!KINDS.includes(input.kind)) return { success: false, error: "Неизвестный вид группы" };
+  if (input.icon && !isGroupIconKey(input.icon)) return { success: false, error: "Неизвестный значок" };
 
   const admin = getSupabaseAdmin();
-  const row = { title, kind: input.kind, is_active: input.isActive };
+  // Значок не выбран — подбираем по названию, чтобы новая группа не
+  // осталась безликой.
+  const icon = input.icon || (input.id ? undefined : guessGroupIcon(title, input.kind));
+  const row = { title, kind: input.kind, is_active: input.isActive, ...(icon ? { icon } : {}) };
   const { data, error } = input.id
     ? await admin.from("inv_groups").update(row).eq("id", input.id).select("id").maybeSingle()
     : await admin.from("inv_groups").insert(row).select("id").maybeSingle();
