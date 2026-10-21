@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { approveDiscount, searchCustomers, uploadBouquetPhoto } from "@/lib/uchet/pos-actions";
+import { createCustomerAtTill } from "@/lib/uchet/customer-actions";
 import type { CustomerHit, VitrineBouquet } from "@/lib/uchet/pos-queries";
 import type { PickableEmployee } from "@/lib/uchet/people";
 import { formatDate, formatMoney } from "@/lib/uchet/format";
 import { prepareImageForUpload } from "@/lib/prepare-image";
 import { ui } from "@/components/uchet/ui";
+import { useToast } from "@/components/uchet/Toast";
 import { CloseButton, Dialog, Panel, Sheet } from "@/components/uchet/Overlay";
 import { AmountDisplay, NumPad, PinDots } from "@/components/uchet/NumPad";
 import { AgeBadge } from "@/components/uchet/vitrina/VitrineView";
@@ -201,7 +203,8 @@ export function CustomerPanel({
     let cancelled = false;
     const id = setTimeout(async () => {
       setBusy(true);
-      const found = await searchCustomers(query);
+      // Сбой связи или истёкший вход не должен оставить «Ищем…» навсегда.
+      const found = await searchCustomers(query).catch(() => [] as CustomerHit[]);
       if (!cancelled) {
         setHits(found);
         setBusy(false);
@@ -238,7 +241,15 @@ export function CustomerPanel({
           <p className="text-xs text-zinc-500">Бонусы пока ведёт Posiflora: здесь видно, сколько их, а списать и начислить — там.</p>
         )}
         {busy && <p className={ui.muted}>Ищем…</p>}
-        {!busy && query.replace(/\D/g, "").length >= 4 && hits.length === 0 && <p className={ui.muted}>Не нашли. Проверьте номер.</p>}
+        {!busy && query.replace(/\D/g, "").length >= 4 && hits.length === 0 && (
+          <NewCustomerForm
+            phone={query}
+            onCreated={(c) => {
+              onPick(c);
+              onClose();
+            }}
+          />
+        )}
         <ul className="space-y-2">
           {hits.map((h) => (
             <li key={h.id}>
@@ -254,7 +265,7 @@ export function CustomerPanel({
                   <span className="block truncate font-semibold">{h.name || "Без имени"}</span>
                   <span className="block text-xs text-zinc-500">
                     {h.phone}
-                    {h.lastOrderAt && ` · заказывал(а) ${formatDate(h.lastOrderAt)}`}
+                    {h.lastOrderAt && ` · последний заказ ${formatDate(h.lastOrderAt)}`}
                   </span>
                 </span>
                 <span className="shrink-0 text-sm font-semibold tabular-nums text-lavender-700">{formatMoney(h.bonusBalance)}</span>
@@ -276,6 +287,36 @@ export function CustomerPanel({
         )}
       </div>
     </Panel>
+  );
+}
+
+/**
+ * Клиента нет в базе — добавить тут же: номер уже набран, имя по желанию.
+ * Карточка заводится только у нас, не в Posiflora (см. customer-actions).
+ */
+function NewCustomerForm({ phone, onCreated }: { phone: string; onCreated: (c: Customer) => void }) {
+  const toast = useToast();
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const full = phone.replace(/\D/g, "").replace(/^[78](?=\d{10}$)/, "").length === 10;
+
+  async function add() {
+    setBusy(true);
+    const result = await createCustomerAtTill(phone, name).catch(() => ({ success: false as const, error: "Не получилось — проверьте связь" }));
+    setBusy(false);
+    if (!result.success) return toast({ tone: "error", text: result.error });
+    onCreated({ id: result.data.id, name: result.data.name, phone: result.data.phone, bonusBalance: result.data.bonusBalance });
+  }
+
+  if (!full) return <p className={ui.muted}>Не нашли. Наберите номер целиком — и клиента можно будет добавить.</p>;
+  return (
+    <div className="space-y-2 rounded-xl bg-zinc-50 p-4">
+      <p className="text-sm text-zinc-700">Такого клиента ещё нет. Добавить?</p>
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя (можно не писать)" maxLength={80} className={ui.field} />
+      <button type="button" disabled={busy} onClick={add} className={`${ui.btnPrimary} w-full`}>
+        {busy ? "…" : "Добавить клиента"}
+      </button>
+    </div>
   );
 }
 
