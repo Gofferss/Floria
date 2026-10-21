@@ -45,7 +45,7 @@ export const WORK_NAV: NavItem[] = [
 ];
 
 export const OWNER_NAV: NavItem[] = [
-  { href: "/uchet/svodka", label: "Сводка", icon: ChartBarIcon, ready: false, ownerOnly: true },
+  { href: "/uchet/svodka", label: "Сводка", icon: ChartBarIcon, ready: true, ownerOnly: true },
   { href: "/uchet/katalog", label: "Каталог", icon: TagIcon, ready: false, ownerOnly: true },
   { href: "/uchet/dengi", label: "Деньги", icon: CardIcon, ready: false, ownerOnly: true },
   { href: "/uchet/klienty", label: "Клиенты", icon: UserIcon, ready: false, ownerOnly: true },
