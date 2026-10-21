@@ -167,11 +167,11 @@ function Scheme({ e, month, busy, run }: { e: EmployeePay; month: string; busy: 
                   value={p.value}
                   onChange={(ev) => setParts(parts.map((x, j) => (j === i ? { ...x, value: ev.target.value } : x)))}
                   placeholder={p.kind === "sales_percent" ? "5" : "50 000"}
-                  className={`${ui.fieldSm} w-32`}
+                  className={`${ui.fieldInline} w-32`}
                 />
                 <span className="text-sm text-zinc-600">{p.kind === "sales_percent" ? "%" : "₽"}</span>
                 {p.kind === "sales_percent" && (
-                  <select value={p.base} onChange={(ev) => setParts(parts.map((x, j) => (j === i ? { ...x, base: ev.target.value as SalesBase } : x)))} className={`${ui.fieldSm} w-auto flex-1`}>
+                  <select value={p.base} onChange={(ev) => setParts(parts.map((x, j) => (j === i ? { ...x, base: ev.target.value as SalesBase } : x)))} className={`${ui.fieldInline} min-w-0 flex-1`}>
                     {SALES_BASES.map((b) => (
                       <option key={b.base} value={b.base}>
                         {b.label}
@@ -319,8 +319,8 @@ function Adjustments({ e, month, busy, run }: { e: EmployeePay; month: string; b
             Удержание
           </button>
         </div>
-        <input inputMode="decimal" value={amount} onChange={(ev) => setAmount(ev.target.value)} placeholder="сумма" className={`${ui.fieldSm} w-28`} />
-        <input value={comment} onChange={(ev) => setComment(ev.target.value)} placeholder="за что" className={`${ui.fieldSm} min-w-[140px] flex-1`} />
+        <input inputMode="decimal" value={amount} onChange={(ev) => setAmount(ev.target.value)} placeholder="сумма" className={`${ui.fieldInline} w-28`} />
+        <input value={comment} onChange={(ev) => setComment(ev.target.value)} placeholder="за что" className={`${ui.fieldInline} min-w-[140px] flex-1`} />
         <button type="button" disabled={busy || !amount || !comment.trim()} onClick={add} className={`${ui.btnSecondary} min-h-[38px] px-4`}>
           Добавить
         </button>

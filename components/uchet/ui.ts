@@ -24,6 +24,9 @@ export const ui = {
     "w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-[15px] text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-lavender-500 focus:ring-2 focus:ring-lavender-500/20",
   fieldSm:
     "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-lavender-500 focus:ring-2 focus:ring-lavender-500/20",
+  /** То же поле, но своей ширины (w-20, w-28…): у fieldSm w-full перебил бы её. */
+  fieldInline:
+    "rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-lavender-500 focus:ring-2 focus:ring-lavender-500/20",
 
   btnPrimary:
     "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-lavender-600 px-5 text-sm font-semibold text-white transition hover:bg-lavender-700 disabled:cursor-not-allowed disabled:opacity-40",

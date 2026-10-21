@@ -175,7 +175,7 @@ export function ShopOrderForm({ order, methods, shiftOpen, onClose }: Props) {
                 {label}
               </button>
             ))}
-            <input id="order-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Дата" className={`${ui.fieldSm} w-auto`} />
+            <input id="order-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Дата" className={ui.fieldInline} />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {SLOTS.map((s) => (
@@ -194,8 +194,8 @@ export function ShopOrderForm({ order, methods, shiftOpen, onClose }: Props) {
             ))}
           </div>
           <div className="mt-2 flex items-center gap-2 text-sm text-zinc-600">
-            с <input type="time" value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} aria-label="Время с" className={`${ui.fieldSm} w-28`} />
-            до <input type="time" value={timeTo} onChange={(e) => setTimeTo(e.target.value)} aria-label="Время до" className={`${ui.fieldSm} w-28`} />
+            с <input type="time" value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} aria-label="Время с" className={`${ui.fieldInline} w-28`} />
+            до <input type="time" value={timeTo} onChange={(e) => setTimeTo(e.target.value)} aria-label="Время до" className={`${ui.fieldInline} w-28`} />
           </div>
         </div>
 

@@ -273,7 +273,7 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
           onGroup={setGroup}
           onAdd={addItem}
           onOpenVitrine={() => setDialog({ kind: "vitrine" })}
-          onPriceBouquet={() => setDialog({ kind: "priceBouquet" })}
+          onPriceBouquet={settings.compositionRequired ? undefined : () => setDialog({ kind: "priceBouquet" })}
         />
       </div>
 

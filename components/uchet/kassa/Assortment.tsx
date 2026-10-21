@@ -118,7 +118,8 @@ type Props = {
   onGroup: (g: string | null) => void;
   onAdd: (i: KassaItem) => void;
   onOpenVitrine: () => void;
-  onPriceBouquet: () => void;
+  /** Нет — продавать букет без состава запрещено в «Настройках», плитки нет. */
+  onPriceBouquet?: () => void;
 };
 
 export function Assortment({ assembly, items, groups, frequent, vitrine, query, onQuery, group, onGroup, onAdd, onOpenVitrine, onPriceBouquet }: Props) {
@@ -206,17 +207,19 @@ export function Assortment({ assembly, items, groups, frequent, vitrine, query, 
                   </span>
                 </span>
               </button>
-              <button
-                type="button"
-                onClick={onPriceBouquet}
-                className="flex min-h-[72px] items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-left ring-1 ring-inset ring-zinc-200 transition hover:ring-lavender-300"
-              >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lavender-50 font-display text-xl font-bold text-lavender-700">₽</span>
-                <span className="min-w-0">
-                  <span className="block font-display text-[15px] font-semibold text-zinc-900">Букет по цене</span>
-                  <span className="block text-xs text-zinc-500">ввести сумму, состав — по желанию</span>
-                </span>
-              </button>
+              {onPriceBouquet && (
+                <button
+                  type="button"
+                  onClick={onPriceBouquet}
+                  className="flex min-h-[72px] items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-left ring-1 ring-inset ring-zinc-200 transition hover:ring-lavender-300"
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lavender-50 font-display text-xl font-bold text-lavender-700">₽</span>
+                  <span className="min-w-0">
+                    <span className="block font-display text-[15px] font-semibold text-zinc-900">Букет по цене</span>
+                    <span className="block text-xs text-zinc-500">ввести сумму, состав — по желанию</span>
+                  </span>
+                </button>
+              )}
             </div>
           )}
 

@@ -50,7 +50,7 @@ export const OWNER_NAV: NavItem[] = [
   { href: "/uchet/dengi", label: "Деньги", icon: CardIcon, ready: false, ownerOnly: true },
   { href: "/uchet/klienty", label: "Клиенты", icon: UserIcon, ready: false, ownerOnly: true },
   { href: "/uchet/lyudi", label: "Сотрудники", icon: StarIcon, ready: true, ownerOnly: true },
-  { href: "/uchet/nastroiki", label: "Настройки", icon: EditIcon, ready: false, ownerOnly: true },
+  { href: "/uchet/nastroiki", label: "Настройки", icon: EditIcon, ready: true, ownerOnly: true },
 ];
 
 /** Курьеру — только его раздел: доставки, адреса, статусы. */

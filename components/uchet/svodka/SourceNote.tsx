@@ -45,7 +45,7 @@ export function SourceNote({ since, canSwitch, today }: { since: string | null; 
         open ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span>Считать по Учёту с</span>
-            <input type="date" value={day} onChange={(e) => setDay(e.target.value)} className={`${ui.fieldSm} w-auto`} />
+            <input type="date" value={day} onChange={(e) => setDay(e.target.value)} className={ui.fieldInline} />
             <button type="button" disabled={busy || !day} onClick={() => save(day)} className={`${ui.btnPrimary} min-h-[38px] px-4`}>
               Сохранить
             </button>

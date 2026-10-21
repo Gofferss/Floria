@@ -89,7 +89,7 @@ export function DeliveryPlanner({ day, stops, couriers, start, hasKey }: Props) 
             {label}
           </button>
         ))}
-        <input type="date" value={day} onChange={(e) => e.target.value && go(e.target.value)} aria-label="День" className={`${ui.fieldSm} w-auto`} />
+        <input type="date" value={day} onChange={(e) => e.target.value && go(e.target.value)} aria-label="День" className={ui.fieldInline} />
         <span className="ml-auto text-sm text-zinc-500">
           {stops.length} доставок · ещё не отвезено {active.length}
         </span>
