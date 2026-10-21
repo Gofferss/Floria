@@ -20,6 +20,12 @@ const TIMEOUT_MS = 4000;
 
 /** Ищем в Крыму: доставки бывают и за город. */
 const LOCATIONS = [{ region: "Крым" }];
+/**
+ * Симферополь — первым: без этого на «Ленина 1» первой подсказкой шло село
+ * Новопокровка, а за ним Евпатория (проверено 22.10.2026). Код города —
+ * из ответа самой DaData (city_kladr_id).
+ */
+const BOOST = [{ kladr_id: "9100000700000" }];
 
 export type GeoPoint = { lat: number; lon: number; quality: number; fullAddress: string };
 export type AddressSuggestion = { value: string };
@@ -37,7 +43,7 @@ async function ask(query: string, count: number): Promise<{ value: string; data:
     const res = await fetch(SUGGEST_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Token ${key}` },
-      body: JSON.stringify({ query: query.slice(0, 300), count, locations: LOCATIONS }),
+      body: JSON.stringify({ query: query.slice(0, 300), count, locations: LOCATIONS, locations_boost: BOOST }),
       signal: controller.signal,
       cache: "no-store",
     });
