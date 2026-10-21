@@ -461,3 +461,47 @@ export async function setDefaultLocation(locationId: string): Promise<Result> {
   revalidatePath("/uchet", "layout");
   return { success: true, data: undefined };
 }
+
+// ---------------------------------------------------------------
+// Фото позиции
+// ---------------------------------------------------------------
+
+const ITEM_PHOTO_BUCKET = "product-images";
+const MAX_ITEM_PHOTO_SIZE = 8 * 1024 * 1024;
+
+/**
+ * Фото позиции — чтобы в кассе и на складе находить её глазами. Файл уже
+ * ужат в браузере (lib/prepare-image.ts). Старое фото в хранилище не
+ * удаляем: его могли перенести из Posiflora, и оно может понадобиться.
+ */
+export async function uploadItemPhoto(itemId: string, formData: FormData): Promise<Result<{ url: string }>> {
+  await requireStaff();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { success: false, error: "Файл не выбран" };
+  if (!file.type.startsWith("image/")) return { success: false, error: "Можно загружать только фотографии" };
+  if (file.size > MAX_ITEM_PHOTO_SIZE) return { success: false, error: "Фото больше 8 МБ" };
+
+  const admin = getSupabaseAdmin();
+  const { data: item } = await admin.from("inv_items").select("id").eq("id", itemId).maybeSingle();
+  if (!item) return { success: false, error: "Позиция не найдена" };
+
+  const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const path = `inventory/${itemId}-${Date.now()}.${ext}`;
+  const { error: upError } = await admin.storage.from(ITEM_PHOTO_BUCKET).upload(path, file, { contentType: file.type, cacheControl: "3600", upsert: false });
+  if (upError) return { success: false, error: "Не удалось загрузить фото" };
+  const { data } = admin.storage.from(ITEM_PHOTO_BUCKET).getPublicUrl(path);
+
+  const { error } = await admin.from("inv_items").update({ photo_url: data.publicUrl }).eq("id", itemId);
+  if (error) return { success: false, error: "Фото загрузилось, но не привязалось к позиции" };
+
+  revalidateSklad();
+  return { success: true, data: { url: data.publicUrl } };
+}
+
+export async function removeItemPhoto(itemId: string): Promise<Result> {
+  await requireStaff();
+  const { error } = await getSupabaseAdmin().from("inv_items").update({ photo_url: null }).eq("id", itemId);
+  if (error) return { success: false, error: "Не удалось убрать фото" };
+  revalidateSklad();
+  return { success: true, data: undefined };
+}

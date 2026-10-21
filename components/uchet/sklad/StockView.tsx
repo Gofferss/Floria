@@ -11,7 +11,7 @@ import { GroupIcon } from "@/components/uchet/GroupIcon";
 import { useToast } from "@/components/uchet/Toast";
 import { ItemDrawer } from "@/components/uchet/sklad/ItemDrawer";
 
-type Chip = "all" | "instock" | "low" | "negative" | "stale" | "noprice" | "hidden";
+type Chip = "all" | "instock" | "low" | "negative" | "stale" | "noprice" | "nophoto" | "hidden";
 type SortKey = "title" | "qty" | "price" | "cost" | "value" | "moved";
 type Sort = { key: SortKey; dir: "asc" | "desc" };
 
@@ -22,6 +22,8 @@ const CHIPS: { key: Chip; label: string; tone?: "warn" | "bad" }[] = [
   { key: "negative", label: "В минусе", tone: "bad" },
   { key: "stale", label: "Залежалось", tone: "warn" },
   { key: "noprice", label: "Без цены" },
+  // Позиции без фото в кассе приходится искать по названию — их видно здесь.
+  { key: "nophoto", label: "Без фото" },
   { key: "hidden", label: "Скрытые" },
 ];
 
@@ -94,6 +96,8 @@ export function StockView({ rows, groups, reasons, withCosts, isTraining }: Prop
         return isStale(r);
       case "noprice":
         return r.isTracked && !r.salePrice;
+      case "nophoto":
+        return !r.photoUrl;
       default:
         return true;
     }

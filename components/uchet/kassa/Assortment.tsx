@@ -41,38 +41,62 @@ const STRIPE: Record<State, string> = {
   neg: "before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-red-500",
 };
 
-function ItemTile({ item, onAdd }: { item: KassaItem; onAdd: (i: KassaItem) => void }) {
+/**
+ * Плитка позиции: фото сверху — флорист находит эустому глазами, а не
+ * читая названия. Нет фото — значок группы, чтобы плитка не пустовала.
+ */
+function ItemTile({ item, icon, onAdd }: { item: KassaItem; icon: string | null; onAdd: (i: KassaItem) => void }) {
   const st = stockState(item);
   return (
     <button
       type="button"
       onClick={() => onAdd(item)}
-      className={`relative flex min-h-[64px] flex-col justify-between gap-1.5 overflow-hidden rounded-xl bg-white px-3 py-2 text-left ring-1 ring-inset ring-zinc-200 transition hover:ring-lavender-300 active:scale-[0.98] ${STRIPE[st]}`}
+      className={`relative flex flex-col overflow-hidden rounded-xl bg-white text-left ring-1 ring-inset ring-zinc-200 transition hover:ring-lavender-300 active:scale-[0.98] ${STRIPE[st]}`}
     >
-      {isOld(item) && (
-        <span className="absolute right-1.5 top-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900" title="Лежит дольше срока свежести — в работу первой">
-          {item.oldestDays} дн.
+      <span className="relative block aspect-[4/3] bg-zinc-100">
+        {item.photoUrl ? (
+          <Image src={item.photoUrl} alt="" fill sizes="(min-width: 1024px) 160px, 33vw" className="object-cover" />
+        ) : (
+          <span className="absolute inset-0 flex items-center justify-center text-zinc-300">
+            <GroupIcon icon={icon} className="h-9 w-9" />
+          </span>
+        )}
+        {isOld(item) && (
+          <span className="absolute right-1.5 top-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900" title="Лежит дольше срока свежести — в работу первой">
+            {item.oldestDays} дн.
+          </span>
+        )}
+      </span>
+      <span className="flex flex-1 flex-col justify-between gap-1 px-2.5 py-2">
+        <span className="line-clamp-2 text-[13px] font-semibold leading-tight text-zinc-900">{item.title}</span>
+        <span className="flex items-baseline justify-between gap-2 text-xs tabular-nums">
+          <span className="font-semibold text-zinc-900">{item.price ? formatMoney(item.price) : <span className="text-amber-700">без цены</span>}</span>
+          <span className={st === "neg" ? "font-semibold text-red-600" : st === "low" ? "font-semibold text-amber-700" : "text-zinc-500"}>{stockText(item)}</span>
         </span>
-      )}
-      <span className="pr-8 text-[13px] font-semibold leading-tight text-zinc-900">{item.title}</span>
-      <span className="flex items-baseline justify-between gap-2 text-xs tabular-nums">
-        <span className="font-semibold text-zinc-900">{item.price ? formatMoney(item.price) : <span className="text-amber-700">без цены</span>}</span>
-        <span className={st === "neg" ? "font-semibold text-red-600" : st === "low" ? "font-semibold text-amber-700" : "text-zinc-500"}>{stockText(item)}</span>
       </span>
     </button>
   );
 }
 
-/** Частые — одной строкой: название и цена. Остаток — только если с ним что-то не так. */
-function FrequentChip({ item, onAdd }: { item: KassaItem; onAdd: (i: KassaItem) => void }) {
+/** Частые — одной строкой: маленькое фото, название и цена. Остаток — только если с ним что-то не так. */
+function FrequentChip({ item, icon, onAdd }: { item: KassaItem; icon: string | null; onAdd: (i: KassaItem) => void }) {
   const st = stockState(item);
   const tag = st === "neg" ? stockText(item) : st === "low" ? "мало" : isOld(item) ? `${item.oldestDays} дн.` : null;
   return (
     <button
       type="button"
       onClick={() => onAdd(item)}
-      className={`relative flex h-10 items-center gap-2 overflow-hidden rounded-lg bg-white px-2.5 text-left text-[13px] ring-1 ring-inset ring-zinc-200 transition hover:ring-lavender-300 active:scale-[0.98] ${STRIPE[st]}`}
+      className={`relative flex h-11 items-center gap-2 overflow-hidden rounded-lg bg-white pl-1 pr-2.5 text-left text-[13px] ring-1 ring-inset ring-zinc-200 transition hover:ring-lavender-300 active:scale-[0.98] ${STRIPE[st]}`}
     >
+      <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-100">
+        {item.photoUrl ? (
+          <Image src={item.photoUrl} alt="" fill sizes="36px" className="object-cover" />
+        ) : (
+          <span className="absolute inset-0 flex items-center justify-center text-zinc-300">
+            <GroupIcon icon={icon} className="h-5 w-5" />
+          </span>
+        )}
+      </span>
       <span className="min-w-0 flex-1 truncate font-medium text-zinc-900">{item.title}</span>
       {tag && (
         <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${st === "neg" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900"}`}>{tag}</span>
@@ -101,6 +125,8 @@ export function Assortment({ assembly, items, groups, frequent, vitrine, query, 
   // В сборку на витрину кладут только то, что ведётся по складу и идёт в букет.
   const pool = assembly ? items.filter((i) => i.isTracked && !i.standalone) : items;
   const byId = new Map(pool.map((i) => [i.id, i]));
+  const groupIcon = new Map(groups.map((g) => [g.id, g.icon]));
+  const iconOf = (i: KassaItem) => (i.groupId ? groupIcon.get(i.groupId) ?? null : null);
   const q = query.trim().toLowerCase();
 
   const found = q ? pool.filter((i) => i.title.toLowerCase().includes(q)).slice(0, 60) : null;
@@ -133,9 +159,9 @@ export function Assortment({ assembly, items, groups, frequent, vitrine, query, 
         <section className="mt-4">
           <h2 className={`${ui.label} mb-2`}>Найдено: {found.length}</h2>
           {found.length ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(136px,1fr))] gap-2">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-2">
               {found.map((i) => (
-                <ItemTile key={i.id} item={i} onAdd={onAdd} />
+                <ItemTile key={i.id} item={i} icon={iconOf(i)} onAdd={onAdd} />
               ))}
             </div>
           ) : (
@@ -150,9 +176,9 @@ export function Assortment({ assembly, items, groups, frequent, vitrine, query, 
               ← все группы
             </button>
           </div>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(136px,1fr))] gap-2">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-2">
             {inGroup.map((i) => (
-              <ItemTile key={i.id} item={i} onAdd={onAdd} />
+              <ItemTile key={i.id} item={i} icon={iconOf(i)} onAdd={onAdd} />
             ))}
           </div>
         </section>
@@ -199,7 +225,7 @@ export function Assortment({ assembly, items, groups, frequent, vitrine, query, 
               <h2 className={`${ui.label} mb-2`}>Частые</h2>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-1.5">
                 {freq.map((i) => (
-                  <FrequentChip key={i.id} item={i} onAdd={onAdd} />
+                  <FrequentChip key={i.id} item={i} icon={iconOf(i)} onAdd={onAdd} />
                 ))}
               </div>
             </section>

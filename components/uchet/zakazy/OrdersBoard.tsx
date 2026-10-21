@@ -131,16 +131,18 @@ export function OrdersBoard({ work, awaitingPayment, doneToday, methods, shiftOp
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [showUnpaid, setShowUnpaid] = useState(false);
+  const [kind, setKind] = useState<"all" | "delivery" | "pickup">("all");
+  const fits = (o: WorkOrder) => kind === "all" || (kind === "pickup" ? o.isPickup : !o.isPickup);
 
   const today = now?.today ?? "";
   const tomorrow = today ? new Date(new Date(`${today}T12:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10) : "";
   const byTime = (a: WorkOrder, b: WorkOrder) => (a.date + (a.timeFrom ?? "00:00")).localeCompare(b.date + (b.timeFrom ?? "00:00"));
 
   const columns = [
-    { key: "overdue", title: "Просрочены", list: work.filter((o) => today && o.date < today) },
-    { key: "today", title: "Сегодня", list: work.filter((o) => o.date === today) },
-    { key: "tomorrow", title: "Завтра", list: work.filter((o) => o.date === tomorrow) },
-    { key: "later", title: "Позже", list: work.filter((o) => tomorrow && o.date > tomorrow) },
+    { key: "overdue", title: "Просрочены", list: work.filter((o) => fits(o) && today && o.date < today) },
+    { key: "today", title: "Сегодня", list: work.filter((o) => fits(o) && o.date === today) },
+    { key: "tomorrow", title: "Завтра", list: work.filter((o) => fits(o) && o.date === tomorrow) },
+    { key: "later", title: "Позже", list: work.filter((o) => fits(o) && tomorrow && o.date > tomorrow) },
   ].filter((c) => c.key !== "overdue" || c.list.length > 0);
 
   const all = [...work, ...awaitingPayment, ...doneToday];
@@ -149,7 +151,19 @@ export function OrdersBoard({ work, awaitingPayment, doneToday, methods, shiftOp
   return (
     <div className={ui.page}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className={ui.muted}>Заказы с сайта и из магазина — вместе, по дням.</p>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Какие заказы">
+          {(
+            [
+              ["all", `Все · ${work.length}`],
+              ["delivery", `Доставка · ${work.filter((o) => !o.isPickup).length}`],
+              ["pickup", `Самовывоз · ${work.filter((o) => o.isPickup).length}`],
+            ] as ["all" | "delivery" | "pickup", string][]
+          ).map(([k, label]) => (
+            <button key={k} type="button" onClick={() => setKind(k)} aria-pressed={kind === k} className={`${ui.chip} ${kind === k ? ui.chipOn : ui.chipOff}`}>
+              {label}
+            </button>
+          ))}
+        </div>
         <button type="button" onClick={() => setCreating(true)} className={`${ui.btnPrimary} min-h-[48px]`}>
           + Заказ
         </button>
@@ -175,7 +189,7 @@ export function OrdersBoard({ work, awaitingPayment, doneToday, methods, shiftOp
 
       {doneToday.length > 0 && (
         <section className="mt-8">
-          <h2 className={`${ui.label} mb-2`}>Доставлены сегодня · {doneToday.length}</h2>
+          <h2 className={`${ui.label} mb-2`}>Выполнены сегодня · {doneToday.length}</h2>
           <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
             {doneToday.map((o) => (
               <OrderCard key={o.id} o={o} urgent={false} overdue={false} onOpen={() => setOpenId(o.id)} />
@@ -211,7 +225,7 @@ export function OrdersBoard({ work, awaitingPayment, doneToday, methods, shiftOp
   );
 }
 
-function OrderPanel({ order: o, onClose }: { order: WorkOrder; onClose: () => void }) {
+export function OrderPanel({ order: o, onClose }: { order: WorkOrder; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState(false);

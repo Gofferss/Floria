@@ -45,11 +45,20 @@ export type WorkOrder = {
   photos: string[];
   photosSentAt: string | null;
   items: { name: string; qty: number }[];
+  /** Когда закрыт: доставлен, выдан или отменён. */
+  closedAt: string | null;
+  /** Почему отменён — у заказов магазина. */
+  cancelReason: string | null;
 };
 
 const ACTIVE: WorkOrderStatus[] = ["new", "confirmed", "assembling", "ready", "delivering"];
 
 const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Simferopol" });
+
+/** Начало дня по Симферополю (UTC+3 круглый год) — для выборок «за день». */
+export function dayStart(day: string): string {
+  return `${day}T00:00:00+03:00`;
+}
 
 /** «2026-10-22» по Симферополю, со сдвигом в днях. */
 export function studioDate(offsetDays = 0): string {
@@ -86,6 +95,7 @@ type Row = {
   florist_accepted_at: string | null;
   assembled_photos: string[] | null;
   assembled_photo_sent_at: string | null;
+  updated_at: string;
   order_items: { product_name: string; quantity: number }[] | null;
 };
 
@@ -93,7 +103,7 @@ const SELECT =
   "id, order_number, status, payment_status, is_pickup, delivery_date, delivery_time_from, delivery_time_to, delivery_address, " +
   "delivery_apartment, delivery_entrance, delivery_floor, delivery_intercom_code, recipient_name, recipient_phone, customer_name, " +
   "customer_phone, is_recipient_self, card_text, courier_comment, admin_comment, total_amount, florist_accepted_at, assembled_photos, " +
-  "assembled_photo_sent_at, order_items(product_name, quantity)";
+  "assembled_photo_sent_at, updated_at, order_items(product_name, quantity)";
 
 function toWorkOrder(r: Row): WorkOrder {
   const extra = [
@@ -133,6 +143,9 @@ function toWorkOrder(r: Row): WorkOrder {
     photos: r.assembled_photos ?? [],
     photosSentAt: r.assembled_photo_sent_at,
     items: (r.order_items ?? []).map((i) => ({ name: i.product_name, qty: i.quantity })),
+    // У заказа сайта отдельной отметки нет — берём последнее изменение.
+    closedAt: r.status === "completed" || r.status === "cancelled" ? r.updated_at : null,
+    cancelReason: null,
   };
 }
 
@@ -159,13 +172,15 @@ type ShopRow = {
   wishes: string | null;
   courier_comment: string | null;
   total: number | string;
+  closed_at: string | null;
+  cancel_reason: string | null;
   pos_bouquets: { title: string; photo_urls: string[] | null; status: string }[] | null;
   pos_sale_lines: { amount: number | string; pos_sales: { status: string } | { status: string }[] | null }[] | null;
 };
 
 const SHOP_SELECT =
   "id, order_no, status, channel, customer_name, customer_phone, recipient_name, recipient_phone, is_pickup, delivery_address, " +
-  "delivery_details, delivery_date, time_from, time_to, card_text, wishes, courier_comment, total, " +
+  "delivery_details, delivery_date, time_from, time_to, card_text, wishes, courier_comment, total, closed_at, cancel_reason, " +
   "pos_bouquets(title, photo_urls, status), pos_sale_lines(amount, pos_sales(status))";
 
 function toShopOrder(r: ShopRow): WorkOrder {
@@ -203,6 +218,8 @@ function toShopOrder(r: ShopRow): WorkOrder {
     photos: bouquets.flatMap((b) => b.photo_urls ?? []),
     photosSentAt: null,
     items: bouquets.map((b) => ({ name: b.title, qty: 1 })),
+    closedAt: r.closed_at,
+    cancelReason: r.cancel_reason,
   };
 }
 
@@ -226,9 +243,9 @@ export async function listWorkOrders(
   const today = studioDate(0);
   const [active, done, shopActive, shopDone] = await Promise.all([
     admin.from("orders").select(SELECT).in("status", ACTIVE).limit(300),
-    admin.from("orders").select(SELECT).eq("status", "completed").eq("delivery_date", today).limit(100),
+    admin.from("orders").select(SELECT).eq("status", "completed").gte("updated_at", dayStart(today)).limit(100),
     admin.from("pos_orders").select(SHOP_SELECT).eq("location_id", locationId).in("status", ACTIVE).limit(300),
-    admin.from("pos_orders").select(SHOP_SELECT).eq("location_id", locationId).eq("status", "completed").eq("delivery_date", today).limit(100),
+    admin.from("pos_orders").select(SHOP_SELECT).eq("location_id", locationId).eq("status", "completed").gte("closed_at", dayStart(today)).limit(100),
   ]);
   for (const r of [active, done, shopActive, shopDone]) if (r.error) throw new Error(`Заказы: ${r.error.message}`);
 
@@ -267,4 +284,88 @@ export async function listDeliveries(days: string[], locationId: string): Promis
     ...((site.data ?? []) as unknown as Row[]).map(toWorkOrder),
     ...((shop.data ?? []) as unknown as ShopRow[]).map(toShopOrder),
   ].sort(byTime);
+}
+
+// ---------------------------------------------------------------
+// Выполненные и отменённые
+// ---------------------------------------------------------------
+
+/**
+ * Закрытые заказы за последние дни: доставлены, выданы, отменены — с
+ * сайта и из магазина. Отсюда же видно долги: заказ магазина отдали, а
+ * оплатили не всё.
+ */
+export async function listClosedOrders(locationId: string, days = 14): Promise<WorkOrder[]> {
+  const admin = getSupabaseAdmin();
+  const since = dayStart(studioDate(-days));
+  const [site, shop] = await Promise.all([
+    admin.from("orders").select(SELECT).in("status", ["completed", "cancelled"]).gte("updated_at", since).limit(500),
+    admin.from("pos_orders").select(SHOP_SELECT).eq("location_id", locationId).in("status", ["completed", "cancelled"]).gte("closed_at", since).limit(500),
+  ]);
+  if (site.error) throw new Error(`Выполненные заказы: ${site.error.message}`);
+  if (shop.error) throw new Error(`Выполненные заказы: ${shop.error.message}`);
+  return [
+    ...((site.data ?? []) as unknown as Row[]).map(toWorkOrder),
+    ...((shop.data ?? []) as unknown as ShopRow[]).map(toShopOrder),
+  ].sort((a, b) => (b.closedAt ?? "").localeCompare(a.closedAt ?? ""));
+}
+
+// ---------------------------------------------------------------
+// Продажи в зале
+// ---------------------------------------------------------------
+
+export type HallSale = {
+  id: string;
+  saleNo: string;
+  at: string;
+  status: "paid" | "returned";
+  total: number;
+  discountPercent: number;
+  who: string | null;
+  lines: { kind: string; title: string; qty: number; amount: number; orderNo: string | null }[];
+  payments: { title: string; amount: number }[];
+};
+
+/** Все чеки дня в этом месте — продажи в зале и оплаты заказов. */
+export async function listHallSales(locationId: string, day: string): Promise<HallSale[]> {
+  const next = new Date(new Date(`${day}T12:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
+  const { data, error } = await getSupabaseAdmin()
+    .from("pos_sales")
+    .select(
+      "id, sale_no, created_at, status, total, discount_percent, hr_employees!pos_sales_employee_id_fkey(short_name), " +
+        "pos_sale_lines(kind, title, qty, amount, sort, pos_orders(order_no)), pos_payments(amount, pos_payment_methods(title))"
+    )
+    .eq("location_id", locationId)
+    .gte("created_at", dayStart(day))
+    .lt("created_at", dayStart(next))
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`Продажи за день: ${error.message}`);
+
+  type One<T> = T | T[] | null;
+  const first = <T,>(v: One<T>): T | null => (Array.isArray(v) ? v[0] ?? null : v);
+  type SaleRow = {
+    id: string;
+    sale_no: string;
+    created_at: string;
+    status: "paid" | "returned";
+    total: number | string;
+    discount_percent: number | string;
+    hr_employees: One<{ short_name: string }>;
+    pos_sale_lines: { kind: string; title: string; qty: number | string; amount: number | string; sort: number; pos_orders: One<{ order_no: string }> }[];
+    pos_payments: { amount: number | string; pos_payment_methods: One<{ title: string }> }[];
+  };
+
+  return ((data ?? []) as unknown as SaleRow[]).map((r) => ({
+    id: r.id,
+    saleNo: r.sale_no,
+    at: r.created_at,
+    status: r.status,
+    total: Number(r.total) || 0,
+    discountPercent: Number(r.discount_percent) || 0,
+    who: first(r.hr_employees)?.short_name ?? null,
+    lines: [...r.pos_sale_lines]
+      .sort((a, b) => a.sort - b.sort)
+      .map((l) => ({ kind: l.kind, title: l.title, qty: Number(l.qty) || 1, amount: Number(l.amount) || 0, orderNo: first(l.pos_orders)?.order_no ?? null })),
+    payments: r.pos_payments.map((p) => ({ title: first(p.pos_payment_methods)?.title ?? "—", amount: Number(p.amount) || 0 })),
+  }));
 }

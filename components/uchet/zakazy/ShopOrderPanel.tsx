@@ -61,6 +61,9 @@ export function ShopOrderPanel({ order: o, methods, shiftOpen, onClose }: Props)
   const path = o.isPickup ? ["new", "assembling", "ready", "completed"] : ["new", "assembling", "ready", "delivering", "completed"];
   const at = path.indexOf(o.status);
   const closed = o.status === "completed" || o.status === "cancelled";
+  // Выданный заказ с недоплатой — это долг: оплату по нему принимать можно.
+  const canPay = rest > 0 && o.status !== "cancelled";
+  const debt = rest > 0 && o.status === "completed";
   const assembleHref = `/uchet/kassa?mode=assembly&order=${o.id}`;
 
   async function step(to: "assembling" | "ready" | "delivering" | "completed") {
@@ -166,8 +169,9 @@ export function ShopOrderPanel({ order: o, methods, shiftOpen, onClose }: Props)
           <p className="text-base font-bold">
             {rest === 0 ? `Оплачено ${formatMoney(o.total)}` : o.paidAmount > 0 ? `Внесено ${formatMoney(o.paidAmount)} из ${formatMoney(o.total)}` : `Не оплачено · ${formatMoney(o.total)}`}
           </p>
-          {rest > 0 && <p className="text-sm">Осталось {formatMoney(rest)}</p>}
-          {rest > 0 && !closed && (
+          {rest > 0 && o.status !== "cancelled" && <p className="text-sm">{debt ? `Долг ${formatMoney(rest)} — заказ уже выдан` : `Осталось ${formatMoney(rest)}`}</p>}
+          {o.status === "cancelled" && <p className="text-sm">Заказ отменён{o.cancelReason ? `: ${o.cancelReason}` : ""}</p>}
+          {canPay && (
             <button
               type="button"
               onClick={() => {
@@ -180,7 +184,7 @@ export function ShopOrderPanel({ order: o, methods, shiftOpen, onClose }: Props)
               Принять оплату
             </button>
           )}
-          {rest > 0 && !closed && !shiftOpen && <p className="mt-2 text-xs">Чтобы принять оплату, откройте смену.</p>}
+          {canPay && !shiftOpen && <p className="mt-2 text-xs">Чтобы принять оплату, откройте смену.</p>}
         </div>
 
         <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 text-sm">

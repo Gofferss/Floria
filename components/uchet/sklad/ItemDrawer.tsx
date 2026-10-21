@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { patchItem, quickAction, reverseDocument } from "@/lib/uchet/actions";
@@ -9,6 +8,7 @@ import type { GroupOption, ReasonOption, StockRow } from "@/lib/uchet/queries";
 import { PAYMENT_LABEL, daysLabel, daysSince, formatMoney, formatQty, type PaymentMethod } from "@/lib/uchet/format";
 import { ui } from "@/components/uchet/ui";
 import { useToast } from "@/components/uchet/Toast";
+import { ItemPhoto } from "@/components/uchet/sklad/ItemPhoto";
 
 type Tab = "writeoff" | "receipt" | "count" | "edit";
 
@@ -166,9 +166,7 @@ export function ItemDrawer({ row, groups, reasons, withCosts, isTraining, onClos
 
       <aside className="relative flex h-full w-full max-w-[440px] flex-col bg-white shadow-2xl">
         <div className="flex items-start gap-4 border-b border-zinc-200 p-5">
-          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
-            {row.photoUrl && <Image src={row.photoUrl} alt="" fill sizes="64px" className="object-cover" />}
-          </div>
+          <ItemPhoto itemId={row.id} photoUrl={row.photoUrl} title={row.title} />
           <div className="min-w-0 flex-1">
             <h2 className="font-display text-base font-semibold leading-snug text-zinc-900">{row.title}</h2>
             <p className="mt-0.5 text-sm text-zinc-500">

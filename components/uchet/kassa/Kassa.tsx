@@ -100,6 +100,20 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
       current = { ...current, vitrine: current.vitrine.filter((v) => onVitrine.has(v.bouquetId)) };
       toast({ tone: "error", text: `«${gone[0].title}» уже не на витрине — убран из чека` });
     }
+    // Позиции, которых в кассе больше нет (скрыли на складе), тоже убираем:
+    // иначе в чеке висела бы строка «—», которую не продать.
+    const known = (id: string) => index.has(id);
+    const lost =
+      current.items.filter((l) => !known(l.itemId)).length +
+      current.bouquets.reduce((n, b) => n + b.stems.filter((s) => !known(s.itemId)).length, 0);
+    if (lost) {
+      current = {
+        ...current,
+        items: current.items.filter((l) => known(l.itemId)),
+        bouquets: current.bouquets.map((b) => ({ ...b, stems: b.stems.filter((s) => known(s.itemId)) })),
+      };
+      toast({ tone: "error", text: "Часть позиций из отложенного чека скрыли на складе — они убраны из чека" });
+    }
     if (addVitrineId && !current.vitrine.some((v) => v.bouquetId === addVitrineId)) {
       const b = vitrine.find((v) => v.id === addVitrineId);
       if (b) current = { ...current, vitrine: [...current.vitrine, vitrineLine(b)] };

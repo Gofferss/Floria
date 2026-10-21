@@ -306,6 +306,8 @@ export type KassaItem = {
   standalone: boolean;
   oldestDays: number | null;
   freshDays: number | null;
+  /** Фото — чтобы находить глазами, а не читать названия. */
+  photoUrl: string | null;
 };
 
 export type KassaGroup = { id: string; title: string; icon: string | null; kind: string };
@@ -320,7 +322,7 @@ export async function listKassaAssortment(
   const [items, groups, fresh, freq] = await Promise.all([
     admin
       .from("inv_items")
-      .select("id, title, group_id, sale_price, min_qty, is_tracked, fresh_days, inv_groups(kind), inv_stock(qty, location_id), inv_posiflora_snapshot(qty, movements)")
+      .select("id, title, group_id, sale_price, min_qty, is_tracked, fresh_days, photo_url, inv_groups(kind), inv_stock(qty, location_id), inv_posiflora_snapshot(qty, movements)")
       .eq("is_active", true)
       .order("title")
       .limit(2000),
@@ -349,6 +351,7 @@ export async function listKassaAssortment(
     min_qty: number | string | null;
     is_tracked: boolean;
     fresh_days: number | null;
+    photo_url: string | null;
     inv_groups: { kind: string } | { kind: string }[] | null;
     inv_stock: { qty: number | string; location_id: string }[] | null;
     inv_posiflora_snapshot: { qty: number | string; movements: number | null } | { qty: number | string; movements: number | null }[] | null;
@@ -372,6 +375,7 @@ export async function listKassaAssortment(
       standalone: STANDALONE_KINDS.has(kind) || !r.is_tracked,
       oldestDays: freshMap.get(r.id) ?? null,
       freshDays: r.fresh_days,
+      photoUrl: r.photo_url,
     };
   });
 
