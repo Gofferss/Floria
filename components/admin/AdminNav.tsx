@@ -4,7 +4,8 @@ import { LogoutButton } from "@/components/auth/LogoutButton";
 const NAV_LINKS = [
   { href: "/admin", label: "Дашборд" },
   { href: "/admin/orders", label: "Заказы" },
-  { href: "/admin/sklad", label: "Склад" },
+  // Учёт — отдельное приложение со своим каркасом, отсюда только вход в него.
+  { href: "/uchet", label: "Учёт ↗" },
   { href: "/admin/blog", label: "Блог" },
   { href: "/admin/catalog", label: "Каталог" },
   { href: "/admin/categories", label: "Категории" },

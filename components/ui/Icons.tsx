@@ -1,4 +1,3 @@
-import { statfsSync } from "fs";
 
 type IconProps = {
   className?: string;

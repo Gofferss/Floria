@@ -12,10 +12,10 @@ import {
   type DocStatus,
   type DocType,
 } from "@/lib/uchet/format";
-import { SkladHeader } from "@/components/admin/sklad/SkladHeader";
+import { SkladHeader } from "@/components/uchet/sklad/SkladHeader";
 
 export const metadata: Metadata = {
-  title: "Документы склада — Админка Floria",
+  title: "Документы склада",
 };
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export default async function SkladDocsPage({
   searchParams: Promise<{ type?: string; status?: string }>;
 }) {
   const params = await searchParams;
-  const staff = await requireStaffUser();
+  const staff = await requireStaffUser("/uchet/sklad");
   const withCosts = canSeeCosts(staff.role);
 
   const type = DOC_TYPES.includes(params.type as DocType) ? (params.type as DocType) : undefined;
@@ -46,7 +46,7 @@ export default async function SkladDocsPage({
     if (t) q.set("type", t);
     if (s) q.set("status", s);
     const qs = q.toString();
-    return `/admin/sklad/docs${qs ? `?${qs}` : ""}`;
+    return `/uchet/sklad/docs${qs ? `?${qs}` : ""}`;
   };
 
   const chip = (active: boolean) =>
@@ -55,7 +55,7 @@ export default async function SkladDocsPage({
     }`;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+    <div className="mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 lg:px-8">
       <SkladHeader active="docs" title="Документы" subtitle="Каждое изменение остатка — здесь. Проведённое не правится, ошибку исправляет сторно." />
 
       <div className="flex flex-wrap gap-2">
@@ -79,18 +79,18 @@ export default async function SkladDocsPage({
       </div>
 
       {docs.length === 0 ? (
-        <div className="mt-6 rounded-3xl border border-dashed border-lavender-200 px-6 py-16 text-center">
+        <div className="mt-6 rounded-2xl border border-dashed border-zinc-300 px-6 py-16 text-center">
           <p className="font-display text-lg font-semibold text-ink">Документов пока нет</p>
           <p className="mt-2 font-body text-sm text-ink/55">
             Первый приход — кнопка «Приход» справа вверху.
           </p>
         </div>
       ) : (
-        <div className="mt-6 overflow-hidden rounded-3xl border border-lavender-100 bg-white">
+        <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left">
               <thead>
-                <tr className="border-b border-lavender-100 bg-lavender-50/60">
+                <tr className="border-b border-zinc-200 bg-zinc-50">
                   <th className="px-5 py-3 font-display text-xs font-semibold uppercase tracking-wide text-ink/50">Документ</th>
                   <th className="px-4 py-3 font-display text-xs font-semibold uppercase tracking-wide text-ink/50">Дата</th>
                   <th className="px-4 py-3 font-display text-xs font-semibold uppercase tracking-wide text-ink/50">Подробности</th>
@@ -103,9 +103,9 @@ export default async function SkladDocsPage({
               </thead>
               <tbody>
                 {docs.map((d) => (
-                  <tr key={d.id} className="border-b border-lavender-50 last:border-0 hover:bg-lavender-50/40">
+                  <tr key={d.id} className="border-b border-zinc-100 last:border-0 hover:bg-lavender-50/60">
                     <td className="px-5 py-3">
-                      <Link href={`/admin/sklad/docs/${d.id}`} className="font-mono text-sm font-medium text-ink hover:text-gold-700">
+                      <Link href={`/uchet/sklad/docs/${d.id}`} className="font-mono text-sm font-medium text-ink hover:text-lavender-700">
                         {d.docNo}
                       </Link>
                       <span className="ml-2 font-body text-xs text-ink/50">

@@ -1,5 +1,6 @@
 "use client";
 
+import { safeRedirect } from "@/lib/auth/safe-redirect";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/auth/client";
@@ -16,7 +17,7 @@ import { ArrowRightIcon } from "@/components/ui/Icons";
 export function StaffLoginView() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirect") || "/admin";
+  const redirectTo = safeRedirect(searchParams.get("redirect"), "/admin");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getStaffUser } from "@/lib/auth/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { canPostOpening } from "@/lib/uchet/access";
+import { canPostOpening, canSeeCosts } from "@/lib/uchet/access";
 import { KINDS, PAYMENT_METHODS, type DocType, type GroupKind, type PaymentMethod } from "@/lib/uchet/format";
 
 // ================================================================
@@ -32,7 +32,7 @@ function dbMessage(error: { message?: string } | null | undefined, fallback: str
 }
 
 function revalidateSklad() {
-  revalidatePath("/admin/sklad", "layout");
+  revalidatePath("/uchet", "layout");
 }
 
 function optionalNumber(value: number | null | undefined): number | null {
@@ -292,4 +292,146 @@ export async function saveReason(input: ReasonInput): Promise<Result<{ id: strin
   }
   revalidateSklad();
   return { success: true, data: { id: data.id } };
+}
+
+// ---------------------------------------------------------------
+// Быстрые действия из списка — не заходя в позицию
+// ---------------------------------------------------------------
+
+/**
+ * Одна позиция — одно действие: «списать 3, завяли». Внутри это обычный
+ * документ из одной строки, сразу проведённый. Так журнал остаётся
+ * честным (у каждого изменения есть номер и автор), а человеку не нужно
+ * открывать форму документа ради одной строки.
+ */
+export type QuickAction =
+  | { kind: "writeoff"; itemId: string; qty: number; reasonId: string; comment?: string }
+  | { kind: "receipt"; itemId: string; qty: number; unitCost: number; paymentMethod: PaymentMethod | null; supplierId?: string | null }
+  | { kind: "count"; itemId: string; counted: number };
+
+export async function quickAction(action: QuickAction): Promise<Result<{ id: string; docNo: string }>> {
+  const base: Omit<DraftInput, "docType" | "lines"> = {
+    docDate: null,
+    supplierId: null,
+    writeoffReasonId: null,
+    paymentMethod: null,
+    comment: null,
+  };
+
+  let input: DraftInput;
+  if (action.kind === "writeoff") {
+    input = {
+      ...base,
+      docType: "writeoff",
+      writeoffReasonId: action.reasonId,
+      comment: action.comment?.trim() || null,
+      lines: [{ itemId: action.itemId, qty: action.qty, unitCost: null }],
+    };
+  } else if (action.kind === "receipt") {
+    input = {
+      ...base,
+      docType: "receipt",
+      paymentMethod: action.paymentMethod,
+      supplierId: action.supplierId ?? null,
+      lines: [{ itemId: action.itemId, qty: action.qty, unitCost: action.unitCost }],
+    };
+  } else {
+    input = {
+      ...base,
+      docType: "inventory",
+      comment: "Пересчёт одной позиции",
+      lines: [{ itemId: action.itemId, qty: action.counted, unitCost: null }],
+    };
+  }
+
+  const result = await saveAndPost(input);
+  if (!result.success) return { success: false, error: result.error };
+
+  const { data } = await getSupabaseAdmin().from("inv_documents").select("doc_no").eq("id", result.data.id).maybeSingle();
+  return { success: true, data: { id: result.data.id, docNo: data?.doc_no ?? "" } };
+}
+
+export type ItemPatch = Partial<{
+  salePrice: number | null;
+  minQty: number | null;
+  freshDays: number | null;
+  groupId: string | null;
+  isActive: boolean;
+  title: string;
+}>;
+
+/** Поправить одно-два поля позиции прямо из панели, без формы целиком. */
+export async function patchItem(id: string, patch: ItemPatch): Promise<Result> {
+  await requireStaff();
+
+  const row: Record<string, unknown> = {};
+  if ("title" in patch) {
+    const title = (patch.title ?? "").replace(/\s+/g, " ").trim();
+    if (!title) return { success: false, error: "Название не может быть пустым" };
+    row.title = title;
+  }
+  if ("salePrice" in patch) {
+    const v = optionalNumber(patch.salePrice);
+    if (v !== null && v < 0) return { success: false, error: "Цена не может быть отрицательной" };
+    row.sale_price = v;
+  }
+  if ("minQty" in patch) {
+    const v = optionalNumber(patch.minQty);
+    if (v !== null && v < 0) return { success: false, error: "Минимум не может быть отрицательным" };
+    row.min_qty = v;
+  }
+  if ("freshDays" in patch) {
+    const v = optionalNumber(patch.freshDays);
+    if (v !== null && (v <= 0 || !Number.isInteger(v))) return { success: false, error: "Срок свежести — целое число дней больше нуля" };
+    row.fresh_days = v;
+  }
+  if ("groupId" in patch) row.group_id = patch.groupId || null;
+  if ("isActive" in patch) row.is_active = !!patch.isActive;
+  if (Object.keys(row).length === 0) return { success: true, data: undefined };
+
+  const { error } = await getSupabaseAdmin().from("inv_items").update(row).eq("id", id);
+  if (error) return { success: false, error: dbMessage(error, "Не удалось сохранить") };
+
+  revalidateSklad();
+  return { success: true, data: undefined };
+}
+
+/** Массовые правки отмеченных позиций — только владельцу. */
+export async function bulkUpdateItems(
+  ids: string[],
+  patch: { groupId?: string | null; isActive?: boolean }
+): Promise<Result<{ count: number }>> {
+  const staff = await requireStaff();
+  if (!canSeeCosts(staff.role)) return { success: false, error: "Массовые правки доступны владельцу" };
+  if (ids.length === 0) return { success: false, error: "Ничего не отмечено" };
+  if (ids.length > 1000) return { success: false, error: "Слишком много позиций за раз" };
+
+  const row: Record<string, unknown> = {};
+  if ("groupId" in patch) row.group_id = patch.groupId || null;
+  if ("isActive" in patch) row.is_active = !!patch.isActive;
+  if (Object.keys(row).length === 0) return { success: false, error: "Нечего менять" };
+
+  const { error, count } = await getSupabaseAdmin()
+    .from("inv_items")
+    .update(row, { count: "exact" })
+    .in("id", ids);
+  if (error) return { success: false, error: dbMessage(error, "Не удалось сохранить") };
+
+  revalidateSklad();
+  return { success: true, data: { count: count ?? ids.length } };
+}
+
+/**
+ * Запуск учёта: основное место хранения — «Магазин» вместо «Тренировки».
+ * После этого все документы идут в настоящий журнал. Только владельцу.
+ */
+export async function setDefaultLocation(locationId: string): Promise<Result> {
+  const staff = await requireStaff();
+  if (!canSeeCosts(staff.role)) return { success: false, error: "Запускать учёт может только владелец" };
+
+  const { error } = await getSupabaseAdmin().rpc("inv_set_default_location", { p_location: locationId });
+  if (error) return { success: false, error: dbMessage(error, "Не удалось переключить место хранения") };
+
+  revalidatePath("/uchet", "layout");
+  return { success: true, data: undefined };
 }

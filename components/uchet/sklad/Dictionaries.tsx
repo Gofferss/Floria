@@ -14,9 +14,9 @@ import { KINDS, KIND_LABEL, type GroupKind } from "@/lib/uchet/format";
 // ================================================================
 
 const field =
-  "w-full rounded-xl border border-lavender-200 bg-lavender-50 px-3 py-2 font-body text-sm text-ink outline-none focus:border-gold-400 focus:bg-white";
+  "w-full rounded-xl border border-zinc-300 bg-lavender-50 px-3 py-2 font-body text-sm text-ink outline-none focus:border-gold-400 focus:bg-white";
 const saveBtn =
-  "rounded-full bg-gold-500 px-4 py-2 font-display text-xs font-semibold text-white transition hover:bg-gold-600 disabled:opacity-40";
+  "rounded-full bg-lavender-600 px-4 py-2 font-display text-xs font-semibold text-white transition hover:bg-lavender-700 disabled:opacity-40";
 
 type SaveResult = { success: true } | { success: false; error: string };
 
@@ -39,7 +39,7 @@ function useSave() {
 
 function Section({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-3xl border border-lavender-100 bg-white p-6 sm:p-8">
+    <section className="rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8">
       <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
       <p className="mt-1 max-w-2xl font-body text-sm text-ink/55">{hint}</p>
       <div className="mt-5">{children}</div>
@@ -67,7 +67,7 @@ function GroupRow({ group }: { group: GroupOption }) {
         ))}
       </select>
       <label htmlFor={`g-active-${group.id}`} className="flex items-center gap-2 font-body text-sm text-ink/70">
-        <input id={`g-active-${group.id}`} type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-gold-500" />
+        <input id={`g-active-${group.id}`} type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-lavender-600" />
         действует
       </label>
       <button
@@ -113,7 +113,7 @@ export function GroupsEditor({ groups }: { groups: GroupOption[] }) {
         </button>
       </form>
       {error && <p className="mt-2 font-body text-xs text-red-600">{error}</p>}
-      <ul className="mt-4 divide-y divide-lavender-100">
+      <ul className="mt-4 divide-y divide-zinc-200">
         {groups.map((g) => (
           <GroupRow key={g.id} group={g} />
         ))}
@@ -136,7 +136,7 @@ function SupplierRow({ supplier }: { supplier: SupplierOption }) {
       <input id={`s-title-${supplier.id}`} aria-label="Поставщик" value={title} onChange={(e) => setTitle(e.target.value)} className={field} />
       <input id={`s-phone-${supplier.id}`} aria-label="Телефон" placeholder="Телефон" value={phone} onChange={(e) => setPhone(e.target.value)} className={field} />
       <label htmlFor={`s-active-${supplier.id}`} className="flex items-center gap-2 font-body text-sm text-ink/70">
-        <input id={`s-active-${supplier.id}`} type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-gold-500" />
+        <input id={`s-active-${supplier.id}`} type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-lavender-600" />
         действует
       </label>
       <button
@@ -179,7 +179,7 @@ export function SuppliersEditor({ suppliers }: { suppliers: SupplierOption[] }) 
       {suppliers.length === 0 ? (
         <p className="mt-4 font-body text-sm text-ink/45">Пока никого.</p>
       ) : (
-        <ul className="mt-4 divide-y divide-lavender-100">
+        <ul className="mt-4 divide-y divide-zinc-200">
           {suppliers.map((s) => (
             <SupplierRow key={s.id} supplier={s} />
           ))}
@@ -201,7 +201,7 @@ function ReasonRow({ reason }: { reason: ReasonOption }) {
     <li className="grid grid-cols-1 items-center gap-2 py-3 sm:grid-cols-[1fr_auto_auto]">
       <input id={`r-title-${reason.id}`} aria-label="Причина" value={title} onChange={(e) => setTitle(e.target.value)} className={field} />
       <label htmlFor={`r-active-${reason.id}`} className="flex items-center gap-2 font-body text-sm text-ink/70">
-        <input id={`r-active-${reason.id}`} type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-gold-500" />
+        <input id={`r-active-${reason.id}`} type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-lavender-600" />
         действует
       </label>
       <button
@@ -236,7 +236,7 @@ export function ReasonsEditor({ reasons }: { reasons: ReasonOption[] }) {
         </button>
       </form>
       {error && <p className="mt-2 font-body text-xs text-red-600">{error}</p>}
-      <ul className="mt-4 divide-y divide-lavender-100">
+      <ul className="mt-4 divide-y divide-zinc-200">
         {reasons.map((r) => (
           <ReasonRow key={r.id} reason={r} />
         ))}

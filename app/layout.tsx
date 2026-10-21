@@ -1,11 +1,6 @@
 import type { Metadata } from "next";
 import { Montserrat, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { CartProvider } from "@/components/cart/CartProvider";
-import { CartDrawer } from "@/components/cart/CartDrawer";
-import { LocalBusinessSchema } from "@/components/seo/LocalBusinessSchema";
 
 const montserrat = Montserrat({
   subsets: ["latin", "cyrillic"],
@@ -56,15 +51,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru" className={`${montserrat.variable} ${ibmPlexSans.variable}`}>
-      <body className="bg-lavender-50 font-body text-ink antialiased">
-        <LocalBusinessSchema />
-        <CartProvider>
-          <Header />
-          <main>{children}</main>
-          <Footer />
-          <CartDrawer />
-        </CartProvider>
-      </body>
+      {/* Только шрифты и фон. Шапка, подвал и корзина магазина — в
+          app/(site)/layout.tsx, каркас учёта — в app/(uchet)/uchet/layout.tsx. */}
+      <body className="bg-lavender-50 font-body text-ink antialiased">{children}</body>
     </html>
   );
 }

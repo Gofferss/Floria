@@ -1,5 +1,6 @@
 "use client";
 
+import { safeRedirect } from "@/lib/auth/safe-redirect";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -54,7 +55,7 @@ function humanizeLoginError(message: string): string {
 export function PhoneLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirect") || "/account";
+  const redirectTo = safeRedirect(searchParams.get("redirect"), "/account");
 
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [phoneInput, setPhoneInput] = useState("");

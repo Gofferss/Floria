@@ -22,6 +22,36 @@ function num(value: unknown): number | null {
 }
 
 // ---------------------------------------------------------------
+// Место хранения
+// ---------------------------------------------------------------
+
+export type LocationInfo = { id: string; title: string; isTraining: boolean };
+
+/**
+ * Основное место хранения. Пока учёт не запущен, это «Тренировка»: все
+ * документы попадают туда и не смешиваются с настоящим журналом.
+ */
+export async function getDefaultLocation(): Promise<LocationInfo> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("inv_locations")
+    .select("id, title, is_training")
+    .eq("is_default", true)
+    .maybeSingle();
+  if (error || !data) throw new Error(`Место хранения по умолчанию: ${error?.message ?? "не задано"}`);
+  return { id: data.id, title: data.title, isTraining: data.is_training };
+}
+
+export async function listLocations(): Promise<(LocationInfo & { isDefault: boolean })[]> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("inv_locations")
+    .select("id, title, is_training, is_default")
+    .eq("is_active", true)
+    .order("is_training");
+  if (error) throw new Error(`Места хранения: ${error.message}`);
+  return (data ?? []).map((l) => ({ id: l.id, title: l.title, isTraining: l.is_training, isDefault: l.is_default }));
+}
+
+// ---------------------------------------------------------------
 // Справочники
 // ---------------------------------------------------------------
 
@@ -97,7 +127,8 @@ export type StockRow = {
   salePrice: number | null;
   minQty: number | null;
   freshDays: number | null;
-  /** Остаток по нашему журналу. */
+  photoUrl: string | null;
+  /** Остаток по нашему журналу в текущем месте хранения. */
   qty: number;
   /** Сколько дней лежит самая старая партия (FIFO), по нашему журналу. */
   oldestBatchDays: number | null;
@@ -112,8 +143,8 @@ export type StockRow = {
 };
 
 const STOCK_SELECT =
-  "id, title, group_id, unit_code, fractional, is_tracked, is_active, sale_price, min_qty, fresh_days, avg_cost, " +
-  "inv_groups(title, kind), inv_units(short_title), inv_stock(qty), " +
+  "id, title, group_id, unit_code, fractional, is_tracked, is_active, sale_price, min_qty, fresh_days, avg_cost, photo_url, " +
+  "inv_groups(title, kind), inv_units(short_title), inv_stock(qty, location_id), " +
   "inv_posiflora_snapshot(qty, unit_cost, last_movement_at, training_qty, taken_at)";
 
 type StockDbRow = {
@@ -128,20 +159,24 @@ type StockDbRow = {
   min_qty: number | string | null;
   fresh_days: number | null;
   avg_cost: number | string | null;
+  photo_url: string | null;
   inv_groups: { title: string; kind: string } | { title: string; kind: string }[] | null;
   inv_units: { short_title: string } | { short_title: string }[] | null;
-  inv_stock: { qty: number | string }[] | null;
+  inv_stock: { qty: number | string; location_id: string }[] | null;
   inv_posiflora_snapshot:
     | { qty: number | string; unit_cost: number | string | null; last_movement_at: string | null; training_qty: number | string; taken_at: string }
     | { qty: number | string; unit_cost: number | string | null; last_movement_at: string | null; training_qty: number | string; taken_at: string }[]
     | null;
 };
 
-function mapStockRow(row: StockDbRow, freshness: Map<string, number>, withCosts: boolean): StockRow {
+function mapStockRow(row: StockDbRow, freshness: Map<string, number>, withCosts: boolean, locationId: string): StockRow {
   const group = one(row.inv_groups);
   const unit = one(row.inv_units);
   const snap = one(row.inv_posiflora_snapshot);
-  const qty = (row.inv_stock ?? []).reduce((sum, s) => sum + (Number(s.qty) || 0), 0);
+  // Только текущее место: тренировочные остатки не должны смешиваться с настоящими.
+  const qty = (row.inv_stock ?? [])
+    .filter((s) => s.location_id === locationId)
+    .reduce((sum, s) => sum + (Number(s.qty) || 0), 0);
 
   return {
     id: row.id,
@@ -156,6 +191,7 @@ function mapStockRow(row: StockDbRow, freshness: Map<string, number>, withCosts:
     salePrice: num(row.sale_price),
     minQty: num(row.min_qty),
     freshDays: row.fresh_days,
+    photoUrl: row.photo_url,
     qty,
     oldestBatchDays: freshness.get(row.id) ?? null,
     posifloraQty: snap ? num(snap.qty) : null,
@@ -167,8 +203,11 @@ function mapStockRow(row: StockDbRow, freshness: Map<string, number>, withCosts:
   };
 }
 
-async function freshnessMap(itemId?: string): Promise<Map<string, number>> {
-  let query = getSupabaseAdmin().from("inv_item_freshness").select("item_id, oldest_batch_days");
+async function freshnessMap(locationId: string, itemId?: string): Promise<Map<string, number>> {
+  let query = getSupabaseAdmin()
+    .from("inv_item_freshness")
+    .select("item_id, oldest_batch_days")
+    .eq("location_id", locationId);
   if (itemId) query = query.eq("item_id", itemId);
   const { data, error } = await query;
   if (error) throw new Error(`Свежесть: ${error.message}`);
@@ -176,22 +215,24 @@ async function freshnessMap(itemId?: string): Promise<Map<string, number>> {
 }
 
 export async function listStock(withCosts: boolean): Promise<StockRow[]> {
+  const location = await getDefaultLocation();
   const [{ data, error }, freshness] = await Promise.all([
     getSupabaseAdmin().from("inv_items").select(STOCK_SELECT).order("title").limit(5000),
-    freshnessMap(),
+    freshnessMap(location.id),
   ]);
   if (error) throw new Error(`Остатки: ${error.message}`);
-  return ((data ?? []) as unknown as StockDbRow[]).map((row) => mapStockRow(row, freshness, withCosts));
+  return ((data ?? []) as unknown as StockDbRow[]).map((row) => mapStockRow(row, freshness, withCosts, location.id));
 }
 
 export async function getStockItem(id: string, withCosts: boolean): Promise<StockRow | null> {
+  const location = await getDefaultLocation();
   const [{ data, error }, freshness] = await Promise.all([
     getSupabaseAdmin().from("inv_items").select(STOCK_SELECT).eq("id", id).maybeSingle(),
-    freshnessMap(id),
+    freshnessMap(location.id, id),
   ]);
   if (error) throw new Error(`Позиция: ${error.message}`);
   if (!data) return null;
-  return mapStockRow(data as unknown as StockDbRow, freshness, withCosts);
+  return mapStockRow(data as unknown as StockDbRow, freshness, withCosts, location.id);
 }
 
 /** Поля позиции для формы редактирования. */
@@ -251,12 +292,13 @@ export type MovementRow = {
   unitCost: number | null;
   amount: number | null;
   comment: string | null;
+  isTraining: boolean;
 };
 
 export async function listItemMovements(itemId: string, withCosts: boolean): Promise<MovementRow[]> {
   const { data, error } = await getSupabaseAdmin()
     .from("inv_document_lines")
-    .select("qty_delta, unit_cost, amount, inv_documents!inner(id, doc_no, doc_type, status, doc_date, reversal_of, comment)")
+    .select("qty_delta, unit_cost, amount, inv_documents!inner(id, doc_no, doc_type, status, doc_date, reversal_of, comment, inv_locations(is_training))")
     .eq("item_id", itemId)
     .neq("inv_documents.status", "draft")
     .limit(300);
@@ -267,8 +309,18 @@ export async function listItemMovements(itemId: string, withCosts: boolean): Pro
     unit_cost: number | string | null;
     amount: number | string | null;
     inv_documents:
-      | { id: string; doc_no: string; doc_type: string; status: string; doc_date: string; reversal_of: string | null; comment: string | null }
-      | { id: string; doc_no: string; doc_type: string; status: string; doc_date: string; reversal_of: string | null; comment: string | null }[];
+      | MovementDoc
+      | MovementDoc[];
+  };
+  type MovementDoc = {
+    id: string;
+    doc_no: string;
+    doc_type: string;
+    status: string;
+    doc_date: string;
+    reversal_of: string | null;
+    comment: string | null;
+    inv_locations: { is_training: boolean } | { is_training: boolean }[] | null;
   };
 
   return ((data ?? []) as unknown as Row[])
@@ -285,6 +337,7 @@ export async function listItemMovements(itemId: string, withCosts: boolean): Pro
         unitCost: withCosts ? num(row.unit_cost) : null,
         amount: withCosts ? num(row.amount) : null,
         comment: d.comment,
+        isTraining: one(d.inv_locations)?.is_training ?? false,
       };
     })
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -308,6 +361,7 @@ export type DocumentSummary = {
   totalCost: number | null;
   createdBy: string | null;
   isReversal: boolean;
+  isTraining: boolean;
 };
 
 export async function listDocuments(
@@ -318,7 +372,7 @@ export async function listDocuments(
     .from("inv_documents")
     .select(
       "id, doc_no, doc_type, status, doc_date, payment_method, comment, total_cost, reversal_of, " +
-        "inv_suppliers(title), inv_writeoff_reasons(title), staff!inv_documents_created_by_fkey(full_name), inv_document_lines(count)"
+        "inv_suppliers(title), inv_writeoff_reasons(title), staff!inv_documents_created_by_fkey(full_name), inv_document_lines(count), inv_locations(is_training)"
     )
     .order("doc_date", { ascending: false })
     .limit(300);
@@ -342,6 +396,7 @@ export async function listDocuments(
     inv_writeoff_reasons: { title: string } | { title: string }[] | null;
     staff: { full_name: string } | { full_name: string }[] | null;
     inv_document_lines: { count: number }[] | null;
+    inv_locations: { is_training: boolean } | { is_training: boolean }[] | null;
   };
 
   return ((data ?? []) as unknown as Row[]).map((d) => ({
@@ -358,6 +413,7 @@ export async function listDocuments(
     totalCost: withCosts ? num(d.total_cost) : null,
     createdBy: one(d.staff)?.full_name ?? null,
     isReversal: !!d.reversal_of,
+    isTraining: one(d.inv_locations)?.is_training ?? false,
   }));
 }
 

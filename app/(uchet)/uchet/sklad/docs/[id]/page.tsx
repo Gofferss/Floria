@@ -5,26 +5,26 @@ import { requireStaffUser } from "@/lib/auth/server";
 import { canSeeCosts } from "@/lib/uchet/access";
 import { getDocument, listPickerItems, listReasons, listSuppliers } from "@/lib/uchet/queries";
 import { DOC_TYPE_LABEL, PAYMENT_LABEL, STATUS_LABEL, formatDateTime, formatMoney, formatQty } from "@/lib/uchet/format";
-import { SkladHeader } from "@/components/admin/sklad/SkladHeader";
-import { DocumentEditor } from "@/components/admin/sklad/DocumentEditor";
-import { ReverseButton } from "@/components/admin/sklad/ReverseButton";
+import { SkladHeader } from "@/components/uchet/sklad/SkladHeader";
+import { DocumentEditor } from "@/components/uchet/sklad/DocumentEditor";
+import { ReverseButton } from "@/components/uchet/sklad/ReverseButton";
 
 export const metadata: Metadata = {
-  title: "Документ склада — Админка Floria",
+  title: "Документ склада",
 };
 
 export const dynamic = "force-dynamic";
 
 export default async function SkladDocPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const staff = await requireStaffUser();
+  const staff = await requireStaffUser("/uchet/sklad");
   const withCosts = canSeeCosts(staff.role);
 
   const doc = await getDocument(id, withCosts);
   if (!doc) notFound();
 
   const back = (
-    <Link href="/admin/sklad/docs" className="font-body text-sm text-ink/55 underline decoration-lavender-300 underline-offset-4 hover:text-ink">
+    <Link href="/uchet/sklad/docs" className="font-body text-sm text-ink/55 underline decoration-lavender-300 underline-offset-4 hover:text-ink">
       ← Все документы
     </Link>
   );
@@ -33,7 +33,7 @@ export default async function SkladDocPage({ params }: { params: Promise<{ id: s
   if (doc.status === "draft") {
     const [items, suppliers, reasons] = await Promise.all([listPickerItems(), listSuppliers(), listReasons()]);
     return (
-      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+      <div className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 lg:px-8">
         <SkladHeader active="docs" title={`${DOC_TYPE_LABEL[doc.docType]} ${doc.docNo} · черновик`} />
         {back}
         <div className="mt-6">
@@ -63,11 +63,11 @@ export default async function SkladDocPage({ params }: { params: Promise<{ id: s
   const isInventory = doc.docType === "inventory";
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+    <div className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 lg:px-8">
       <SkladHeader active="docs" title={`${DOC_TYPE_LABEL[doc.docType]} ${doc.docNo}`} />
       {back}
 
-      <div className="mt-6 rounded-3xl border border-lavender-100 bg-white p-6 sm:p-8">
+      <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8">
         <div className="flex flex-wrap items-center gap-3">
           <span
             className={`rounded-full px-3 py-1 font-display text-xs font-semibold ${
@@ -79,7 +79,7 @@ export default async function SkladDocPage({ params }: { params: Promise<{ id: s
           {doc.reversalOf && (
             <span className="font-body text-sm text-ink/60">
               сторно документа{" "}
-              <Link href={`/admin/sklad/docs/${doc.reversalOf.id}`} className="font-mono text-ink underline decoration-lavender-300 underline-offset-4">
+              <Link href={`/uchet/sklad/docs/${doc.reversalOf.id}`} className="font-mono text-ink underline decoration-lavender-300 underline-offset-4">
                 {doc.reversalOf.docNo}
               </Link>
             </span>
@@ -87,7 +87,7 @@ export default async function SkladDocPage({ params }: { params: Promise<{ id: s
           {doc.reversedBy && (
             <span className="font-body text-sm text-ink/60">
               сторнирован документом{" "}
-              <Link href={`/admin/sklad/docs/${doc.reversedBy.id}`} className="font-mono text-ink underline decoration-lavender-300 underline-offset-4">
+              <Link href={`/uchet/sklad/docs/${doc.reversedBy.id}`} className="font-mono text-ink underline decoration-lavender-300 underline-offset-4">
                 {doc.reversedBy.docNo}
               </Link>
             </span>
@@ -133,11 +133,11 @@ export default async function SkladDocPage({ params }: { params: Promise<{ id: s
         </dl>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-3xl border border-lavender-100 bg-white">
+      <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-left">
             <thead>
-              <tr className="border-b border-lavender-100 bg-lavender-50/60">
+              <tr className="border-b border-zinc-200 bg-zinc-50">
                 <th className="px-5 py-3 font-display text-xs font-semibold uppercase tracking-wide text-ink/50">Позиция</th>
                 {isInventory && (
                   <>
@@ -156,9 +156,9 @@ export default async function SkladDocPage({ params }: { params: Promise<{ id: s
             </thead>
             <tbody>
               {doc.lines.map((l, i) => (
-                <tr key={`${l.itemId}-${i}`} className="border-b border-lavender-50 last:border-0">
+                <tr key={`${l.itemId}-${i}`} className="border-b border-zinc-100 last:border-0">
                   <td className="px-5 py-3">
-                    <Link href={`/admin/sklad/items/${l.itemId}`} className="font-body text-sm text-ink hover:text-gold-700">
+                    <Link href={`/uchet/sklad/items/${l.itemId}`} className="font-body text-sm text-ink hover:text-lavender-700">
                       {l.itemTitle}
                     </Link>
                   </td>
@@ -188,7 +188,7 @@ export default async function SkladDocPage({ params }: { params: Promise<{ id: s
           </table>
         </div>
         {doc.totalCost !== null && (
-          <p className="border-t border-lavender-100 px-5 py-4 text-right font-display text-base font-semibold text-ink">
+          <p className="border-t border-zinc-200 px-5 py-4 text-right font-display text-base font-semibold text-ink">
             Итого: <span className="font-mono tabular-nums">{formatMoney(doc.totalCost)}</span>
           </p>
         )}

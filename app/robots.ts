@@ -6,7 +6,8 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/admin", "/admin/", "/account", "/api"],
+      // /uchet — рабочее приложение студии, в поиске ему делать нечего.
+      disallow: ["/admin", "/admin/", "/account", "/api", "/uchet"],
     },
     sitemap: `${CONTACTS.siteUrl}/sitemap.xml`,
   };

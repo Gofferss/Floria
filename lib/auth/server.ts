@@ -66,11 +66,15 @@ export async function getStaffUser(): Promise<StaffUser | null> {
   return { id: staff.id, role: staff.role as string, fullName: staff.full_name as string };
 }
 
-/** Для серверных компонентов в /admin/**: не сотрудник — редирект на /login. */
-export async function requireStaffUser(): Promise<StaffUser> {
+/**
+ * Для серверных компонентов в /admin/** и /uchet/**: не сотрудник — редирект
+ * на /login. После входа человек возвращается туда, откуда пришёл: флорист,
+ * открывший учёт, должен попасть в учёт, а не в админку сайта.
+ */
+export async function requireStaffUser(returnTo: string = "/admin"): Promise<StaffUser> {
   const staff = await getStaffUser();
   if (!staff) {
-    redirect("/login?redirect=/admin");
+    redirect(`/login?redirect=${encodeURIComponent(returnTo)}`);
   }
   return staff;
 }

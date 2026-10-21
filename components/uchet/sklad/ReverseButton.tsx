@@ -23,7 +23,7 @@ export function ReverseButton({ id, docNo }: { id: string; docNo: string }) {
     const result = await reverseDocument(id, comment);
     setBusy(false);
     if (!result.success) return setError(result.error);
-    router.push(`/admin/sklad/docs/${result.data.id}`);
+    router.push(`/uchet/sklad/docs/${result.data.id}`);
     router.refresh();
   }
 
@@ -32,7 +32,7 @@ export function ReverseButton({ id, docNo }: { id: string; docNo: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-full border border-lavender-200 bg-white px-6 py-2.5 font-display text-sm font-semibold text-ink transition hover:border-red-300 hover:text-red-700"
+        className="rounded-full border border-zinc-300 bg-white px-6 py-2.5 font-display text-sm font-semibold text-ink transition hover:border-red-300 hover:text-red-700"
       >
         Сторнировать
       </button>
@@ -40,7 +40,7 @@ export function ReverseButton({ id, docNo }: { id: string; docNo: string }) {
   }
 
   return (
-    <div className="rounded-3xl border border-red-200 bg-red-50 p-5">
+    <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
       <p className="font-body text-sm text-red-900">
         Сторно {docNo}: будет создан документ с обратным знаком, и остатки вернутся как были. Сам {docNo} останется в
         журнале с пометкой.
@@ -68,7 +68,7 @@ export function ReverseButton({ id, docNo }: { id: string; docNo: string }) {
           type="button"
           onClick={() => setOpen(false)}
           disabled={busy}
-          className="rounded-full border border-lavender-200 bg-white px-6 py-2.5 font-display text-sm font-semibold text-ink"
+          className="rounded-full border border-zinc-300 bg-white px-6 py-2.5 font-display text-sm font-semibold text-ink"
         >
           Отмена
         </button>

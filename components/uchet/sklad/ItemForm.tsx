@@ -79,7 +79,7 @@ export function ItemForm({ item, groups, units }: Props) {
       return;
     }
     if (!item) {
-      router.push(`/admin/sklad/items/${result.data.id}`);
+      router.push(`/uchet/sklad/items/${result.data.id}`);
       return;
     }
     setSaved(true);
@@ -87,7 +87,7 @@ export function ItemForm({ item, groups, units }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-3xl border border-lavender-100 bg-white p-6 sm:p-8">
+    <form onSubmit={handleSubmit} className="rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8">
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <FormField label="Название" htmlFor="item-title" required>
@@ -143,15 +143,15 @@ export function ItemForm({ item, groups, units }: Props) {
 
       <div className="mt-6 flex flex-col gap-3">
         <label htmlFor="item-fractional" className="flex items-center gap-3 font-body text-sm text-ink">
-          <input id="item-fractional" type="checkbox" checked={fractional} onChange={(e) => setFractional(e.target.checked)} className="h-4 w-4 accent-gold-500" />
+          <input id="item-fractional" type="checkbox" checked={fractional} onChange={(e) => setFractional(e.target.checked)} className="h-4 w-4 accent-lavender-600" />
           Можно дробное количество (метры ленты, половина упаковки)
         </label>
         <label htmlFor="item-tracked" className="flex items-center gap-3 font-body text-sm text-ink">
-          <input id="item-tracked" type="checkbox" checked={isTracked} onChange={(e) => setIsTracked(e.target.checked)} className="h-4 w-4 accent-gold-500" />
+          <input id="item-tracked" type="checkbox" checked={isTracked} onChange={(e) => setIsTracked(e.target.checked)} className="h-4 w-4 accent-lavender-600" />
           Вести остаток (выключите для услуг: доставка, работа флориста)
         </label>
         <label htmlFor="item-active" className="flex items-center gap-3 font-body text-sm text-ink">
-          <input id="item-active" type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-4 w-4 accent-gold-500" />
+          <input id="item-active" type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-4 w-4 accent-lavender-600" />
           Действующая позиция (снимите, чтобы скрыть из списков, не удаляя историю)
         </label>
       </div>
@@ -160,7 +160,7 @@ export function ItemForm({ item, groups, units }: Props) {
         <button
           type="submit"
           disabled={busy}
-          className="rounded-full bg-gold-500 px-7 py-3 font-display text-sm font-semibold text-white shadow-sm transition hover:bg-gold-600 disabled:opacity-50"
+          className="rounded-full bg-lavender-600 px-6 py-3 font-display text-sm font-semibold text-white shadow-sm transition hover:bg-lavender-700 disabled:opacity-50"
         >
           {busy ? "Сохраняем…" : item ? "Сохранить" : "Создать позицию"}
         </button>

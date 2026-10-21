@@ -108,6 +108,14 @@ const nextConfig = {
         ]
       : [],
   },
+  // Склад переехал из админки сайта в отдельное приложение учёта. Старые
+  // ссылки и закладки ведут туда же, а не в 404.
+  async redirects() {
+    return [
+      { source: "/admin/sklad", destination: "/uchet/sklad", permanent: false },
+      { source: "/admin/sklad/:path*", destination: "/uchet/sklad/:path*", permanent: false },
+    ];
+  },
   async headers() {
     return [
       {

@@ -5,18 +5,18 @@ import { requireStaffUser } from "@/lib/auth/server";
 import { canSeeCosts } from "@/lib/uchet/access";
 import { getItemEditable, getStockItem, listGroups, listItemMovements, listUnits } from "@/lib/uchet/queries";
 import { DOC_TYPE_LABEL, daysLabel, daysSince, formatDateTime, formatMoney, formatQty } from "@/lib/uchet/format";
-import { SkladHeader } from "@/components/admin/sklad/SkladHeader";
-import { ItemForm } from "@/components/admin/sklad/ItemForm";
+import { SkladHeader } from "@/components/uchet/sklad/SkladHeader";
+import { ItemForm } from "@/components/uchet/sklad/ItemForm";
 
 export const metadata: Metadata = {
-  title: "Позиция склада — Админка Floria",
+  title: "Позиция склада",
 };
 
 export const dynamic = "force-dynamic";
 
 export default async function SkladItemPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const staff = await requireStaffUser();
+  const staff = await requireStaffUser("/uchet/sklad");
   const withCosts = canSeeCosts(staff.role);
 
   const [editable, stock, movements, groups, units] = await Promise.all([
@@ -29,10 +29,10 @@ export default async function SkladItemPage({ params }: { params: Promise<{ id: 
   if (!editable || !stock) notFound();
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+    <div className="mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 lg:px-8">
       <SkladHeader active="stock" title={editable.title} />
 
-      <Link href="/admin/sklad" className="font-body text-sm text-ink/55 underline decoration-lavender-300 underline-offset-4 hover:text-ink">
+      <Link href="/uchet/sklad" className="font-body text-sm text-ink/55 underline decoration-lavender-300 underline-offset-4 hover:text-ink">
         ← Все остатки
       </Link>
 
@@ -40,7 +40,7 @@ export default async function SkladItemPage({ params }: { params: Promise<{ id: 
         <ItemForm item={editable} groups={groups} units={units} />
 
         <aside className="flex flex-col gap-4">
-          <div className="rounded-3xl border border-lavender-100 bg-white p-6">
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6">
             <h2 className="font-display text-xs font-semibold uppercase tracking-wide text-ink/50">Остаток у нас</h2>
             <p className="mt-2 font-mono text-3xl font-semibold tabular-nums text-ink">
               {stock.isTracked ? `${formatQty(stock.qty)} ${stock.unit}` : "не ведётся"}
@@ -56,7 +56,7 @@ export default async function SkladItemPage({ params }: { params: Promise<{ id: 
             <p className="mt-3 font-body text-xs text-ink/45">Меняется только документами — приходом, списанием, инвентаризацией.</p>
           </div>
 
-          <div className="rounded-3xl border border-lavender-100 bg-white p-6">
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6">
             <h2 className="font-display text-xs font-semibold uppercase tracking-wide text-ink/50">В Posiflora</h2>
             <p
               className={`mt-2 font-mono text-3xl font-semibold tabular-nums ${
@@ -89,11 +89,11 @@ export default async function SkladItemPage({ params }: { params: Promise<{ id: 
             В нашем учёте движений ещё нет. История Posiflora по этой позиции осталась в Posiflora.
           </p>
         ) : (
-          <div className="mt-4 overflow-hidden rounded-3xl border border-lavender-100 bg-white">
+          <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[620px] text-left">
                 <thead>
-                  <tr className="border-b border-lavender-100 bg-lavender-50/60">
+                  <tr className="border-b border-zinc-200 bg-zinc-50">
                     <th className="px-5 py-3 font-display text-xs font-semibold uppercase tracking-wide text-ink/50">Документ</th>
                     <th className="px-4 py-3 font-display text-xs font-semibold uppercase tracking-wide text-ink/50">Дата</th>
                     <th className="px-4 py-3 text-right font-display text-xs font-semibold uppercase tracking-wide text-ink/50">Изменение</th>
@@ -104,9 +104,9 @@ export default async function SkladItemPage({ params }: { params: Promise<{ id: 
                 </thead>
                 <tbody>
                   {movements.map((m, i) => (
-                    <tr key={`${m.documentId}-${i}`} className="border-b border-lavender-50 last:border-0">
+                    <tr key={`${m.documentId}-${i}`} className="border-b border-zinc-100 last:border-0">
                       <td className="px-5 py-3">
-                        <Link href={`/admin/sklad/docs/${m.documentId}`} className="font-body text-sm font-medium text-ink hover:text-gold-700">
+                        <Link href={`/uchet/sklad/docs/${m.documentId}`} className="font-body text-sm font-medium text-ink hover:text-lavender-700">
                           {m.docNo}
                         </Link>
                         <span className="ml-2 font-body text-xs text-ink/50">

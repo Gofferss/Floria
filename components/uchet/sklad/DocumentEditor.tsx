@@ -31,6 +31,8 @@ export type EditorInitial = {
 type Props = {
   docType: DocType;
   initial?: EditorInitial;
+  /** Позиции, отмеченные в списке склада: строки создаются сразу, количество — за человеком. */
+  prefill?: string[];
   items: PickerItem[];
   suppliers: SupplierOption[];
   reasons: ReasonOption[];
@@ -69,7 +71,7 @@ function dateForServer(date: string): string | null {
   return `${date}T12:00:00+03:00`;
 }
 
-export function DocumentEditor({ docType, initial, items, suppliers, reasons, withCosts }: Props) {
+export function DocumentEditor({ docType, initial, prefill, items, suppliers, reasons, withCosts }: Props) {
   const router = useRouter();
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
 
@@ -79,14 +81,21 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
   const [reasonId, setReasonId] = useState(initial?.reasonId ?? "");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">(initial?.paymentMethod ?? "");
   const [comment, setComment] = useState(initial?.comment ?? "");
-  const [lines, setLines] = useState<Line[]>(
-    initial?.lines.map((l) => ({
-      key: nextKey(),
-      itemId: l.itemId,
-      qty: String(l.qty),
-      unitCost: l.unitCost != null ? String(l.unitCost) : "",
-    })) ?? []
-  );
+  const [lines, setLines] = useState<Line[]>(() => {
+    if (initial) {
+      return initial.lines.map((l) => ({
+        key: nextKey(),
+        itemId: l.itemId,
+        qty: String(l.qty),
+        unitCost: l.unitCost != null ? String(l.unitCost) : "",
+      }));
+    }
+    // Отмеченные в списке: только известные позиции, без повторов.
+    const known = new Set(items.map((i) => i.id));
+    return [...new Set(prefill ?? [])]
+      .filter((id) => known.has(id))
+      .map((itemId) => ({ key: nextKey(), itemId, qty: "", unitCost: "" }));
+  });
 
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState<"save" | "post" | "delete" | null>(null);
@@ -165,7 +174,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
   function rememberId(id: string) {
     if (!docId) {
       setDocId(id);
-      window.history.replaceState(null, "", `/admin/sklad/docs/${id}`);
+      window.history.replaceState(null, "", `/uchet/sklad/docs/${id}`);
     }
   }
 
@@ -201,7 +210,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
       if (result.id) rememberId(result.id);
       return setError(result.error);
     }
-    router.push(`/admin/sklad/docs/${result.data.id}`);
+    router.push(`/uchet/sklad/docs/${result.data.id}`);
     router.refresh();
   }
 
@@ -212,7 +221,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
     setBusy(null);
     setConfirm(null);
     if (!result.success) return setError(result.error);
-    router.push("/admin/sklad/docs");
+    router.push("/uchet/sklad/docs");
     router.refresh();
   }
 
@@ -220,7 +229,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-3xl border border-lavender-100 bg-white p-6 sm:p-8">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8">
         <p className="max-w-2xl font-body text-sm text-ink/65">{DOC_TYPE_HINT[docType]}</p>
 
         <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -283,7 +292,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
         </div>
       </div>
 
-      <div className="rounded-3xl border border-lavender-100 bg-white p-6 sm:p-8">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-ink/50">Позиции</h2>
 
         <div className="relative mt-4">
@@ -306,7 +315,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
             className={inputClass()}
           />
           {matches.length > 0 && (
-            <ul className="absolute left-0 right-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-2xl border border-lavender-200 bg-white py-1 shadow-lg">
+            <ul className="absolute left-0 right-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-2xl border border-zinc-300 bg-white py-1 shadow-lg">
               {matches.map((m) => (
                 <li key={m.id}>
                   <button
@@ -329,11 +338,11 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
         </div>
 
         {lines.length === 0 ? (
-          <p className="mt-6 rounded-2xl border border-dashed border-lavender-200 px-5 py-8 text-center font-body text-sm text-ink/50">
+          <p className="mt-6 rounded-2xl border border-dashed border-zinc-300 px-5 py-8 text-center font-body text-sm text-ink/50">
             Пока пусто. Найдите позицию в поле выше.
           </p>
         ) : (
-          <ul className="mt-5 divide-y divide-lavender-100">
+          <ul className="mt-5 divide-y divide-zinc-200">
             {lines.map((l, i) => {
               const item = byId.get(l.itemId);
               const qty = parseNum(l.qty);
@@ -375,7 +384,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
                       value={l.qty}
                       onChange={(e) => updateLine(l.key, { qty: e.target.value })}
                       placeholder={docType === "inventory" ? "насчитали" : "кол-во"}
-                      className="w-full rounded-xl border border-lavender-200 bg-lavender-50 px-3 py-2 text-right font-mono text-sm tabular-nums text-ink outline-none focus:border-gold-400 focus:bg-white"
+                      className="w-full rounded-xl border border-zinc-300 bg-lavender-50 px-3 py-2 text-right font-mono text-sm tabular-nums text-ink outline-none focus:border-gold-400 focus:bg-white"
                     />
                     <span className="font-body text-xs text-ink/45">{item?.unit ?? "шт"}</span>
                   </label>
@@ -389,7 +398,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
                         value={l.unitCost}
                         onChange={(e) => updateLine(l.key, { unitCost: e.target.value })}
                         placeholder={costRequired ? "цена, ₽" : "цена, необяз."}
-                        className="w-full rounded-xl border border-lavender-200 bg-lavender-50 px-3 py-2 text-right font-mono text-sm tabular-nums text-ink outline-none focus:border-gold-400 focus:bg-white"
+                        className="w-full rounded-xl border border-zinc-300 bg-lavender-50 px-3 py-2 text-right font-mono text-sm tabular-nums text-ink outline-none focus:border-gold-400 focus:bg-white"
                       />
                       <span className="font-body text-xs text-ink/45">₽</span>
                     </label>
@@ -416,7 +425,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
         )}
 
         {total !== null && lines.length > 0 && (
-          <p className="mt-4 border-t border-lavender-100 pt-4 text-right font-display text-base font-semibold text-ink">
+          <p className="mt-4 border-t border-zinc-200 pt-4 text-right font-display text-base font-semibold text-ink">
             Итого: <span className="font-mono tabular-nums">{formatMoney(total)}</span>
           </p>
         )}
@@ -424,7 +433,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
 
       <div className="flex flex-col gap-3">
         {confirm === "post" ? (
-          <div className="rounded-3xl border border-gold-300 bg-gold-300/20 p-5">
+          <div className="rounded-2xl border border-gold-300 bg-gold-300/20 p-5">
             <p className="font-body text-sm text-ink">
               Провести {DOC_TYPE_LABEL[docType].toLowerCase()}? После этого документ не меняется — исправить можно только сторно.
             </p>
@@ -433,7 +442,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
                 type="button"
                 onClick={handlePost}
                 disabled={working}
-                className="rounded-full bg-gold-500 px-6 py-2.5 font-display text-sm font-semibold text-white transition hover:bg-gold-600 disabled:opacity-50"
+                className="rounded-full bg-lavender-600 px-6 py-2.5 font-display text-sm font-semibold text-white transition hover:bg-lavender-700 disabled:opacity-50"
               >
                 {busy === "post" ? "Проводим…" : "Да, провести"}
               </button>
@@ -441,14 +450,14 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
                 type="button"
                 onClick={() => setConfirm(null)}
                 disabled={working}
-                className="rounded-full border border-lavender-200 bg-white px-6 py-2.5 font-display text-sm font-semibold text-ink transition hover:border-gold-400"
+                className="rounded-full border border-zinc-300 bg-white px-6 py-2.5 font-display text-sm font-semibold text-ink transition hover:border-gold-400"
               >
                 Отмена
               </button>
             </div>
           </div>
         ) : confirm === "delete" ? (
-          <div className="rounded-3xl border border-red-200 bg-red-50 p-5">
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
             <p className="font-body text-sm text-red-900">Удалить черновик? Остатков он не касался, но восстановить его нельзя.</p>
             <div className="mt-4 flex flex-wrap gap-3">
               <button
@@ -463,7 +472,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
                 type="button"
                 onClick={() => setConfirm(null)}
                 disabled={working}
-                className="rounded-full border border-lavender-200 bg-white px-6 py-2.5 font-display text-sm font-semibold text-ink"
+                className="rounded-full border border-zinc-300 bg-white px-6 py-2.5 font-display text-sm font-semibold text-ink"
               >
                 Отмена
               </button>
@@ -478,7 +487,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
                 setConfirm("post");
               }}
               disabled={working || lines.length === 0}
-              className="rounded-full bg-gold-500 px-7 py-3 font-display text-sm font-semibold text-white shadow-sm transition hover:bg-gold-600 disabled:opacity-50"
+              className="rounded-full bg-lavender-600 px-6 py-3 font-display text-sm font-semibold text-white shadow-sm transition hover:bg-lavender-700 disabled:opacity-50"
             >
               Провести
             </button>
@@ -486,7 +495,7 @@ export function DocumentEditor({ docType, initial, items, suppliers, reasons, wi
               type="button"
               onClick={handleSave}
               disabled={working || lines.length === 0}
-              className="rounded-full border border-lavender-200 bg-white px-7 py-3 font-display text-sm font-semibold text-ink transition hover:border-gold-400 hover:text-gold-700 disabled:opacity-50"
+              className="rounded-full border border-zinc-300 bg-white px-7 py-3 font-display text-sm font-semibold text-ink transition hover:border-zinc-400 hover:text-zinc-900 disabled:opacity-50"
             >
               {busy === "save" ? "Сохраняем…" : "Сохранить черновик"}
             </button>
