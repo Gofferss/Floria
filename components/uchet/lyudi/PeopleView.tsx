@@ -7,6 +7,7 @@ import type { AccountRow, EmployeeRow } from "@/lib/uchet/people";
 import { POSITIONS, POSITION_LABEL, type Position } from "@/lib/uchet/positions";
 import { ROLE_HINT, ROLE_LABEL, STAFF_ROLES, type StaffRole } from "@/lib/auth/roles";
 import { formatDateTime } from "@/lib/uchet/format";
+import { PeopleTabs } from "@/components/uchet/lyudi/PeopleTabs";
 import { ui } from "@/components/uchet/ui";
 import { useToast } from "@/components/uchet/Toast";
 import { CloseButton, Panel } from "@/components/uchet/Overlay";
@@ -28,13 +29,14 @@ export function PeopleView({ employees, accounts, meId }: { employees: EmployeeR
 
   return (
     <div className={`${ui.page} max-w-5xl space-y-6`}>
+      <PeopleTabs active="people" />
       <section className={ui.cardPad}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className={ui.h1}>Люди в магазине</h1>
             <p className={`${ui.muted} mt-1 max-w-2xl`}>
               Кто работает за айпадом магазина. Каждый выбирает себя и вводит свой PIN из 4 цифр — так каждая продажа и
-              списание подписаны именем. Отсюда же потом будут считаться проценты и ставки.
+              списание подписаны именем. По этим подписям считается зарплата.
             </p>
           </div>
           <button type="button" onClick={() => setEditEmployee("new")} className={ui.btnPrimary}>

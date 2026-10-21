@@ -1,7 +1,8 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { posifloraFetch } from "@/lib/posiflora/http";
+import { MINUTE, posifloraCached, posifloraRange, type JsonApi } from "@/lib/posiflora/cached";
 import { dayStart, studioDate } from "@/lib/uchet/order-queries";
 import { getDefaultLocation } from "@/lib/uchet/queries";
+import { addDays, daysIn, monthEnd, nextMonth, prevMonth, studioDay } from "@/lib/uchet/days";
 
 // ================================================================
 // «Сводка» для владельцев: деньги за период и порог дохода за год.
@@ -19,8 +20,7 @@ import { getDefaultLocation } from "@/lib/uchet/queries";
 // показывает нули: ноль в сводке владелец прочтёт как «ничего не продали».
 // ================================================================
 
-const MIN = 60_000;
-const DAY = 86_400_000;
+const MIN = MINUTE;
 
 /**
  * Порог дохода за год, после которого на УСН появляется НДС (с 1-го числа
@@ -33,29 +33,7 @@ const INCOME_LIMIT_BY_YEAR: Record<number, number> = { 2026: 20_000_000 };
 
 const MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 
-// ---------------------------------------------------------------
-// Даты — строками «2026-10-21» по Симферополю
-// ---------------------------------------------------------------
-
-const toMs = (day: string) => Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10)));
-const fromMs = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-export const addDays = (day: string, n: number) => fromMs(toMs(day) + n * DAY);
-const daysIn = (from: string, to: string) => Math.round((toMs(to) - toMs(from)) / DAY) + 1;
-const monthEnd = (month: string) => addDays(`${nextMonth(month)}-01`, -1);
-function nextMonth(month: string): string {
-  const y = Number(month.slice(0, 4));
-  const m = Number(month.slice(5, 7));
-  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
-}
-function prevMonth(month: string): string {
-  const y = Number(month.slice(0, 4));
-  const m = Number(month.slice(5, 7));
-  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
-}
 export const monthTitle = (month: string) => MONTHS[Number(month.slice(5, 7)) - 1] ?? month;
-
-const studioDayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Simferopol" });
-const studioDay = (iso: string) => studioDayFmt.format(new Date(iso));
 
 // ---------------------------------------------------------------
 // Период
@@ -157,33 +135,13 @@ export type Summary = {
 export const isFailed = (b: SourceBlock | FailedBlock): b is FailedBlock => "error" in b;
 
 // ---------------------------------------------------------------
-// Posiflora — с кэшем в памяти процесса
+// Posiflora — с кэшем в памяти процесса (lib/posiflora/cached.ts)
 // ---------------------------------------------------------------
 
-type JsonApi = {
-  data?: { id: string; type: string; attributes?: Record<string, unknown>; relationships?: Record<string, { data?: { id: string } | null }> }[] | { attributes?: Record<string, unknown> };
-  meta?: Record<string, unknown>;
-  included?: { id: string; type: string; attributes?: Record<string, unknown> }[];
-};
-
-const cache = new Map<string, { at: number; ttl: number; value: JsonApi }>();
-
-/**
- * Один и тот же отчёт за прошлый месяц не меняется — нет смысла спрашивать
- * его на каждое открытие. Период с сегодняшним днём живёт 3 минуты,
- * прошлое — 30. Ошибки не кэшируются: следующее открытие спросит снова.
- */
-async function posi(path: string, ttl: number): Promise<JsonApi> {
-  const hit = cache.get(path);
-  if (hit && Date.now() - hit.at < hit.ttl) return hit.value;
-  const value = (await posifloraFetch(path, { headers: { Accept: "application/vnd.api+json" } })) as JsonApi;
-  if (cache.size > 300) cache.clear();
-  cache.set(path, { at: Date.now(), ttl, value });
-  return value;
-}
-
-const range = (from: string, to: string) => `filter[range]=custom&filter[rangeFrom]=${from}&filter[rangeTo]=${to}`;
-const ttlFor = (to: string) => (to >= studioDate(0) ? 3 * MIN : 30 * MIN);
+const posi = posifloraCached;
+const range = posifloraRange;
+/** Период с сегодняшним днём живёт 3 минуты, прошлое не меняется — 30. */
+export const ttlFor = (to: string) => (to >= studioDate(0) ? 3 * MIN : 30 * MIN);
 
 function num(value: unknown): number {
   const n = Number(value);
@@ -283,14 +241,14 @@ async function loadPosifloraBlock(from: string, to: string, names: Record<string
 // Учёт
 // ---------------------------------------------------------------
 
-async function realLocationIds(): Promise<string[]> {
+export async function realLocationIds(): Promise<string[]> {
   const { data, error } = await getSupabaseAdmin().from("inv_locations").select("id").eq("is_training", false).eq("is_active", true);
   if (error) throw new Error(`Места: ${error.message}`);
   return (data ?? []).map((l) => l.id);
 }
 
 /** PostgREST отдаёт не больше 1000 строк за раз — дочитываем страницами. */
-async function allRows<T>(query: (fromRow: number, toRow: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
+export async function allRows<T>(query: (fromRow: number, toRow: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
   const out: T[] = [];
   for (let page = 0; page < 100; page++) {
     const { data, error } = await query(page * 1000, page * 1000 + 999);
@@ -415,7 +373,7 @@ async function sitePaid(from: string, to: string): Promise<{ count: number; amou
 // ---------------------------------------------------------------
 
 /** Части диапазона по источникам: до даты перехода — Posiflora, с неё — Учёт. */
-function splitBySource(from: string, to: string, since: string | null): { source: "posiflora" | "uchet"; from: string; to: string }[] {
+export function splitBySource(from: string, to: string, since: string | null): { source: "posiflora" | "uchet"; from: string; to: string }[] {
   if (!since || to < since) return [{ source: "posiflora", from, to }];
   if (from >= since) return [{ source: "uchet", from, to }];
   return [

@@ -191,7 +191,29 @@ export async function signInEmployee(employeeId: string, pin: string): Promise<P
     maxAge: TTL_MS / 1000,
   });
 
+  await markWorkDay(employeeId);
   return { success: true, employee: toEmployee(checked.row) };
+}
+
+const studioDayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Simferopol" });
+
+/**
+ * Вход по PIN — это и отметка в табеле: человек сегодня работал. Только
+ * после запуска учёта — до него входы пробные. Ручную отметку владельца
+ * не перебивает. Ошибка здесь не мешает входу: табель поправят руками.
+ */
+async function markWorkDay(employeeId: string) {
+  try {
+    const admin = getSupabaseAdmin();
+    const { data: main } = await admin.from("inv_locations").select("is_training").eq("is_default", true).maybeSingle();
+    if (!main || main.is_training) return;
+    const { error } = await admin
+      .from("hr_work_days")
+      .upsert({ employee_id: employeeId, day: studioDayFmt.format(new Date()), worked: true, source: "pin" }, { onConflict: "employee_id,day", ignoreDuplicates: true });
+    if (error) console.error("[employee] табель:", error.message);
+  } catch (e) {
+    console.error("[employee] табель:", e instanceof Error ? e.message : e);
+  }
 }
 
 export async function signOutEmployee(): Promise<void> {
