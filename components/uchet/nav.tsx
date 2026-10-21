@@ -7,6 +7,7 @@ import {
   ClockIcon,
   EditIcon,
   PackageIcon,
+  PinIcon,
   StarIcon,
   TagIcon,
   TruckIcon,
@@ -37,6 +38,7 @@ export type NavItem = {
 export const WORK_NAV: NavItem[] = [
   { href: "/uchet/kassa", label: "Касса", icon: BanknoteIcon, ready: true },
   { href: "/uchet/zakazy", label: "Заказы", icon: TruckIcon, ready: true },
+  { href: "/uchet/dostavki", label: "Доставки", icon: PinIcon, ready: true },
   { href: "/uchet/vitrina", label: "Витрина", icon: BouquetIcon, ready: true },
   { href: "/uchet/sklad", label: "Склад", icon: PackageIcon, ready: true },
   { href: "/uchet/smena", label: "Смена", icon: ClockIcon, ready: true },
@@ -52,4 +54,4 @@ export const OWNER_NAV: NavItem[] = [
 ];
 
 /** Курьеру — только его раздел: доставки, адреса, статусы. */
-export const COURIER_NAV: NavItem[] = [{ href: "/uchet/dostavki", label: "Доставки", icon: TruckIcon, ready: true }];
+export const COURIER_NAV: NavItem[] = [{ href: "/uchet/dostavki", label: "Доставки", icon: PinIcon, ready: true }];

@@ -10,6 +10,7 @@ import { formatRussianPhoneInput, toE164RussianPhone } from "@/lib/phone-mask";
 import { ui } from "@/components/uchet/ui";
 import { useToast } from "@/components/uchet/Toast";
 import { CloseButton, Panel } from "@/components/uchet/Overlay";
+import { AddressInput } from "@/components/uchet/zakazy/AddressInput";
 
 // ================================================================
 // Заказ магазина: новый и правка. Порядок полей — как идёт разговор с
@@ -209,7 +210,7 @@ export function ShopOrderForm({ order, methods, shiftOpen, onClose }: Props) {
         {!isPickup && (
           <>
             <Field id="order-address" label="Адрес">
-              <input id="order-address" value={address} onChange={(e) => setAddress(e.target.value)} className={ui.field} placeholder="ул. Киевская, 41" />
+              <AddressInput id="order-address" value={address} onChange={setAddress} />
             </Field>
             <Field id="order-details" label="Квартира, подъезд, домофон">
               <input id="order-details" value={details} onChange={(e) => setDetails(e.target.value)} className={ui.field} placeholder="кв. 12, подъезд 2, домофон 12К" />
