@@ -190,6 +190,7 @@ export function DeliveryPlanner({ day, stops, couriers, start, hasKey }: Props) 
                           {!s.point && s.address && <span className="font-semibold text-amber-700"> · нет на карте</span>}
                           {s.point && s.quality !== null && s.quality >= 2 && <span className="text-amber-700"> · точка — по улице</span>}
                           {s.due > 0 && <span className="font-semibold text-red-600"> · взять {formatMoney(s.due)}</span>}
+                          {s.testPayment && <span className="font-semibold text-amber-700"> · тестовая оплата, денег нет</span>}
                         </p>
                         {s.status !== "completed" && s.status !== "delivering" && couriers.length > 0 && (
                           <div className="mt-2 flex flex-wrap items-center gap-1.5">

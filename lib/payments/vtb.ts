@@ -36,6 +36,25 @@ function requireEnv(name: string): string {
   return value;
 }
 
+/** Боевой платёжный API ВТБ. Любой другой адрес (test3.api.vtb.ru…) — песочница. */
+const VTB_PRODUCTION_HOST = "gw.api.vtb.ru";
+
+/**
+ * Работаем ли с песочницей. В ней «оплата» проходит без денег: на тестовой
+ * странице СБП кто угодно нажимает «успешно». Поэтому такая оплата
+ * помечается тестовой везде, где её видит студия, — иначе флорист отвезёт
+ * «оплаченный онлайн» букет, за который никто не платил.
+ */
+export function isVtbSandbox(): boolean {
+  const base = process.env.VTB_API_BASE;
+  if (!base) return false;
+  try {
+    return new URL(base).hostname !== VTB_PRODUCTION_HOST;
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Значение заголовка X-IBM-Client-Id — это client_id БЕЗ домена и в нижнем
  * регистре (требование раздела 4.16.2 инструкции). Выводим его из client_id,

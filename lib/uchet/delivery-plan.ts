@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { isVtbSandbox } from "@/lib/payments/vtb";
 import { CONTACTS } from "@/lib/contacts";
 import { geocode, hasDadataKey } from "@/lib/geo/dadata";
 import type { Point } from "@/lib/uchet/route";
@@ -35,6 +36,8 @@ export type PlanStop = {
   cardText: string | null;
   /** Сколько взять при получении (у заказов магазина). */
   due: number;
+  /** Заказ сайта оплачен в песочнице ВТБ — денег нет. */
+  testPayment: boolean;
 };
 
 export type Courier = { id: string; name: string };
@@ -164,6 +167,7 @@ export async function loadDayStops(day: string, locationId: string): Promise<Pla
       courierComment: r.courier_comment,
       cardText: r.card_text,
       due: 0,
+      testPayment: isVtbSandbox(),
     });
   }
   for (const r of (shop.data ?? []) as unknown as ShopRow[]) {
@@ -190,6 +194,7 @@ export async function loadDayStops(day: string, locationId: string): Promise<Pla
       courierComment: r.courier_comment,
       cardText: r.card_text,
       due: Math.max(0, (Number(r.total) || 0) - paid),
+      testPayment: false,
     });
   }
   return stops;

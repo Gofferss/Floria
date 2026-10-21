@@ -104,10 +104,10 @@ function OrderCard({ o, urgent, overdue, onOpen }: { o: WorkOrder; urgent: boole
       <span className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold">
         <span
           className={`rounded-full px-2 py-0.5 ${
-            o.paid ? "bg-emerald-50 text-emerald-800" : o.paidAmount > 0 ? "bg-amber-100 text-amber-900" : "bg-red-50 text-red-700"
+            o.testPayment ? "bg-amber-100 text-amber-900" : o.paid ? "bg-emerald-50 text-emerald-800" : o.paidAmount > 0 ? "bg-amber-100 text-amber-900" : "bg-red-50 text-red-700"
           }`}
         >
-          {o.paid ? "оплачено" : o.paidAmount > 0 ? `внесено ${formatMoney(o.paidAmount)}` : "не оплачено"}
+          {o.testPayment ? "тестовая оплата" : o.paid ? "оплачено" : o.paidAmount > 0 ? `внесено ${formatMoney(o.paidAmount)}` : "не оплачено"}
         </span>
         <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-700">{STATUS_LABEL[o.status]}</span>
         <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-500">{o.source === "site" ? "с сайта" : "магазин"}</span>
@@ -275,9 +275,15 @@ export function OrderPanel({ order: o, onClose }: { order: WorkOrder; onClose: (
       </div>
 
       <div className="space-y-5 p-5">
-        <p className={`rounded-xl px-4 py-3 text-base font-bold ${o.paid ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-900"}`}>
-          {o.paid ? `Оплачено ${formatMoney(o.total)} — деньги не брать` : `Не оплачено · ${formatMoney(o.total)}`}
-        </p>
+        {o.testPayment ? (
+          <p className="rounded-xl bg-amber-100 px-4 py-3 text-base font-bold text-amber-950">
+            Тестовая оплата {formatMoney(o.total)} — денег нет: онлайн-оплата ВТБ в тестовом режиме. Не выполнять без владельца.
+          </p>
+        ) : (
+          <p className={`rounded-xl px-4 py-3 text-base font-bold ${o.paid ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-900"}`}>
+            {o.paid ? `Оплачено ${formatMoney(o.total)} — деньги не брать` : `Не оплачено · ${formatMoney(o.total)}`}
+          </p>
+        )}
 
         <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 text-sm">
           <dt className="text-zinc-500">Получатель</dt>

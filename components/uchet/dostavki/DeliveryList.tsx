@@ -101,7 +101,9 @@ export function DeliveryList({ days }: { days: { title: string; stops: PlanStop[
                       )}
                     </p>
                     {s.courierComment && <p className="mt-1 text-sm text-zinc-600">«{s.courierComment}»</p>}
-                    {s.due > 0 ? (
+                    {s.testPayment ? (
+                      <p className="mt-3 rounded-xl bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-950">Тестовая оплата с сайта — денег нет. Не везти, пока магазин не подтвердит</p>
+                    ) : s.due > 0 ? (
                       <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">Взять с получателя {formatMoney(s.due)} — и передать в магазин</p>
                     ) : (
                       <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">Оплачено — деньги не брать</p>

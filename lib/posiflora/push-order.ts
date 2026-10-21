@@ -1,5 +1,6 @@
 import { posifloraFetch } from "@/lib/posiflora/http";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { isVtbSandbox } from "@/lib/payments/vtb";
 
 // ================================================================
 // Отправка заказа с сайта в Posiflora.
@@ -144,7 +145,10 @@ function buildDescription(order: OrderForPush, items: { product_name: string; qu
   // способен взять деньги с уже заплатившего клиента.
   const lines: string[] = [
     `Заказ с сайта ${order.order_number}`,
-    `ОПЛАЧЕНО ОНЛАЙН: ${amount} ₽ — повторно деньги не брать`,
+    // Песочница ВТБ пропускает «оплату» без денег — см. isVtbSandbox.
+    isVtbSandbox()
+      ? `ТЕСТОВАЯ ОПЛАТА: ${amount} ₽ — ВТБ в тестовом режиме, денег НЕТ. Не выполнять без проверки`
+      : `ОПЛАЧЕНО ОНЛАЙН: ${amount} ₽ — повторно деньги не брать`,
   ];
 
   if (items.length) {

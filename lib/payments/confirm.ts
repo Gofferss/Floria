@@ -3,6 +3,7 @@ import { notifyStaffTelegram } from "@/lib/n8n";
 import { escapeTelegramHtml } from "@/lib/telegram/bot";
 import { notifyCustomerAboutStatus } from "@/lib/telegram/order-notify";
 import { pushOrderToPosiflora } from "@/lib/posiflora/push-order";
+import { isVtbSandbox } from "@/lib/payments/vtb";
 
 // ================================================================
 // Перевод заказа в «оплачен» — единственное место, где это происходит.
@@ -92,12 +93,14 @@ export async function confirmPaidOrder(orderNumber: string, paidAmount: number):
     ? `\n${order.staff_notify_details}`
     : "\nСостав и адрес — в админке.";
 
+  const sandbox = isVtbSandbox();
   const staffNotified = await notifyStaffTelegram(
-    `💰 <b>ОПЛАЧЕН заказ ${escapeTelegramHtml(order.order_number)}</b>\n\n` +
+    (sandbox ? `🧪 <b>ТЕСТОВАЯ ОПЛАТА</b> — ВТБ в тестовом режиме, настоящих денег нет.\nНе выполнять, если это не ваша проверка.\n\n` : "") +
+      `💰 <b>ОПЛАЧЕН заказ ${escapeTelegramHtml(order.order_number)}</b>\n\n` +
       `Клиент: ${escapeTelegramHtml(order.customer_name ?? "—")}, ` +
       `${escapeTelegramHtml(order.customer_phone ?? "—")}\n` +
       details +
-      `\nСумма: ${expected} ₽ — <b>оплачено онлайн</b>`
+      (sandbox ? `\nСумма: ${expected} ₽ — <b>тестовая оплата, денег нет</b>` : `\nСумма: ${expected} ₽ — <b>оплачено онлайн</b>`)
   );
 
   if (staffNotified) {

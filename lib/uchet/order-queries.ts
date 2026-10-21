@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { isVtbSandbox } from "@/lib/payments/vtb";
 
 // ================================================================
 // Заказы для учёта: что собрать и отвезти — по дням.
@@ -20,6 +21,8 @@ export type WorkOrder = {
   status: WorkOrderStatus;
   /** Оплачен целиком. */
   paid: boolean;
+  /** Оплачен в песочнице ВТБ — настоящих денег нет (см. isVtbSandbox). */
+  testPayment: boolean;
   /** Сколько уже внесено. У заказа сайта — всё или ничего. */
   paidAmount: number;
   /** Что собрать — у заказов магазина. */
@@ -121,6 +124,7 @@ function toWorkOrder(r: Row): WorkOrder {
     number: r.order_number,
     status: r.status,
     paid: r.payment_status === "paid",
+    testPayment: r.payment_status === "paid" && isVtbSandbox(),
     paidAmount: r.payment_status === "paid" ? total : 0,
     wishes: null,
     channel: "site",
@@ -196,6 +200,7 @@ function toShopOrder(r: ShopRow): WorkOrder {
     number: r.order_no,
     status: r.status,
     paid: paidAmount >= total,
+    testPayment: false,
     paidAmount,
     wishes: r.wishes,
     channel: r.channel,
