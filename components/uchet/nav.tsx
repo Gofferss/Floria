@@ -36,7 +36,7 @@ export type NavItem = {
 
 export const WORK_NAV: NavItem[] = [
   { href: "/uchet/kassa", label: "Касса", icon: BanknoteIcon, ready: true },
-  { href: "/uchet/zakazy", label: "Заказы", icon: TruckIcon, ready: false },
+  { href: "/uchet/zakazy", label: "Заказы", icon: TruckIcon, ready: true },
   { href: "/uchet/vitrina", label: "Витрина", icon: BouquetIcon, ready: true },
   { href: "/uchet/sklad", label: "Склад", icon: PackageIcon, ready: true },
   { href: "/uchet/smena", label: "Смена", icon: ClockIcon, ready: true },

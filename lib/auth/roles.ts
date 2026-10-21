@@ -74,3 +74,8 @@ export function homePathFor(role: string | null | undefined): string {
   if (has(role, ["florist", "courier"])) return "/uchet";
   return "/";
 }
+
+/** Отметить доставку («забрал», «доставил») — курьеру и тем, кто в магазине. */
+export function canDeliver(role: string | null | undefined): boolean {
+  return has(role, STAFF_ROLES);
+}
