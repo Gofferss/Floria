@@ -292,7 +292,7 @@ export function StockView({ rows, groups, reasons, withCosts, isTraining }: Prop
                 <th className="w-14 px-3 py-2.5" aria-label="Фото" />
                 <SortHead k="title">Позиция</SortHead>
                 <SortHead k="qty" right>
-                  {isTraining ? "Остаток" : "Остаток"}
+                  Остаток
                 </SortHead>
                 <SortHead k="price" right>
                   Цена

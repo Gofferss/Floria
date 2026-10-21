@@ -103,7 +103,7 @@ export function ItemDrawer({ row, groups, reasons, withCosts, isTraining, onClos
         label: "Отменить",
         run: async () => {
           const undo = await reverseDocument(docId, "Отмена сразу после проведения");
-          toast(undo.success ? { tone: "ok", text: "Отменено сторно" } : { tone: "error", text: undo.error });
+          toast(undo.success ? { tone: "ok", text: "Отменено — документ сторнирован, остаток вернулся" } : { tone: "error", text: undo.error });
           router.refresh();
         },
       },
