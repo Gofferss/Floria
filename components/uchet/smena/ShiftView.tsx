@@ -10,6 +10,7 @@ import { ui } from "@/components/uchet/ui";
 import { useToast } from "@/components/uchet/Toast";
 import { CloseButton, Dialog, Sheet } from "@/components/uchet/Overlay";
 import { AmountDisplay, NumPad } from "@/components/uchet/NumPad";
+import { useOutbox } from "@/components/uchet/kassa/outbox";
 
 type Props = {
   shift: OpenShift | null;
@@ -38,6 +39,7 @@ const timeFmt = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-d
 export function ShiftView({ shift, lastClosed, cash, totals, reasons, employees }: Props) {
   const [dialog, setDialog] = useState<null | "open" | "in" | "out" | "close">(null);
   const [closed, setClosed] = useState<CloseShiftResult | null>(null);
+  const outbox = useOutbox();
 
   if (!shift) {
     return (
@@ -91,9 +93,14 @@ export function ShiftView({ shift, lastClosed, cash, totals, reasons, employees 
               Изъять
             </button>
           </div>
-          <button type="button" onClick={() => setDialog("close")} className={`${ui.btnPrimary} mt-2 min-h-[52px] w-full text-base`}>
+          <button type="button" disabled={outbox.length > 0} onClick={() => setDialog("close")} className={`${ui.btnPrimary} mt-2 min-h-[52px] w-full text-base`}>
             Закрыть смену
           </button>
+          {outbox.length > 0 && (
+            <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              На айпаде продаж без связи: {outbox.length}. Сначала они должны уйти на сервер (значок вверху) — иначе пересчёт кассы не сойдётся.
+            </p>
+          )}
 
           {totals && (
             <dl className="mt-6 space-y-2 border-t border-zinc-100 pt-4 text-sm">

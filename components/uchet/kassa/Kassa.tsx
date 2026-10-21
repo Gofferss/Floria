@@ -11,6 +11,7 @@ import { Assortment } from "@/components/uchet/kassa/Assortment";
 import { CheckPanel } from "@/components/uchet/kassa/CheckPanel";
 import { PaySheet } from "@/components/uchet/kassa/PaySheet";
 import { AmountDialog, CustomerPanel, DiscountDialog, DoneSheet, ToVitrineDialog, VitrinePicker } from "@/components/uchet/kassa/KassaDialogs";
+import { SERVER_FAILURE, classifyFailure, enqueueSale, pendingVitrineIds, setPendingError, useOutbox } from "@/components/uchet/kassa/outbox";
 import {
   bouquetPrice,
   due,
@@ -77,6 +78,7 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const outbox = useOutbox();
   const restored = useRef(false);
 
   // Чек продажи переживает перезагрузку и закрытие приложения. Сборка —
@@ -216,21 +218,47 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
   async function pay(payments: { method: string; amount: number }[]) {
     setBusy(true);
     setError(null);
-    const result = await recordSale(toSaleInput(check, index, payments));
+    const input = toSaleInput(check, index, payments);
+    const amount = due(check, index);
+    const noComposition = check.bouquets.filter((b) => b.stems.length === 0).length;
+    const noCompositionNote = noComposition
+      ? `${noComposition === 1 ? "Букет без состава" : `${noComposition} букета без состава`} — цветы не списаны со склада.`
+      : null;
+
+    let result: Awaited<ReturnType<typeof recordSale>>;
+    try {
+      result = await recordSale(input);
+    } catch (e) {
+      // Ответа нет — связь пропала (или ответ потерялся по дороге). Чек
+      // ложится на айпад и уйдёт сам: сервер проводит его по id один раз,
+      // так что повтор ничего не задвоит. Покупатель уже заплатил — не
+      // заставляем его ждать связи.
+      setBusy(false);
+      const why = classifyFailure(e);
+      if (!enqueueSale({ id: input.id, input, amount, savedAt: Date.now() })) {
+        return setError("Сервер не ответил, и сохранить чек на айпаде не вышло. Запишите продажу на бумаге и проведите её, когда связь вернётся.");
+      }
+      if (why === "server") setPendingError(input.id, SERVER_FAILURE);
+      setCheck(newCheck());
+      setActiveKey(null);
+      setDialog({
+        kind: "done",
+        text: `Сохранено: ${formatMoney(amount)}`,
+        note:
+          why === "stale"
+            ? "Вышла новая версия учёта — обновите страницу, и продажа уйдёт сама. Чек не потеряется."
+            : why === "server"
+              ? "Сервер не принял продажу — она сохранена на айпаде. Обновите страницу (может, нужно войти заново) и нажмите «Повторить» в значке вверху."
+              : `Связи нет — продажа сохранена на айпаде и уйдёт сама, когда связь вернётся. Деньги примите как обычно.${noCompositionNote ? ` ${noCompositionNote}` : ""}`,
+      });
+      return;
+    }
     setBusy(false);
     if (!result.success) return setError(result.error);
 
-    const amount = due(check, index);
-    const noComposition = check.bouquets.filter((b) => b.stems.length === 0).length;
     setCheck(newCheck());
     setActiveKey(null);
-    setDialog({
-      kind: "done",
-      text: `${result.data.saleNo}: оплачено ${formatMoney(amount)}`,
-      note: noComposition
-        ? `${noComposition === 1 ? "Букет без состава" : `${noComposition} букета без состава`} — цветы не списаны со склада.`
-        : null,
-    });
+    setDialog({ kind: "done", text: `${result.data.saleNo}: оплачено ${formatMoney(amount)}`, note: noCompositionNote });
     router.refresh();
   }
 
@@ -239,7 +267,10 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
     if (!b) return;
     setBusy(true);
     setError(null);
-    const result = await assembleBouquet({ id: b.key, title: v.title, price: v.price, items: b.stems, photoUrls: v.photoUrls, orderId: forOrder?.id ?? null });
+    const result = await assembleBouquet({ id: b.key, title: v.title, price: v.price, items: b.stems, photoUrls: v.photoUrls, orderId: forOrder?.id ?? null }).catch(() => ({
+      success: false as const,
+      error: "Нет связи — букет не поставлен на витрину. Набранный состав сохранён: повторите, когда связь вернётся.",
+    }));
     setBusy(false);
     if (!result.success) return setError(result.error);
     if (forOrder) {
@@ -252,7 +283,8 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
     router.refresh();
   }
 
-  const takenVitrine = new Set(check.vitrine.map((v) => v.bouquetId));
+  // Букет из чека, который ещё не ушёл на сервер, уже продан — второй раз не предлагаем.
+  const takenVitrine = new Set([...check.vitrine.map((v) => v.bouquetId), ...pendingVitrineIds(outbox)]);
   const priceTarget = dialog?.kind === "price" ? check.bouquets.find((b) => b.key === dialog.bouquetKey) : null;
   const itemTarget = dialog?.kind === "itemPrice" ? check.items.find((i) => i.itemId === dialog.itemId) : null;
 
