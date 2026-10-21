@@ -17,17 +17,34 @@
 // перезаписываются (правки владельца важнее), добавляются только новые.
 // Снимок остатков обновляется всегда — на то он и снимок.
 //
+// С ключом --refresh дополнительно уточняет у ещё НЕ тронутых владельцем
+// позиций (updated_at не позже чем через 2 минуты после created_at):
+//   * действует ли позиция — по activePoints каталога Posiflora. В «Обзоре
+//     склада» владелец видит 203 позиции, остальные там выключены;
+//   * цену продажи — из отчёта точки (stats-by-store), если её нет;
+//   * фото — копирует в наше хранилище. Ссылаться на CDN Posiflora нельзя:
+//     после отключения подписки картинки пропадут.
+//
+// Остаток и себестоимость в снимке — из того же отчёта точки, то есть ровно
+// те цифры, что владелец видит в «Обзоре склада». Остаток по нему и по сумме
+// движений сверен на 40 позициях — совпал во всех. Себестоимость своя у
+// Posiflora точнее моей оценки по суммам движений, поэтому берём её.
+//
 // Переменные окружения:
 //   POSIFLORA_API_URL, POSIFLORA_USERNAME, POSIFLORA_PASSWORD
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 //
 // Запуск:
-//   node scripts/uchet-import-posiflora.mjs [--snapshot] [--dry-run]
+//   node scripts/uchet-import-posiflora.mjs [--snapshot] [--refresh] [--dry-run]
 // ================================================================
 
 const args = new Set(process.argv.slice(2));
 const DRY = args.has("--dry-run");
 const SNAPSHOT = args.has("--snapshot");
+const REFRESH = args.has("--refresh");
+
+/** Бакет, куда копируются фото позиций склада. Тот же, что у каталога сайта. */
+const PHOTO_BUCKET = "product-images";
 
 function need(name) {
   const value = process.env[name];
@@ -169,12 +186,15 @@ function kindOf(groupTitle) {
 async function fetchItems() {
   const items = [];
   const groupTitle = {};
+  const logoFile = {};
   for (let page = 1; page <= 40; page++) {
-    const j = await posi(`/inventory-items?page[size]=50&page[number]=${page}&include=group,measure`);
+    const j = await posi(`/inventory-items?page[size]=50&page[number]=${page}&include=group,measure,logo`);
     for (const x of j.included ?? []) {
       if (x.type === "inventory-groups") groupTitle[x.id] = x.attributes?.title;
+      if (x.type === "images" && x.attributes?.file) logoFile[x.id] = x.attributes.file;
     }
     for (const it of j.data ?? []) {
+      const logoId = it.relationships?.logo?.data?.id ?? null;
       items.push({
         id: it.id,
         title: String(it.attributes?.title ?? "").replace(/\s+/g, " ").trim(),
@@ -182,12 +202,58 @@ async function fetchItems() {
         deleted: !!it.attributes?.deleted,
         priceMax: Number(it.attributes?.priceMax) || 0,
         groupId: it.relationships?.group?.data?.id ?? null,
+        logoId,
       });
     }
     if ((j.data ?? []).length < 50) break;
   }
-  for (const it of items) it.group = it.groupId ? groupTitle[it.groupId] ?? null : null;
+  for (const it of items) {
+    it.group = it.groupId ? groupTitle[it.groupId] ?? null : null;
+    it.logo = it.logoId ? logoFile[it.logoId] ?? null : null;
+  }
   return items;
+}
+
+/** Активность позиции: в скольких точках она включена (то, что в «Обзоре склада» — «1 из 1»). */
+async function fetchActivePoints() {
+  const active = {};
+  for (let page = 1; page <= 40; page++) {
+    const j = await posi(`/catalog?page[size]=50&page[number]=${page}`);
+    for (const c of j.data ?? []) {
+      if (c.attributes?.itemId) active[c.attributes.itemId] = Number(c.attributes.activePoints) || 0;
+    }
+    if ((j.data ?? []).length < 50) break;
+  }
+  return active;
+}
+
+/** Отчёт точки по позиции: остаток, себестоимость, цена — как в «Обзоре склада». */
+async function storeStats(itemId) {
+  const j = await posi(`/inventory-items/${itemId}/stats-by-store/${SHOP_STORE_ID}`);
+  const a = j.data?.attributes ?? {};
+  const num = (x) => (x === null || x === undefined || x === "" ? null : Number(x));
+  return { qty: num(a.qty) ?? 0, cost: num(a.cost), price: num(a.price) };
+}
+
+/** Скопировать фото с CDN Posiflora в наше хранилище. Возвращает наш адрес или null. */
+async function copyPhoto(posifloraId, url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const type = r.headers.get("content-type") || "image/jpeg";
+    if (!type.startsWith("image/")) return null;
+    const ext = /png/.test(type) ? "png" : /webp/.test(type) ? "webp" : "jpg";
+    const path = `inventory/${posifloraId}.${ext}`;
+    const body = Buffer.from(await r.arrayBuffer());
+    const up = await fetch(`${SUPA}/storage/v1/object/${PHOTO_BUCKET}/${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${KEY}`, "Content-Type": type, "x-upsert": "true" },
+      body,
+    });
+    return up.ok ? `${SUPA}/storage/v1/object/public/${PHOTO_BUCKET}/${path}` : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -299,12 +365,16 @@ async function main() {
   console.log("Читаю номенклатуру Posiflora…");
   const items = await fetchItems();
   const { byId: categories, single, broken } = await fetchCategories(items);
+  const activePoints = await fetchActivePoints();
   console.log(`  позиций: ${items.length}; категорий добрано поштучно: ${single}, не прочиталось: ${broken}`);
+  console.log(`  включены в точке: ${items.filter((it) => (activePoints[it.id] ?? 0) > 0).length}`);
+  console.log(`  с фото: ${items.filter((it) => it.logo).length}`);
 
   // Группа = категория, иначе группа Posiflora, иначе «Без группы».
   for (const it of items) {
     it.groupTitle = pretty(categories[it.id] ?? it.group ?? "Без группы");
     it.kind = kindOf(it.groupTitle);
+    it.active = !it.deleted && (activePoints[it.id] ?? 0) > 0;
   }
 
   const groupTitles = [...new Set(items.map((it) => it.groupTitle))].sort();
@@ -333,17 +403,19 @@ async function main() {
   const groups = await selectAll("inv_groups", "id,posiflora_key");
   const groupId = Object.fromEntries(groups.filter((g) => g.posiflora_key).map((g) => [g.posiflora_key, g.id]));
 
-  // --- позиции ---
-  const before = (await selectAll("inv_items", "posiflora_id")).length;
-  for (let k = 0; k < items.length; k += 100) {
-    const chunk = items.slice(k, k + 100).map((it) => ({
+  // --- новые позиции ---
+  const before = await selectAll("inv_items", "posiflora_id");
+  const known = new Set(before.map((x) => x.posiflora_id));
+  const fresh = items.filter((it) => !known.has(it.id));
+  for (let k = 0; k < fresh.length; k += 100) {
+    const chunk = fresh.slice(k, k + 100).map((it) => ({
       title: it.title || "Без названия",
       group_id: groupId[it.groupTitle.toLowerCase()] ?? null,
       unit_code: "pcs",
       fractional: it.fractional,
       is_tracked: it.kind !== "service",
       sale_price: it.priceMax > 0 ? it.priceMax : null,
-      is_active: !it.deleted,
+      is_active: it.active,
       posiflora_id: it.id,
     }));
     await supa("inv_items?on_conflict=posiflora_id", {
@@ -352,74 +424,119 @@ async function main() {
       body: JSON.stringify(chunk),
     });
   }
-  const ours = await selectAll("inv_items", "id,posiflora_id");
-  const ourId = Object.fromEntries(ours.filter((x) => x.posiflora_id).map((x) => [x.posiflora_id, x.id]));
-  console.log(`  в базе позиций: ${ours.length} (добавлено сейчас: ${ours.length - before})`);
+  const ours = await selectAll("inv_items", "id,posiflora_id,created_at,updated_at,sale_price,photo_url,is_active");
+  const ourBy = Object.fromEntries(ours.filter((x) => x.posiflora_id).map((x) => [x.posiflora_id, x]));
+  console.log(`  в базе позиций: ${ours.length} (добавлено сейчас: ${fresh.length})`);
 
-  if (!SNAPSHOT) return;
-
-  // --- снимок ---
-  const stores = await posi("/stores");
-  const training = (stores.data ?? []).find((s) => s.id !== SHOP_STORE_ID)?.id ?? null;
-
-  console.log(`\nСнимаю остатки (${items.length} позиций, точка «Флория»${training ? " и тренировочный склад" : ""})…`);
-  const snap = [];
-  const failed = [];
-  await pool(items, 6, async (it) => {
-    try {
-      const shop = summarize(await movements(it.id, SHOP_STORE_ID));
-      const train = training ? summarize(await movements(it.id, training)) : { qty: 0 };
-      snap.push({
-        item_id: ourId[it.id],
-        qty: shop.qty,
-        unit_cost: shop.unitCost,
-        last_movement_at: shop.last,
-        movements: shop.count,
-        training_qty: train.qty,
-        taken_at: new Date().toISOString(),
-        _title: it.title,
-        _kind: it.kind,
-      });
-    } catch (e) {
-      failed.push(`${it.title}: ${e.message}`);
-    }
-  });
-
-  const rows = snap.filter((s) => s.item_id).map(({ _title, _kind, ...row }) => row);
-  for (let k = 0; k < rows.length; k += 200) {
-    await supa("inv_posiflora_snapshot?on_conflict=item_id", {
-      method: "POST",
-      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify(rows.slice(k, k + 200)),
+  // --- снимок остатков (и цены для уточнения) ---
+  let stats = {};
+  if (SNAPSHOT || REFRESH) {
+    console.log(`\nЧитаю отчёт точки по ${items.length} позициям…`);
+    const failed = [];
+    await pool(items, 6, async (it) => {
+      try {
+        stats[it.id] = await storeStats(it.id);
+      } catch (e) {
+        failed.push(`${it.title}: ${e.message}`);
+      }
     });
+    if (failed.length) console.log(`  не прочиталось: ${failed.length} — например ${failed[0]}`);
   }
 
-  // --- отчёт ---
-  const days = (d) => (d ? (Date.now() - new Date(d).getTime()) / 86400000 : Infinity);
-  const positive = snap.filter((s) => s.qty > 0);
-  const negative = snap.filter((s) => s.qty < 0);
-  const alive90 = snap.filter((s) => days(s.last_movement_at) <= 90);
-  const never = snap.filter((s) => s.movements === 0);
-  const trainingLeft = snap.filter((s) => s.training_qty !== 0);
-  const value = positive.reduce((sum, s) => sum + s.qty * (s.unit_cost ?? 0), 0);
-  const noCost = positive.filter((s) => s.unit_cost === null);
+  if (SNAPSHOT) {
+    // Дату последнего движения и остаток на тренировочном складе даёт только
+    // журнал движений — читаем его заодно.
+    const stores = await posi("/stores");
+    const training = (stores.data ?? []).find((s) => s.id !== SHOP_STORE_ID)?.id ?? null;
+    console.log("Читаю даты последних движений…");
+    const moves = {};
+    await pool(items, 6, async (it) => {
+      try {
+        const shop = summarize(await movements(it.id, SHOP_STORE_ID));
+        const train = training ? summarize(await movements(it.id, training)) : { qty: 0 };
+        moves[it.id] = { last: shop.last, count: shop.count, training: train.qty };
+      } catch {
+        // без даты движения позиция всё равно попадёт в снимок
+      }
+    });
 
-  console.log("\n=== Снимок ===");
-  console.log(`  записано: ${rows.length}, не прочиталось: ${failed.length}`);
-  console.log(`  с остатком > 0:            ${positive.length}`);
-  console.log(`  в минусе:                  ${negative.length}`);
-  console.log(`  двигались за 90 дней:      ${alive90.length}`);
-  console.log(`  не двигались никогда:      ${never.length}`);
-  console.log(`  остаток на тренировочном:  ${trainingLeft.length} позиций`);
-  console.log(`  стоимость остатка (оценка): ${Math.round(value).toLocaleString("ru-RU")} ₽`);
-  console.log(`  с остатком, но без цены:   ${noCost.length}`);
-  if (negative.length) {
-    console.log("\n  в минусе (до 10):");
-    negative.slice(0, 10).forEach((s) => console.log(`    ${String(s.qty).padStart(7)}  ${s._title.slice(0, 50)}`));
+    const rows = items
+      .filter((it) => ourBy[it.id] && stats[it.id])
+      .map((it) => ({
+        item_id: ourBy[it.id].id,
+        qty: stats[it.id].qty,
+        unit_cost: stats[it.id].cost !== null && stats[it.id].cost >= 0 ? stats[it.id].cost : null,
+        last_movement_at: moves[it.id]?.last ?? null,
+        movements: moves[it.id]?.count ?? 0,
+        training_qty: moves[it.id]?.training ?? 0,
+        taken_at: new Date().toISOString(),
+      }));
+    for (let k = 0; k < rows.length; k += 200) {
+      await supa("inv_posiflora_snapshot?on_conflict=item_id", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(rows.slice(k, k + 200)),
+      });
+    }
+
+    const positive = rows.filter((r) => r.qty > 0);
+    const negative = rows.filter((r) => r.qty < 0);
+    const value = positive.reduce((s, r) => s + r.qty * (r.unit_cost ?? 0), 0);
+    console.log("\n=== Снимок ===");
+    console.log(`  записано: ${rows.length}`);
+    console.log(`  с остатком > 0: ${positive.length}, в минусе: ${negative.length}`);
+    console.log(`  стоимость остатка по себестоимости Posiflora: ${Math.round(value).toLocaleString("ru-RU")} ₽`);
   }
-  if (failed.length) {
-    console.log("\n  не прочиталось (до 5):");
-    failed.slice(0, 5).forEach((f) => console.log("    " + f.slice(0, 100)));
+
+  // --- уточнение нетронутых позиций ---
+  if (REFRESH) {
+    const untouched = (x) => new Date(x.updated_at).getTime() - new Date(x.created_at).getTime() < 2 * 60 * 1000;
+    let activity = 0;
+    let prices = 0;
+    let photos = 0;
+    let skipped = 0;
+
+    console.log("\nУточняю нетронутые позиции и копирую фото…");
+    await pool(items, 4, async (it) => {
+      const row = ourBy[it.id];
+      if (!row) return;
+      if (!untouched(row)) {
+        skipped++;
+        return;
+      }
+      const patch = {};
+      if (row.is_active !== it.active) {
+        patch.is_active = it.active;
+        activity++;
+      }
+      const price = stats[it.id]?.price ?? null;
+      if (row.sale_price === null && price && price > 0) {
+        patch.sale_price = price;
+        prices++;
+      }
+      if (!row.photo_url && it.logo) {
+        const url = await copyPhoto(it.id, it.logo);
+        if (url) {
+          patch.photo_url = url;
+          photos++;
+        }
+      }
+      if (Object.keys(patch).length === 0) return;
+      // Триггер set_updated_at отметит позицию изменённой, и следующий запуск
+      // с --refresh её пропустит. Так и задумано: уточнение применяется один
+      // раз, к позициям, которых ещё никто не трогал.
+      await supa(`inv_items?id=eq.${row.id}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify(patch),
+      });
+    });
+
+    console.log("\n=== Уточнение ===");
+    console.log(`  активность поправлена: ${activity}`);
+    console.log(`  цены добавлены:        ${prices}`);
+    console.log(`  фото скопированы:      ${photos}`);
+    console.log(`  пропущено (владелец уже правил): ${skipped}`);
   }
 }
 
