@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { bulkUpdateItems } from "@/lib/uchet/actions";
 import type { GroupOption, ReasonOption, StockRow } from "@/lib/uchet/queries";
 import { daysLabel, daysSince, formatMoney, formatQty } from "@/lib/uchet/format";
-import { KIND_STYLE, ui } from "@/components/uchet/ui";
+import { ui } from "@/components/uchet/ui";
+import { GroupIcon } from "@/components/uchet/GroupIcon";
 import { useToast } from "@/components/uchet/Toast";
 import { ItemDrawer } from "@/components/uchet/sklad/ItemDrawer";
 
@@ -199,21 +200,26 @@ export function StockView({ rows, groups, reasons, withCosts, isTraining }: Prop
 
   return (
     <div>
-      {/* Плитки групп — цвет по виду, крупные, на одно касание. */}
+      {/* Плитки групп: белые, со значком. Цвет — только у того, что требует
+          внимания (сколько в минусе), чтобы важное не тонуло в раскраске. */}
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2" role="group" aria-label="Группы">
         <button
           type="button"
           onClick={() => setGroup("")}
           aria-pressed={!group}
-          className={`flex min-h-[64px] min-w-[104px] shrink-0 flex-col justify-between rounded-xl px-3.5 py-2.5 text-left ring-1 ring-inset transition ${
-            !group ? "bg-zinc-900 text-white ring-zinc-900" : "bg-white text-zinc-800 ring-zinc-200 hover:ring-zinc-300"
+          className={`flex min-h-[60px] min-w-[112px] shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-left ring-1 ring-inset transition ${
+            !group ? "bg-white ring-2 ring-lavender-600" : "bg-white ring-zinc-200 hover:ring-lavender-300"
           }`}
         >
-          <span className="text-sm font-semibold">Все группы</span>
-          <span className="text-xs opacity-60 tabular-nums">{rows.filter((r) => matchesChip(r, chip === "hidden" ? "hidden" : "all")).length}</span>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600">
+            <GroupIcon icon="other" className="h-5 w-5" />
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <span className="text-sm font-semibold text-zinc-900">Все</span>
+            <span className="text-xs tabular-nums text-zinc-500">{rows.filter((r) => matchesChip(r, chip === "hidden" ? "hidden" : "all")).length}</span>
+          </span>
         </button>
         {groupTiles.map((g) => {
-          const style = KIND_STYLE[g.kind];
           const on = group === g.id;
           return (
             <button
@@ -221,19 +227,19 @@ export function StockView({ rows, groups, reasons, withCosts, isTraining }: Prop
               type="button"
               onClick={() => setGroup(on ? "" : g.id)}
               aria-pressed={on}
-              className={`flex min-h-[64px] min-w-[120px] shrink-0 flex-col justify-between rounded-xl px-3.5 py-2.5 text-left ring-1 ring-inset transition ${
-                on ? "bg-zinc-900 text-white ring-zinc-900" : `${style.tile} hover:brightness-[0.98]`
+              className={`flex min-h-[60px] min-w-[150px] shrink-0 items-center gap-2.5 rounded-xl bg-white px-3 py-2 text-left ring-inset transition ${
+                on ? "ring-2 ring-lavender-600" : "ring-1 ring-zinc-200 hover:ring-lavender-300"
               }`}
             >
-              <span className="flex items-center gap-1.5 text-sm font-semibold">
-                <span className={`h-2 w-2 shrink-0 rounded-full ${style.dot}`} aria-hidden="true" />
-                <span className="truncate">{g.title}</span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-lavender-50 text-lavender-700">
+                <GroupIcon icon={g.icon} />
               </span>
-              <span className="flex items-center gap-2 text-xs tabular-nums">
-                <span className="opacity-60">{g.count}</span>
-                {g.negative > 0 && (
-                  <span className={`rounded px-1 font-semibold ${on ? "bg-red-500 text-white" : "bg-red-100 text-red-700"}`}>−{g.negative}</span>
-                )}
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-sm font-semibold text-zinc-900">{g.title}</span>
+                <span className="flex items-center gap-1.5 whitespace-nowrap text-xs tabular-nums text-zinc-500">
+                  {g.count} поз.
+                  {g.negative > 0 && <span className="font-semibold text-red-600">· минус {g.negative}</span>}
+                </span>
               </span>
             </button>
           );
@@ -313,7 +319,6 @@ export function StockView({ rows, groups, reasons, withCosts, isTraining }: Prop
             <tbody>
               {visible.map((r) => {
                 const q = mainQty(r);
-                const style = r.kind ? KIND_STYLE[r.kind] : KIND_STYLE.other;
                 const low = r.minQty !== null && q < r.minQty;
                 const stale = isStale(r);
                 const moved = daysSince(r.lastMovementAt);
@@ -340,7 +345,9 @@ export function StockView({ rows, groups, reasons, withCosts, isTraining }: Prop
                         {r.photoUrl ? (
                           <Image src={r.photoUrl} alt="" fill sizes="40px" className="object-cover" />
                         ) : (
-                          <span className={`absolute inset-0 m-auto h-2.5 w-2.5 rounded-full ${style.dot}`} aria-hidden="true" />
+                          <span className="absolute inset-0 flex items-center justify-center text-zinc-400">
+                            <GroupIcon icon={r.groupIcon} className="h-5 w-5" />
+                          </span>
                         )}
                       </div>
                     </td>

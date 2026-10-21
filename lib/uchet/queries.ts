@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
-import type { DocStatus, DocType, GroupKind, PaymentMethod } from "@/lib/uchet/format";
+import type { AnyDocType, DocStatus, GroupKind, PaymentMethod } from "@/lib/uchet/format";
 
 // ================================================================
 // Чтение склада для админки.
@@ -55,7 +55,7 @@ export async function listLocations(): Promise<(LocationInfo & { isDefault: bool
 // Справочники
 // ---------------------------------------------------------------
 
-export type GroupOption = { id: string; title: string; kind: GroupKind; isActive: boolean; sort: number };
+export type GroupOption = { id: string; title: string; kind: GroupKind; icon: string | null; isActive: boolean; sort: number };
 export type SupplierOption = { id: string; title: string; phone: string | null; notes: string | null; isActive: boolean };
 export type ReasonOption = { id: string; title: string; isActive: boolean; sort: number };
 export type UnitOption = { code: string; title: string; shortTitle: string };
@@ -63,7 +63,7 @@ export type UnitOption = { code: string; title: string; shortTitle: string };
 export async function listGroups(): Promise<GroupOption[]> {
   const { data, error } = await getSupabaseAdmin()
     .from("inv_groups")
-    .select("id, title, kind, is_active, sort")
+    .select("id, title, kind, icon, is_active, sort")
     .order("sort")
     .order("title");
   if (error) throw new Error(`Группы склада: ${error.message}`);
@@ -71,6 +71,7 @@ export async function listGroups(): Promise<GroupOption[]> {
     id: g.id,
     title: g.title,
     kind: g.kind as GroupKind,
+    icon: g.icon ?? null,
     isActive: g.is_active,
     sort: g.sort,
   }));
@@ -119,6 +120,7 @@ export type StockRow = {
   title: string;
   groupId: string | null;
   groupTitle: string | null;
+  groupIcon: string | null;
   kind: GroupKind | null;
   unit: string;
   fractional: boolean;
@@ -144,7 +146,7 @@ export type StockRow = {
 
 const STOCK_SELECT =
   "id, title, group_id, unit_code, fractional, is_tracked, is_active, sale_price, min_qty, fresh_days, avg_cost, photo_url, " +
-  "inv_groups(title, kind), inv_units(short_title), inv_stock(qty, location_id), " +
+  "inv_groups(title, kind, icon), inv_units(short_title), inv_stock(qty, location_id), " +
   "inv_posiflora_snapshot(qty, unit_cost, last_movement_at, training_qty, taken_at)";
 
 type StockDbRow = {
@@ -160,7 +162,7 @@ type StockDbRow = {
   fresh_days: number | null;
   avg_cost: number | string | null;
   photo_url: string | null;
-  inv_groups: { title: string; kind: string } | { title: string; kind: string }[] | null;
+  inv_groups: { title: string; kind: string; icon: string | null } | { title: string; kind: string; icon: string | null }[] | null;
   inv_units: { short_title: string } | { short_title: string }[] | null;
   inv_stock: { qty: number | string; location_id: string }[] | null;
   inv_posiflora_snapshot:
@@ -183,6 +185,7 @@ function mapStockRow(row: StockDbRow, freshness: Map<string, number>, withCosts:
     title: row.title,
     groupId: row.group_id,
     groupTitle: group?.title ?? null,
+    groupIcon: group?.icon ?? null,
     kind: (group?.kind as GroupKind | undefined) ?? null,
     unit: unit?.short_title ?? "шт",
     fractional: row.fractional,
@@ -284,7 +287,7 @@ export async function getItemEditable(id: string): Promise<ItemEditable | null> 
 export type MovementRow = {
   documentId: string;
   docNo: string;
-  docType: DocType;
+  docType: AnyDocType;
   status: DocStatus;
   isReversal: boolean;
   date: string;
@@ -329,7 +332,7 @@ export async function listItemMovements(itemId: string, withCosts: boolean): Pro
       return {
         documentId: d.id,
         docNo: d.doc_no,
-        docType: d.doc_type as DocType,
+        docType: d.doc_type as AnyDocType,
         status: d.status as DocStatus,
         isReversal: !!d.reversal_of,
         date: d.doc_date,
@@ -350,7 +353,7 @@ export async function listItemMovements(itemId: string, withCosts: boolean): Pro
 export type DocumentSummary = {
   id: string;
   docNo: string;
-  docType: DocType;
+  docType: AnyDocType;
   status: DocStatus;
   date: string;
   supplierTitle: string | null;
@@ -365,7 +368,7 @@ export type DocumentSummary = {
 };
 
 export async function listDocuments(
-  filter: { type?: DocType; status?: DocStatus },
+  filter: { type?: AnyDocType; status?: DocStatus },
   withCosts: boolean
 ): Promise<DocumentSummary[]> {
   let query = getSupabaseAdmin()
@@ -402,7 +405,7 @@ export async function listDocuments(
   return ((data ?? []) as unknown as Row[]).map((d) => ({
     id: d.id,
     docNo: d.doc_no,
-    docType: d.doc_type as DocType,
+    docType: d.doc_type as AnyDocType,
     status: d.status as DocStatus,
     date: d.doc_date,
     supplierTitle: one(d.inv_suppliers)?.title ?? null,
@@ -432,7 +435,7 @@ export type DocumentLineDetail = {
 export type DocumentDetail = {
   id: string;
   docNo: string;
-  docType: DocType;
+  docType: AnyDocType;
   status: DocStatus;
   date: string;
   supplierId: string | null;
@@ -518,7 +521,7 @@ export async function getDocument(id: string, withCosts: boolean): Promise<Docum
   return {
     id: doc.id,
     docNo: doc.doc_no,
-    docType: doc.doc_type as DocType,
+    docType: doc.doc_type as AnyDocType,
     status: doc.status as DocStatus,
     date: doc.doc_date,
     supplierId: doc.supplier_id,

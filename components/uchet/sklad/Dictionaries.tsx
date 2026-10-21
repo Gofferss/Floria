@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { saveGroup, saveReason, saveSupplier } from "@/lib/uchet/actions";
 import type { GroupOption, ReasonOption, SupplierOption } from "@/lib/uchet/queries";
 import { KINDS, KIND_LABEL, type GroupKind } from "@/lib/uchet/format";
+import { GROUP_ICONS, GROUP_ICON_KEYS, GroupIcon } from "@/components/uchet/GroupIcon";
 
 // ================================================================
 // Справочники склада. Удаления нет намеренно: на группу, поставщика или
@@ -49,15 +50,57 @@ function Section({ title, hint, children }: { title: string; hint: string; child
 
 // ---------------------------------------------------------------
 
+/** Значок группы: касание — сетка значков, касание по значку — выбран. */
+function IconPicker({ value, onChange, id }: { value: string | null; onChange: (icon: string) => void; id: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        id={id}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label="Значок группы"
+        title="Сменить значок"
+        className="flex h-10 w-10 items-center justify-center rounded-xl bg-lavender-50 text-lavender-700 ring-1 ring-inset ring-lavender-200 transition hover:ring-lavender-400"
+      >
+        <GroupIcon icon={value} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-12 z-20 grid w-[17rem] grid-cols-6 gap-1 rounded-xl border border-zinc-200 bg-white p-2 shadow-xl" role="listbox" aria-label="Значки">
+          {GROUP_ICON_KEYS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="option"
+              aria-selected={value === k}
+              title={GROUP_ICONS[k].title}
+              onClick={() => {
+                onChange(k);
+                setOpen(false);
+              }}
+              className={`flex h-10 w-10 items-center justify-center rounded-lg transition ${value === k ? "bg-lavender-600 text-white" : "text-zinc-700 hover:bg-lavender-50"}`}
+            >
+              <GroupIcon icon={k} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GroupRow({ group }: { group: GroupOption }) {
   const [title, setTitle] = useState(group.title);
   const [kind, setKind] = useState<GroupKind>(group.kind);
+  const [icon, setIcon] = useState(group.icon);
   const [active, setActive] = useState(group.isActive);
   const { busy, error, run } = useSave();
-  const dirty = title !== group.title || kind !== group.kind || active !== group.isActive;
+  const dirty = title !== group.title || kind !== group.kind || icon !== group.icon || active !== group.isActive;
 
   return (
-    <li className="grid grid-cols-1 items-center gap-2 py-3 sm:grid-cols-[1fr_13rem_auto_auto]">
+    <li className="grid grid-cols-1 items-center gap-2 py-3 sm:grid-cols-[auto_1fr_13rem_auto_auto]">
+      <IconPicker id={`g-icon-${group.id}`} value={icon} onChange={setIcon} />
       <input id={`g-title-${group.id}`} aria-label="Название группы" value={title} onChange={(e) => setTitle(e.target.value)} className={field} />
       <select id={`g-kind-${group.id}`} aria-label="Вид" value={kind} onChange={(e) => setKind(e.target.value as GroupKind)} className={field}>
         {KINDS.map((k) => (
@@ -73,12 +116,12 @@ function GroupRow({ group }: { group: GroupOption }) {
       <button
         type="button"
         disabled={!dirty || busy}
-        onClick={() => run(() => saveGroup({ id: group.id, title, kind, isActive: active }))}
+        onClick={() => run(() => saveGroup({ id: group.id, title, kind, icon, isActive: active }))}
         className={saveBtn}
       >
         {busy ? "…" : "Сохранить"}
       </button>
-      {error && <p className="font-body text-xs text-red-600 sm:col-span-4">{error}</p>}
+      {error && <p className="font-body text-xs text-red-600 sm:col-span-5">{error}</p>}
     </li>
   );
 }
@@ -91,7 +134,7 @@ export function GroupsEditor({ groups }: { groups: GroupOption[] }) {
   return (
     <Section
       title="Группы"
-      hint="Вид группы нужен системе: срок свежести подсвечивается у цветов и зелени, у услуг остаток не ведётся."
+      hint="Значок — чтобы группу узнавали с одного взгляда в кассе и на складе. Вид нужен системе: срок свежести подсвечивается у цветов и зелени, у услуг остаток не ведётся."
     >
       <form
         onSubmit={(e) => {

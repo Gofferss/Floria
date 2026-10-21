@@ -10,8 +10,6 @@
 // поменять вид можно было в одном месте.
 // ================================================================
 
-import type { GroupKind } from "@/lib/uchet/format";
-
 export const ui = {
   page: "mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 lg:px-8",
   card: "rounded-2xl border border-zinc-200 bg-white",
@@ -44,20 +42,6 @@ export const ui = {
   td: "px-3 py-2.5 text-sm text-zinc-800",
 };
 
-/**
- * Цвет группы — по ВИДУ, а не случайный. У Posiflora цвет папки
- * назначается как придётся, и «ИМПОРТ» чёрным рядом с «Уценкой» жёлтым
- * не говорит ни о чём. Здесь розовое — всегда цветы, зелёное — всегда
- * зелень, и глаз находит нужное раньше, чем прочитает подпись.
- */
-export const KIND_STYLE: Record<GroupKind, { tile: string; dot: string }> = {
-  flower: { tile: "bg-rose-50 ring-rose-200 text-rose-950", dot: "bg-rose-400" },
-  greenery: { tile: "bg-emerald-50 ring-emerald-200 text-emerald-950", dot: "bg-emerald-500" },
-  decor: { tile: "bg-amber-50 ring-amber-200 text-amber-950", dot: "bg-amber-400" },
-  packaging: { tile: "bg-slate-50 ring-slate-200 text-slate-900", dot: "bg-slate-400" },
-  gift: { tile: "bg-sky-50 ring-sky-200 text-sky-950", dot: "bg-sky-400" },
-  print: { tile: "bg-violet-50 ring-violet-200 text-violet-950", dot: "bg-violet-400" },
-  service: { tile: "bg-zinc-50 ring-zinc-200 text-zinc-800", dot: "bg-zinc-400" },
-  bouquet: { tile: "bg-yellow-50 ring-yellow-200 text-yellow-950", dot: "bg-yellow-400" },
-  other: { tile: "bg-stone-50 ring-stone-200 text-stone-900", dot: "bg-stone-400" },
-};
+// Цвет групп по виду убран (22.10.2026): владелец попросил спокойный вид с
+// акцентом на важном. Группы теперь различаются значком (GroupIcon.tsx),
+// а цвет остался за тем, что требует внимания: минус, «мало», «залежалось».
