@@ -25,9 +25,18 @@ const NEXT: Record<string, "delivering" | "completed" | undefined> = {
   delivering: "completed",
 };
 
-export async function courierAdvance(orderId: string, to: "delivering" | "completed"): Promise<Result> {
+export async function courierAdvance(orderId: string, to: "delivering" | "completed", source: "site" | "shop" = "site"): Promise<Result> {
   const staff = await requireStaffAction(canDeliver);
   const admin = getSupabaseAdmin();
+
+  // Заказ магазина: шаги проверяет база, клиенту в бот не пишем (решение
+  // владельца — сообщения только по заказам с сайта).
+  if (source === "shop") {
+    const { error } = await admin.rpc("pos_set_order_status", { p_order: orderId, p_status: to, p_staff: staff.id, p_employee: null });
+    if (error) return { success: false, error: error.message || "Не удалось сохранить отметку" };
+    revalidatePath("/uchet", "layout");
+    return { success: true };
+  }
 
   const { data: order } = await admin.from("orders").select("status, is_pickup, payment_status").eq("id", orderId).maybeSingle();
   if (!order) return { success: false, error: "Заказ не найден" };

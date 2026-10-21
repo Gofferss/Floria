@@ -38,6 +38,7 @@ type Props = {
   onPay: () => void;
   onToVitrine: () => void;
   onCancelAssembly: () => void;
+  forOrder?: { number: string; wishes: string | null } | null;
 };
 
 function Stepper({ value, onMinus, onPlus, label }: { value: number; onMinus: () => void; onPlus: () => void; label: string }) {
@@ -79,7 +80,14 @@ export function CheckPanel(p: Props) {
           </div>
         )}
         {assembly ? (
-          <p className="text-sm text-zinc-600">Собираете букет на витрину: цветы спишутся со склада сразу, при продаже — уже ничего.</p>
+          p.forOrder ? (
+            <p className="text-sm text-zinc-600">
+              Собираете букет к заказу <span className="font-semibold text-zinc-900">{p.forOrder.number}</span>: цветы спишутся со склада сразу.
+              {p.forOrder.wishes && <span className="mt-1 block rounded-lg bg-lavender-50 px-2.5 py-1.5 text-zinc-800">«{p.forOrder.wishes}»</span>}
+            </p>
+          ) : (
+            <p className="text-sm text-zinc-600">Собираете букет на витрину: цветы спишутся со склада сразу, при продаже — уже ничего.</p>
+          )
         ) : (
           <button
             type="button"
@@ -242,7 +250,7 @@ export function CheckPanel(p: Props) {
                 onClick={p.onToVitrine}
                 className={`${ui.btnPrimary} min-h-[52px] text-base`}
               >
-                На витрину
+                {p.forOrder ? "Собран — к заказу" : "На витрину"}
               </button>
             </div>
           </>

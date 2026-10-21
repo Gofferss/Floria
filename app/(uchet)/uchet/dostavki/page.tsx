@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireStaffUser } from "@/lib/auth/server";
 import { canDeliver } from "@/lib/auth/roles";
 import { listDeliveries, studioDate } from "@/lib/uchet/order-queries";
+import { getDefaultLocation } from "@/lib/uchet/queries";
 import { DeliveryList } from "@/components/uchet/dostavki/DeliveryList";
 
 export const metadata: Metadata = {
@@ -15,7 +16,8 @@ export default async function DeliveriesPage() {
   await requireStaffUser("/uchet/dostavki", canDeliver);
   const today = studioDate(0);
   const tomorrow = studioDate(1);
-  const orders = await listDeliveries([today, tomorrow]);
+  const location = await getDefaultLocation();
+  const orders = await listDeliveries([today, tomorrow], location.id);
 
   return (
     <DeliveryList

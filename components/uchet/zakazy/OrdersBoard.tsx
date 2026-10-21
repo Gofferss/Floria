@@ -10,6 +10,9 @@ import { ui } from "@/components/uchet/ui";
 import { useToast } from "@/components/uchet/Toast";
 import { CloseButton, Panel } from "@/components/uchet/Overlay";
 import { AssembledPhoto } from "@/components/admin/orders/AssembledPhoto";
+import type { PaymentMethodOption } from "@/lib/uchet/pos-queries";
+import { ShopOrderPanel } from "@/components/uchet/zakazy/ShopOrderPanel";
+import { ShopOrderForm } from "@/components/uchet/zakazy/ShopOrderForm";
 
 // ================================================================
 // Заказы по дням, а не таблицей: во сколько и оплачен ли — главное, и оно
@@ -99,10 +102,15 @@ function OrderCard({ o, urgent, overdue, onOpen }: { o: WorkOrder; urgent: boole
       <span className="mt-1 block truncate text-sm text-zinc-700">{o.isPickup ? "Самовывоз" : o.address ?? "адрес не указан"}</span>
       {items && <span className="mt-0.5 block truncate text-sm text-zinc-500">{items}</span>}
       <span className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold">
-        <span className={`rounded-full px-2 py-0.5 ${o.paid ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>
-          {o.paid ? "оплачено" : "не оплачено"}
+        <span
+          className={`rounded-full px-2 py-0.5 ${
+            o.paid ? "bg-emerald-50 text-emerald-800" : o.paidAmount > 0 ? "bg-amber-100 text-amber-900" : "bg-red-50 text-red-700"
+          }`}
+        >
+          {o.paid ? "оплачено" : o.paidAmount > 0 ? `внесено ${formatMoney(o.paidAmount)}` : "не оплачено"}
         </span>
         <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-700">{STATUS_LABEL[o.status]}</span>
+        <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-500">{o.source === "site" ? "с сайта" : "магазин"}</span>
         {overdue && <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-800">просрочен</span>}
         {o.photos.length > 0 && <span className="rounded-full bg-lavender-50 px-2 py-0.5 text-lavender-700">фото {o.photosSentAt ? "отправлено" : "есть"}</span>}
       </span>
@@ -110,11 +118,18 @@ function OrderCard({ o, urgent, overdue, onOpen }: { o: WorkOrder; urgent: boole
   );
 }
 
-type Props = { work: WorkOrder[]; awaitingPayment: WorkOrder[]; doneToday: WorkOrder[] };
+type Props = {
+  work: WorkOrder[];
+  awaitingPayment: WorkOrder[];
+  doneToday: WorkOrder[];
+  methods: PaymentMethodOption[];
+  shiftOpen: boolean;
+};
 
-export function OrdersBoard({ work, awaitingPayment, doneToday }: Props) {
+export function OrdersBoard({ work, awaitingPayment, doneToday, methods, shiftOpen }: Props) {
   const now = useStudioNow();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [showUnpaid, setShowUnpaid] = useState(false);
 
   const today = now?.today ?? "";
@@ -133,6 +148,12 @@ export function OrdersBoard({ work, awaitingPayment, doneToday }: Props) {
 
   return (
     <div className={ui.page}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className={ui.muted}>Заказы с сайта и из магазина — вместе, по дням.</p>
+        <button type="button" onClick={() => setCreating(true)} className={`${ui.btnPrimary} min-h-[48px]`}>
+          + Заказ
+        </button>
+      </div>
       {!now ? null : (
         <div className={`grid gap-4 ${columns.length === 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"} md:grid-cols-2`}>
           {columns.map((c) => (
@@ -179,7 +200,13 @@ export function OrdersBoard({ work, awaitingPayment, doneToday }: Props) {
         </section>
       )}
 
-      {open && <OrderPanel order={open} onClose={() => setOpenId(null)} />}
+      {open &&
+        (open.source === "shop" ? (
+          <ShopOrderPanel order={open} methods={methods} shiftOpen={shiftOpen} onClose={() => setOpenId(null)} />
+        ) : (
+          <OrderPanel order={open} onClose={() => setOpenId(null)} />
+        ))}
+      {creating && <ShopOrderForm order={null} methods={methods} shiftOpen={shiftOpen} onClose={() => setCreating(false)} />}
     </div>
   );
 }

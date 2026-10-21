@@ -28,6 +28,8 @@ type Props = {
   mode: "sale" | "assembly";
   /** Пришли с витрины кнопкой «Продать» — этот букет сразу в чек. */
   addVitrineId: string | null;
+  /** Сборка к заказу магазина, а не на витрину. */
+  forOrder: { id: string; number: string; wishes: string | null } | null;
   shiftOpen: boolean;
   items: KassaItem[];
   groups: KassaGroup[];
@@ -61,7 +63,7 @@ function newBouquet(n: number): BouquetLine {
  * Режим «сборка на витрину» — та же касса, но вместо оплаты кнопка «На
  * витрину»: цветы списываются при сборке, на витрине появляется букет.
  */
-export function Kassa({ mode, addVitrineId, shiftOpen, items, groups, frequent, vitrine, methods, settings, approvers }: Props) {
+export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, frequent, vitrine, methods, settings, approvers }: Props) {
   const router = useRouter();
   const toast = useToast();
   const assembly = mode === "assembly";
@@ -82,7 +84,7 @@ export function Kassa({ mode, addVitrineId, shiftOpen, items, groups, frequent, 
   useEffect(() => {
     if (assembly) {
       const b = newBouquet(1);
-      b.title = "Букет на витрину";
+      b.title = forOrder ? `Букет к заказу ${forOrder.number}` : "Букет на витрину";
       setCheck({ ...newCheck(), bouquets: [b] });
       setActiveKey(b.key);
       restored.current = true;
@@ -223,11 +225,16 @@ export function Kassa({ mode, addVitrineId, shiftOpen, items, groups, frequent, 
     if (!b) return;
     setBusy(true);
     setError(null);
-    const result = await assembleBouquet({ id: b.key, title: v.title, price: v.price, items: b.stems, photoUrls: v.photoUrls });
+    const result = await assembleBouquet({ id: b.key, title: v.title, price: v.price, items: b.stems, photoUrls: v.photoUrls, orderId: forOrder?.id ?? null });
     setBusy(false);
     if (!result.success) return setError(result.error);
-    toast({ tone: "ok", text: `«${v.title || "Букет"}» на витрине. Цветы списаны со склада` });
-    router.push("/uchet/vitrina");
+    if (forOrder) {
+      toast({ tone: "ok", text: `Букет к заказу ${forOrder.number} собран. Цветы списаны со склада` });
+      router.push("/uchet/zakazy");
+    } else {
+      toast({ tone: "ok", text: `«${v.title || "Букет"}» на витрине. Цветы списаны со склада` });
+      router.push("/uchet/vitrina");
+    }
     router.refresh();
   }
 
@@ -283,7 +290,8 @@ export function Kassa({ mode, addVitrineId, shiftOpen, items, groups, frequent, 
           setError(null);
           setDialog({ kind: "toVitrine" });
         }}
-        onCancelAssembly={() => router.push("/uchet/vitrina")}
+        onCancelAssembly={() => router.push(forOrder ? "/uchet/zakazy" : "/uchet/vitrina")}
+        forOrder={forOrder}
       />
 
       {dialog?.kind === "pay" && (
@@ -372,6 +380,7 @@ export function Kassa({ mode, addVitrineId, shiftOpen, items, groups, frequent, 
 
       {dialog?.kind === "toVitrine" && check.bouquets[0] && (
         <ToVitrineDialog
+          forOrder={forOrder?.number ?? null}
           suggested={bouquetPrice(check.bouquets[0], index)}
           busy={busy}
           error={error}

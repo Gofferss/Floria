@@ -340,12 +340,14 @@ export function VitrinePicker({
 // ---------------------------------------------------------------
 
 export function ToVitrineDialog({
+  forOrder,
   suggested,
   busy,
   error,
   onDone,
   onClose,
 }: {
+  forOrder: string | null;
   suggested: number;
   busy: boolean;
   error: string | null;
@@ -382,10 +384,10 @@ export function ToVitrineDialog({
   }
 
   return (
-    <Sheet label="На витрину" onClose={busy ? undefined : onClose} dismissible={!busy}>
+    <Sheet label={forOrder ? "К заказу" : "На витрину"} onClose={busy ? undefined : onClose} dismissible={!busy}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-lg font-semibold">На витрину</h2>
+          <h2 className="font-display text-lg font-semibold">{forOrder ? `Букет к заказу ${forOrder}` : "На витрину"}</h2>
           <p className="mt-0.5 text-sm text-zinc-500">По составу {formatMoney(suggested)}. Цену можно поставить свою.</p>
         </div>
         {!busy && <CloseButton onClose={onClose} />}
@@ -425,7 +427,7 @@ export function ToVitrineDialog({
             onClick={() => onDone({ title, price: Number(price), photoUrls: photos })}
             className={`${ui.btnPrimary} min-h-[52px] w-full text-base`}
           >
-            {busy ? "Ставим…" : "Поставить на витрину"}
+            {busy ? "Сохраняем…" : forOrder ? "Готово — букет к заказу" : "Поставить на витрину"}
           </button>
         </div>
         <NumPad value={price} onChange={setPrice} />

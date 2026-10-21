@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { courierAdvance } from "@/lib/uchet/order-actions";
 import type { WorkOrder } from "@/lib/uchet/order-queries";
+import { formatMoney } from "@/lib/uchet/format";
 import { ui } from "@/components/uchet/ui";
 import { useToast } from "@/components/uchet/Toast";
 
@@ -31,7 +32,7 @@ export function DeliveryList({ days }: { days: { title: string; orders: WorkOrde
 
   async function mark(o: WorkOrder, to: "delivering" | "completed") {
     setBusy(o.id);
-    const result = await courierAdvance(o.id, to);
+    const result = await courierAdvance(o.id, to, o.source);
     setBusy(null);
     if (!result.success) return toast({ tone: "error", text: result.error });
     toast({ tone: "ok", text: to === "delivering" ? `${o.number}: в пути` : `${o.number}: доставлен` });
@@ -75,7 +76,13 @@ export function DeliveryList({ days }: { days: { title: string; orders: WorkOrde
                     </a>
                   </p>
                   {o.courierComment && <p className="mt-1 text-sm text-zinc-600">«{o.courierComment}»</p>}
-                  <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">Оплачено — деньги не брать</p>
+                  {o.paid ? (
+                    <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">Оплачено — деньги не брать</p>
+                  ) : (
+                    <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
+                      Взять с получателя {formatMoney(o.total - o.paidAmount)} — и передать в магазин
+                    </p>
+                  )}
                   <div className="mt-3">
                     {o.status === "delivering" ? (
                       <button type="button" disabled={busy === o.id} onClick={() => mark(o, "completed")} className={`${ui.btnPrimary} min-h-[52px] w-full text-base`}>

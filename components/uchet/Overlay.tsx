@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 // ================================================================
 // Окна поверх экрана — три вида, как договорились в docs/uchet/ux.md:
@@ -18,13 +18,32 @@ type Props = {
   children: React.ReactNode;
 };
 
+// Окна открываются друг поверх друга (панель заказа → окно оплаты), и
+// Escape должен закрыть только верхнее. Поэтому общий стек открытых окон:
+// клавишу обрабатывает тот, кто сверху.
+const stack: symbol[] = [];
+
 function useEscape(onClose: (() => void) | undefined, enabled: boolean) {
+  // Место в стеке занимается один раз, при открытии: иначе нижнее окно,
+  // перерисовавшись, перепрыгнуло бы наверх. Свежий onClose — через ref.
+  const latest = useRef({ onClose, enabled });
+  latest.current = { onClose, enabled };
+
   useEffect(() => {
-    if (!enabled || !onClose) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const me = Symbol("overlay");
+    stack.push(me);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || stack[stack.length - 1] !== me) return;
+      const { onClose: close, enabled: on } = latest.current;
+      if (on && close) close();
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, enabled]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      const at = stack.indexOf(me);
+      if (at !== -1) stack.splice(at, 1);
+    };
+  }, []);
 }
 
 function Backdrop({ onClose, dismissible }: { onClose?: () => void; dismissible: boolean }) {

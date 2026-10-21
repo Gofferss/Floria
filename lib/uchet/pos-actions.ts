@@ -165,6 +165,8 @@ export async function assembleBouquet(input: {
   price: number;
   items: CompositionLine[];
   photoUrls: string[];
+  /** Собрать к заказу магазина, а не на витрину. */
+  orderId?: string | null;
 }): Promise<Result<{ id: string }>> {
   const w = await who();
   if (!w.ok) return { success: false, error: w.error };
@@ -176,7 +178,13 @@ export async function assembleBouquet(input: {
 
   const location = await getDefaultLocation();
   const { data, error } = await getSupabaseAdmin().rpc("pos_assemble_bouquet", {
-    p_bouquet: { id: input.id, title: input.title.trim() || null, price: input.price, photo_urls: input.photoUrls.slice(0, 10) },
+    p_bouquet: {
+      id: input.id,
+      title: input.title.trim() || null,
+      price: input.price,
+      photo_urls: input.photoUrls.slice(0, 10),
+      order_id: input.orderId || null,
+    },
     p_items: input.items.map((l) => ({ item_id: l.itemId, qty: l.qty })),
     p_location: location.id,
     p_staff: w.actor.staff.id,
@@ -263,7 +271,9 @@ export async function uploadBouquetPhoto(formData: FormData): Promise<Result<{ u
 export type SaleLineInput =
   | { kind: "bouquet"; id: string; title: string; price: number; items: CompositionLine[] }
   | { kind: "vitrine"; bouquetId: string }
-  | { kind: "item"; itemId: string; qty: number; price: number };
+  | { kind: "item"; itemId: string; qty: number; price: number }
+  /** Оплата заказа магазина: предоплата, доплата или остаток — отдельным чеком. */
+  | { kind: "order"; orderId: string; amount: number };
 
 export type SaleInput = {
   id: string;
@@ -292,6 +302,8 @@ export async function recordSale(input: SaleInput): Promise<Result<{ saleNo: str
       if (bad) return { success: false, error: bad };
     } else if (l.kind === "item") {
       if (!isUuid(l.itemId) || !Number.isFinite(l.qty) || l.qty <= 0) return { success: false, error: "Неверная строка чека" };
+    } else if (l.kind === "order") {
+      if (!isUuid(l.orderId) || !Number.isFinite(l.amount) || l.amount <= 0) return { success: false, error: "Укажите сумму оплаты заказа" };
     } else if (!isUuid(l.bouquetId)) {
       return { success: false, error: "Неверный букет витрины" };
     }
@@ -321,7 +333,9 @@ export async function recordSale(input: SaleInput): Promise<Result<{ saleNo: str
         ? { kind: "bouquet", id: l.id, title: l.title, price: l.price, items: l.items.map((i) => ({ item_id: i.itemId, qty: i.qty })) }
         : l.kind === "vitrine"
           ? { kind: "vitrine", bouquet_id: l.bouquetId }
-          : { kind: "item", item_id: l.itemId, qty: l.qty, price: l.price }
+          : l.kind === "order"
+            ? { kind: "order", order_id: l.orderId, amount: l.amount }
+            : { kind: "item", item_id: l.itemId, qty: l.qty, price: l.price }
     ),
     p_payments: input.payments.filter((p) => p.amount > 0).map((p) => ({ method: p.method, amount: p.amount })),
     p_staff: w.actor.staff.id,
