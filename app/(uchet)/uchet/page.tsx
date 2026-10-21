@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
+import { requireStaffUser } from "@/lib/auth/server";
+import { canEnterUchet, canUseUchetWork } from "@/lib/auth/roles";
 
-/** Пока готов один раздел — открываем его. Когда появится касса, флорист будет попадать в неё. */
-export default function UchetHome() {
-  redirect("/uchet/sklad");
+/** Первый экран — по роли: курьеру его доставки, остальным — склад (потом касса). */
+export default async function UchetHome() {
+  const staff = await requireStaffUser("/uchet", canEnterUchet);
+  redirect(canUseUchetWork(staff.role) ? "/uchet/sklad" : "/uchet/dostavki");
 }

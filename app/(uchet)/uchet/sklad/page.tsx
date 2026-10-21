@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { requireStaffUser } from "@/lib/auth/server";
+import { canUseUchetWork } from "@/lib/auth/roles";
 import { canSeeCosts } from "@/lib/uchet/access";
 import { getDefaultLocation, listGroups, listReasons, listStock } from "@/lib/uchet/queries";
 import { formatDateTime } from "@/lib/uchet/format";
@@ -12,7 +13,7 @@ export const metadata: Metadata = { title: "Склад" };
 export const dynamic = "force-dynamic";
 
 export default async function SkladPage() {
-  const staff = await requireStaffUser("/uchet/sklad");
+  const staff = await requireStaffUser("/uchet/sklad", canUseUchetWork);
   const withCosts = canSeeCosts(staff.role);
 
   const [rows, groups, reasons, location] = await Promise.all([

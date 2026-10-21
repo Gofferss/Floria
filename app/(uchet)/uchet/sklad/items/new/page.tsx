@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireStaffUser } from "@/lib/auth/server";
+import { canUseUchetWork } from "@/lib/auth/roles";
 import { listGroups, listUnits } from "@/lib/uchet/queries";
 import { SkladHeader } from "@/components/uchet/sklad/SkladHeader";
 import { ItemForm } from "@/components/uchet/sklad/ItemForm";
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function NewSkladItemPage() {
-  await requireStaffUser("/uchet/sklad");
+  await requireStaffUser("/uchet/sklad", canUseUchetWork);
   const [groups, units] = await Promise.all([listGroups(), listUnits()]);
 
   return (

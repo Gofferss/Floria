@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireStaffUser } from "@/lib/auth/server";
+import { canUseSiteOrders } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { OrderStatusControl } from "@/components/admin/orders/OrderStatusControl";
 import { FloristAcceptedCheckbox } from "@/components/admin/orders/FloristAcceptedCheckbox";
@@ -77,7 +78,7 @@ function timeRangeLabel(from: string | null, to: string | null): string {
 }
 
 export default async function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireStaffUser();
+  await requireStaffUser("/admin/orders", canUseSiteOrders);
 
   const { id } = await params;
   const supabase = getSupabaseAdmin();

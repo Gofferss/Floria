@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireStaffUser } from "@/lib/auth/server";
+import { canUseUchetWork } from "@/lib/auth/roles";
 import { canSeeCosts } from "@/lib/uchet/access";
 import { listDocuments } from "@/lib/uchet/queries";
 import {
-  DOC_TYPES,
+  ALL_DOC_TYPES,
   DOC_TYPE_LABEL,
   STATUS_LABEL,
   formatDateTime,
   formatMoney,
   type DocStatus,
-  type DocType,
+  type AnyDocType,
 } from "@/lib/uchet/format";
 import { SkladHeader } from "@/components/uchet/sklad/SkladHeader";
 
@@ -32,10 +33,10 @@ export default async function SkladDocsPage({
   searchParams: Promise<{ type?: string; status?: string }>;
 }) {
   const params = await searchParams;
-  const staff = await requireStaffUser("/uchet/sklad");
+  const staff = await requireStaffUser("/uchet/sklad", canUseUchetWork);
   const withCosts = canSeeCosts(staff.role);
 
-  const type = DOC_TYPES.includes(params.type as DocType) ? (params.type as DocType) : undefined;
+  const type = ALL_DOC_TYPES.includes(params.type as AnyDocType) ? (params.type as AnyDocType) : undefined;
   const status = ["draft", "posted", "reversed"].includes(params.status ?? "") ? (params.status as DocStatus) : undefined;
   const docs = await listDocuments({ type, status }, withCosts);
 
@@ -62,7 +63,7 @@ export default async function SkladDocsPage({
         <Link href={filterLink({ type: undefined })} className={chip(!type)}>
           Все типы
         </Link>
-        {DOC_TYPES.map((t) => (
+        {ALL_DOC_TYPES.map((t) => (
           <Link key={t} href={filterLink({ type: t })} className={chip(type === t)}>
             {DOC_TYPE_LABEL[t]}
           </Link>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireStaffUser } from "@/lib/auth/server";
+import { canUseSiteOrders } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import type { OrderStatus } from "@/lib/actions/orders";
 import { FloristAcceptedCheckbox } from "@/components/admin/orders/FloristAcceptedCheckbox";
@@ -54,7 +55,7 @@ const currency = new Intl.NumberFormat("ru-RU", {
 const dateFormatter = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" });
 
 export default async function AdminOrdersListPage() {
-  await requireStaffUser();
+  await requireStaffUser("/admin/orders", canUseSiteOrders);
 
   const { data, error } = await getSupabaseAdmin()
     .from("orders")

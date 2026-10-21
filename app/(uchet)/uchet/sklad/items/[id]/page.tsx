@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireStaffUser } from "@/lib/auth/server";
+import { canUseUchetWork } from "@/lib/auth/roles";
 import { canSeeCosts } from "@/lib/uchet/access";
 import { getItemEditable, getStockItem, listGroups, listItemMovements, listUnits } from "@/lib/uchet/queries";
 import { DOC_TYPE_LABEL, daysLabel, daysSince, formatDateTime, formatMoney, formatQty } from "@/lib/uchet/format";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SkladItemPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const staff = await requireStaffUser("/uchet/sklad");
+  const staff = await requireStaffUser("/uchet/sklad", canUseUchetWork);
   const withCosts = canSeeCosts(staff.role);
 
   const [editable, stock, movements, groups, units] = await Promise.all([

@@ -1,12 +1,11 @@
 "use server";
 
-import { getStaffUser } from "@/lib/auth/server";
+import { requireStaffAction } from "@/lib/auth/server";
+import { canUseSiteAdmin } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 async function requireStaff() {
-  const staff = await getStaffUser();
-  if (!staff) throw new Error("Доступ только для сотрудников");
-  return staff;
+  return requireStaffAction(canUseSiteAdmin);
 }
 
 const EVENT_TYPES = ["product_view", "add_to_cart", "button_click", "story_open"] as const;

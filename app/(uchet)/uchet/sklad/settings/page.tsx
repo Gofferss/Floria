@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireStaffUser } from "@/lib/auth/server";
+import { canUseUchetWork } from "@/lib/auth/roles";
 import { canSeeCosts } from "@/lib/uchet/access";
 import { listGroups, listLocations, listReasons, listSuppliers } from "@/lib/uchet/queries";
 import { SkladHeader } from "@/components/uchet/sklad/SkladHeader";
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function SkladSettingsPage() {
-  const staff = await requireStaffUser("/uchet/sklad/settings");
+  const staff = await requireStaffUser("/uchet/sklad/settings", canUseUchetWork);
   const isOwner = canSeeCosts(staff.role);
   const [groups, suppliers, reasons, locations] = await Promise.all([
     listGroups(),

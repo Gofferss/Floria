@@ -2,6 +2,7 @@
 
 import { randomUUID } from "crypto";
 import { getStaffUser } from "@/lib/auth/server";
+import { canUseSiteAdmin } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { sendMessage, sendPhoto, TelegramApiError } from "@/lib/telegram/bot";
 import { listActiveBotUsers, markBotUserBlocked } from "@/lib/telegram/reminders";
@@ -19,7 +20,7 @@ const BROADCAST_IMAGES_BUCKET = "blog-images";
 
 export async function uploadBroadcastImage(formData: FormData): Promise<ActionResult<{ url: string }>> {
   const staff = await getStaffUser();
-  if (!staff) return { success: false, error: "Доступ только для сотрудников" };
+  if (!staff || !canUseSiteAdmin(staff.role)) return { success: false, error: "Рассылка доступна владельцам и менеджеру сайта" };
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
@@ -69,7 +70,7 @@ export async function sendBroadcast(
   imageUrl: string | null
 ): Promise<ActionResult<BroadcastSummary>> {
   const staff = await getStaffUser();
-  if (!staff) return { success: false, error: "Доступ только для сотрудников" };
+  if (!staff || !canUseSiteAdmin(staff.role)) return { success: false, error: "Рассылка доступна владельцам и менеджеру сайта" };
 
   const text = message.trim();
   if (!text && !imageUrl) return { success: false, error: "Введите текст рассылки или добавьте фото" };

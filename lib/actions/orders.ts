@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { notifyCustomerAboutStatus, sendAssembledPhotoToCustomer } from "@/lib/telegram/order-notify";
-import { getStaffUser } from "@/lib/auth/server";
+import { requireStaffAction } from "@/lib/auth/server";
+import { canUseSiteOrders } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 // ================================================================
@@ -17,9 +18,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 // ================================================================
 
 async function requireStaff() {
-  const staff = await getStaffUser();
-  if (!staff) throw new Error("Доступ только для сотрудников");
-  return staff;
+  return requireStaffAction(canUseSiteOrders);
 }
 
 export type OrderStatus =

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { requireStaffUser } from "@/lib/auth/server";
 import {
   EditIcon,
   PackageIcon,
@@ -77,7 +78,11 @@ const SECTIONS = [
   },
 ];
 
-export default function AdminHomePage() {
+export default async function AdminHomePage() {
+  // Флористу из админки сайта открыты только заказы — сюда его не пускаем,
+  // а ведём в учёт, где его работа.
+  await requireStaffUser();
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
       <div className="mb-8">

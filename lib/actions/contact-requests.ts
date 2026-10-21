@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getStaffUser } from "@/lib/auth/server";
+import { requireStaffAction } from "@/lib/auth/server";
+import { canUseSiteAdmin } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { findChatIdByPhone } from "@/lib/telegram/order-notify";
 import { sendMessage, escapeTelegramHtml } from "@/lib/telegram/bot";
@@ -20,9 +21,7 @@ import { toE164RussianPhone } from "@/lib/phone-mask";
 // ================================================================
 
 async function requireStaff() {
-  const staff = await getStaffUser();
-  if (!staff) throw new Error("Доступ только для сотрудников");
-  return staff;
+  return requireStaffAction(canUseSiteAdmin);
 }
 
 export type AdminContactRequest = {

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireStaffUser } from "@/lib/auth/server";
+import { canUseUchetWork } from "@/lib/auth/roles";
 import { canPostOpening, canSeeCosts } from "@/lib/uchet/access";
 import { listPickerItems, listReasons, listSuppliers } from "@/lib/uchet/queries";
 import { DOC_TYPES, DOC_TYPE_LABEL, type DocType } from "@/lib/uchet/format";
@@ -23,7 +24,7 @@ export default async function NewSkladDocPage({ searchParams }: { searchParams: 
     .map((s) => s.trim())
     .filter((s) => /^[0-9a-f-]{36}$/i.test(s))
     .slice(0, 150);
-  const staff = await requireStaffUser("/uchet/sklad");
+  const staff = await requireStaffUser("/uchet/sklad", canUseUchetWork);
 
   const docType = DOC_TYPES.includes(type as DocType) ? (type as DocType) : null;
   if (!docType) redirect("/uchet/sklad/docs/new?type=receipt");

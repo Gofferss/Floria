@@ -2,15 +2,14 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
-import { getStaffUser } from "@/lib/auth/server";
+import { requireStaffAction } from "@/lib/auth/server";
+import { canUseSiteAdmin } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 type ActionResult<T> = { success: true; data: T } | { success: false; error: string };
 
 async function requireStaff() {
-  const staff = await getStaffUser();
-  if (!staff) throw new Error("Доступ только для сотрудников");
-  return staff;
+  return requireStaffAction(canUseSiteAdmin);
 }
 
 export type StoryItemInput = {

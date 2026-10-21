@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireStaffUser } from "@/lib/auth/server";
+import { canUseUchetWork } from "@/lib/auth/roles";
 import { canSeeCosts } from "@/lib/uchet/access";
 import { getDocument, listPickerItems, listReasons, listSuppliers } from "@/lib/uchet/queries";
-import { DOC_TYPE_LABEL, PAYMENT_LABEL, STATUS_LABEL, formatDateTime, formatMoney, formatQty } from "@/lib/uchet/format";
+import { DOC_TYPE_LABEL, isPosDocType, PAYMENT_LABEL, STATUS_LABEL, formatDateTime, formatMoney, formatQty } from "@/lib/uchet/format";
 import { SkladHeader } from "@/components/uchet/sklad/SkladHeader";
 import { DocumentEditor } from "@/components/uchet/sklad/DocumentEditor";
 import { ReverseButton } from "@/components/uchet/sklad/ReverseButton";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SkladDocPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const staff = await requireStaffUser("/uchet/sklad");
+  const staff = await requireStaffUser("/uchet/sklad", canUseUchetWork);
   const withCosts = canSeeCosts(staff.role);
 
   const doc = await getDocument(id, withCosts);
@@ -29,8 +30,10 @@ export default async function SkladDocPage({ params }: { params: Promise<{ id: s
     </Link>
   );
 
-  // Черновик редактируется той же формой, что и новый документ.
-  if (doc.status === "draft") {
+  // Черновик редактируется той же формой, что и новый документ. Документы
+  // кассы черновиками не бывают: они создаются и проводятся одним действием.
+  if (doc.status === "draft" && !isPosDocType(doc.docType)) {
+    const docType = doc.docType;
     const [items, suppliers, reasons] = await Promise.all([listPickerItems(), listSuppliers(), listReasons()]);
     return (
       <div className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 lg:px-8">
@@ -38,7 +41,7 @@ export default async function SkladDocPage({ params }: { params: Promise<{ id: s
         {back}
         <div className="mt-6">
           <DocumentEditor
-            docType={doc.docType}
+            docType={docType}
             initial={{
               id: doc.id,
               docNo: doc.docNo,
@@ -194,10 +197,16 @@ export default async function SkladDocPage({ params }: { params: Promise<{ id: s
         )}
       </div>
 
-      {doc.status === "posted" && !doc.reversalOf && (
+      {doc.status === "posted" && !doc.reversalOf && !isPosDocType(doc.docType) && (
         <div className="mt-6">
           <ReverseButton id={doc.id} docNo={doc.docNo} />
         </div>
+      )}
+      {isPosDocType(doc.docType) && (
+        <p className="mt-6 max-w-2xl font-body text-sm text-ink/55">
+          Документ создан кассой. Продажу отменяют возвратом, сборку — разборкой букета на витрине: так деньги и
+          склад не разойдутся.
+        </p>
       )}
     </div>
   );
