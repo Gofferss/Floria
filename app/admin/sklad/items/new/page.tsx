@@ -1,0 +1,29 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { requireStaffUser } from "@/lib/auth/server";
+import { listGroups, listUnits } from "@/lib/uchet/queries";
+import { SkladHeader } from "@/components/admin/sklad/SkladHeader";
+import { ItemForm } from "@/components/admin/sklad/ItemForm";
+
+export const metadata: Metadata = {
+  title: "Новая позиция — Админка Floria",
+};
+
+export const dynamic = "force-dynamic";
+
+export default async function NewSkladItemPage() {
+  await requireStaffUser();
+  const [groups, units] = await Promise.all([listGroups(), listUnits()]);
+
+  return (
+    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+      <SkladHeader active="stock" title="Новая позиция" subtitle="Остаток появится после первого прихода." />
+      <Link href="/admin/sklad" className="font-body text-sm text-ink/55 underline decoration-lavender-300 underline-offset-4 hover:text-ink">
+        ← Все остатки
+      </Link>
+      <div className="mt-6">
+        <ItemForm groups={groups} units={units} />
+      </div>
+    </div>
+  );
+}
