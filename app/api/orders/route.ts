@@ -260,6 +260,14 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (authCustomer) {
+        // Заказ вошедшего — на ЕГО карточку, а не на карточку номера из
+        // формы. Иначе, указав чужой номер, человек списал бы бонусы при
+        // оплате с чужой карточки (списание идёт по orders.customer_id —
+        // lib/bonuses.ts), начислил бы их туда же, а заказ появился бы в
+        // чужом личном кабинете. Номер из формы остаётся в заказе как
+        // контакт — для связи и доставки.
+        customerId = authCustomer.id;
+        posifloraClientId = authCustomer.posiflora_client_id ?? null;
         currentBonusBalance =
           typeof authCustomer.bonus_balance === "string"
             ? Number.parseFloat(authCustomer.bonus_balance)
