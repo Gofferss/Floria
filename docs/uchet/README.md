@@ -460,9 +460,16 @@ previous_counted_cash` и `counted_cash − expected_cash`. Итог — одн�
 `posiflora_id`).
 
 **Тесты** — `migrations/tests/024_warehouse_core_test.sql`,
-`026_save_draft_test.sql`, `028_shop_floor_test.sql`, `029_shop_orders_test.sql`, `031_owner_summary_test.sql`, `032_payroll_test.sql`, `033_bonuses_test.sql`, `034_posiflora_carryover_test.sql`. Выполняются внутри
+`026_save_draft_test.sql`, `028_shop_floor_test.sql`, `029_shop_orders_test.sql`, `031_owner_summary_test.sql`, `032_payroll_test.sql`, `033_bonuses_test.sql`, `034_posiflora_carryover_test.sql`, `035_security_hardening_test.sql`. Выполняются внутри
 транзакции с `ROLLBACK` в конце, поэтому ничего не оставляют в базе;
 каждое расхождение — `RAISE EXCEPTION`.
+
+**Права новых таблиц.** С миграции 035 таблица, созданная в `public`,
+по умолчанию не даёт `anon` ни писать, ни `TRUNCATE`, а `authenticated` —
+`TRUNCATE`. Если таблице когда-нибудь понадобится запись из браузера, право
+выдаётся явно, вместе с политикой RLS. Сейчас сайт и учёт пишут только
+служебным ключом. Проверка защиты базы целиком —
+`migrations/audit/security_audit.sql` (только чтение).
 
 Новую миграцию сначала прогоняют «насухо»: миграция и все тесты в одной
 транзакции с откатом (`migrations/tests/028_dryrun.sql` — так проверялись
