@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { requireStaffAction } from "@/lib/auth/server";
+import { IMAGE_TYPE_ERROR, imageExtension } from "@/lib/image-upload";
 import { canUseSiteAdmin } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { sanitizeBlogContent } from "@/lib/sanitize-html";
@@ -216,14 +217,14 @@ async function uploadImageToBucket(
   if (!(file instanceof File) || file.size === 0) {
     return { success: false, error: "Файл не выбран" };
   }
-  if (!file.type.startsWith("image/")) {
-    return { success: false, error: "Можно загружать только изображения" };
+  const ext = imageExtension(file.type);
+  if (!ext) {
+    return { success: false, error: IMAGE_TYPE_ERROR };
   }
   if (file.size > MAX_IMAGE_SIZE) {
     return { success: false, error: "Максимальный размер файла — 5 МБ" };
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
   const path = `${folder}/${randomUUID()}.${ext}`;
 
   const { error: uploadError } = await getSupabaseAdmin()

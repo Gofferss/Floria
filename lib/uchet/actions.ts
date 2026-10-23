@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireStaffAction } from "@/lib/auth/server";
+import { IMAGE_TYPE_ERROR, imageExtension } from "@/lib/image-upload";
 import { canUseUchetWork } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { canPostOpening, canSeeCosts } from "@/lib/uchet/access";
@@ -478,14 +479,14 @@ export async function uploadItemPhoto(itemId: string, formData: FormData): Promi
   await requireStaff();
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { success: false, error: "Файл не выбран" };
-  if (!file.type.startsWith("image/")) return { success: false, error: "Можно загружать только фотографии" };
+  const ext = imageExtension(file.type);
+  if (!ext) return { success: false, error: IMAGE_TYPE_ERROR };
   if (file.size > MAX_ITEM_PHOTO_SIZE) return { success: false, error: "Фото больше 8 МБ" };
 
   const admin = getSupabaseAdmin();
   const { data: item } = await admin.from("inv_items").select("id").eq("id", itemId).maybeSingle();
   if (!item) return { success: false, error: "Позиция не найдена" };
 
-  const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
   const path = `inventory/${itemId}-${Date.now()}.${ext}`;
   const { error: upError } = await admin.storage.from(ITEM_PHOTO_BUCKET).upload(path, file, { contentType: file.type, cacheControl: "3600", upsert: false });
   if (upError) return { success: false, error: "Не удалось загрузить фото" };

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { notifyCustomerAboutStatus, sendAssembledPhotoToCustomer } from "@/lib/telegram/order-notify";
 import { requireStaffAction } from "@/lib/auth/server";
+import { IMAGE_TYPE_ERROR, imageExtension } from "@/lib/image-upload";
 import { canUseSiteOrders } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { reverseSiteOrderBonuses } from "@/lib/bonuses";
@@ -136,8 +137,9 @@ export async function uploadAssembledPhoto(
   if (!(file instanceof File) || file.size === 0) {
     return { success: false, error: "Файл не выбран" };
   }
-  if (!file.type.startsWith("image/")) {
-    return { success: false, error: "Можно загружать только изображения" };
+  const ext = imageExtension(file.type);
+  if (!ext) {
+    return { success: false, error: IMAGE_TYPE_ERROR };
   }
   if (file.size > MAX_ORDER_PHOTO_SIZE) {
     return { success: false, error: "Максимальный размер файла — 8 МБ" };
@@ -161,7 +163,6 @@ export async function uploadAssembledPhoto(
     return { success: false, error: `Больше ${MAX_ORDER_PHOTOS} фотографий к заказу не прикрепить` };
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
   const path = `orders/${orderId}/${randomUUID()}.${ext}`;
 
   const { error: uploadError } = await getSupabaseAdmin()

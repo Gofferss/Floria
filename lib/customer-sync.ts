@@ -245,16 +245,29 @@ export async function linkAuthenticatedCustomerToPhone(
 
   if (existingByPhone) {
     // Сценарий 2 — сливаем на существующую (гостевую) карточку.
+    //
+    // Сначала отвязываем свою: auth_user_id уникален, и раньше привязка
+    // гостевой при ещё привязанной своей падала на этой уникальности —
+    // слияние не проходило ни разу, человек видел «не удалось сохранить».
+    const { error: unlinkError } = await supabaseAdmin
+      .from("customers")
+      .update({ auth_user_id: null })
+      .eq("id", myCustomer.id);
+
+    if (unlinkError) {
+      throw new Error(`Не удалось отвязать пустую карточку: ${unlinkError.message}`);
+    }
+
     const { error: relinkError } = await supabaseAdmin
       .from("customers")
       .update({ auth_user_id: authUserId })
       .eq("id", existingByPhone.id);
 
     if (relinkError) {
+      // Возвращаем как было — иначе аккаунт остался бы вовсе без карточки.
+      await supabaseAdmin.from("customers").update({ auth_user_id: authUserId }).eq("id", myCustomer.id);
       throw new Error(`Не удалось перепривязать гостевую карточку: ${relinkError.message}`);
     }
-
-    await supabaseAdmin.from("customers").update({ auth_user_id: null }).eq("id", myCustomer.id);
 
     targetCustomerId = existingByPhone.id;
   } else {

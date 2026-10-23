@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireStaffAction } from "@/lib/auth/server";
+import { IMAGE_TYPE_ERROR, imageExtension } from "@/lib/image-upload";
 import { canUseUchetWork } from "@/lib/auth/roles";
 import { actorFor, checkApproval, issueApproval, verifyApprover } from "@/lib/uchet/employee";
 import { getDefaultLocation } from "@/lib/uchet/queries";
@@ -252,10 +253,10 @@ export async function uploadBouquetPhoto(formData: FormData): Promise<Result<{ u
   if (!w.ok) return { success: false, error: w.error };
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { success: false, error: "Файл не выбран" };
-  if (!file.type.startsWith("image/")) return { success: false, error: "Можно загружать только фотографии" };
+  const ext = imageExtension(file.type);
+  if (!ext) return { success: false, error: IMAGE_TYPE_ERROR };
   if (file.size > MAX_PHOTO_SIZE) return { success: false, error: "Фото больше 8 МБ" };
 
-  const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
   const path = `vitrine/${new Date().toISOString().slice(0, 7)}/${randomUUID()}.${ext}`;
   const admin = getSupabaseAdmin();
   const { error } = await admin.storage.from(PHOTO_BUCKET).upload(path, file, { contentType: file.type, cacheControl: "3600", upsert: false });

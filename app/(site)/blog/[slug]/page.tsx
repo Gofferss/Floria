@@ -6,6 +6,7 @@ import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import { PhotoPlaceholder } from "@/components/ui/PhotoPlaceholder";
 import { PhotoCarousel } from "@/components/blog/PhotoCarousel";
 import { formatPublishedDate, getPostBySlug, getPublishedSlugs } from "@/lib/blog";
+import { sanitizeBlogContent } from "@/lib/sanitize-html";
 
 type ArticlePageProps = {
   params: Promise<{ slug: string }>;
@@ -93,14 +94,14 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         )}
 
         {/*
-          content — HTML из blog_posts.content, уже прогнанный через
-          sanitizeBlogContent при сохранении (lib/actions/blog.ts) —
-          dangerouslySetInnerHTML здесь безопасен именно поэтому, а не
-          просто потому что писать может только сотрудник.
+          content — HTML из blog_posts.content. Он чистится при сохранении
+          (lib/actions/blog.ts), но чистим и здесь: статьи, записанные до
+          исправления дыры в sanitize-html (октябрь 2026), прошли через
+          старую версию, а страница статична — проверка стоит копейки.
         */}
         <div
           className="prose prose-img:rounded-2xl mt-6"
-          dangerouslySetInnerHTML={{ __html: post.content }}
+          dangerouslySetInnerHTML={{ __html: sanitizeBlogContent(post.content) }}
         />
       </div>
     </article>
