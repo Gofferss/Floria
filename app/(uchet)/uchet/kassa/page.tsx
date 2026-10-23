@@ -44,6 +44,7 @@ export default async function KassaPage({ searchParams }: { searchParams: Promis
       vitrine={vitrine}
       methods={methods}
       settings={settings}
+      isTraining={location.isTraining}
       approvers={approvers}
     />
   );

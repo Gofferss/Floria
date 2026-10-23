@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import type { CustomerRow, PosifloraCustomer, Purchase } from "@/lib/uchet/customers";
-import { importPosifloraCustomers, loadCustomerHistory, updateCustomer } from "@/lib/uchet/customer-actions";
+import type { BonusMoveRow, CustomerRow, PosifloraCustomer, Purchase } from "@/lib/uchet/customers";
+import { adjustBonus, importPosifloraCustomers, loadCustomerHistory, updateCustomer } from "@/lib/uchet/customer-actions";
 import { formatDate, formatMoney } from "@/lib/uchet/format";
 import { ui } from "@/components/uchet/ui";
 import { useToast } from "@/components/uchet/Toast";
@@ -21,7 +21,19 @@ function prettyPhone(p: string): string {
  * Клиенты: одна база на сайт и магазин. Видно, кто сколько раз покупал,
  * на сколько и когда последний раз; в карточке — история и заметка.
  */
-export function CustomersView({ customers, query, posiflora, posifloraError }: { customers: CustomerRow[]; query: string; posiflora: PosifloraCustomer[]; posifloraError: string | null }) {
+export function CustomersView({
+  customers,
+  query,
+  posiflora,
+  posifloraError,
+  bonusesEnabled,
+}: {
+  customers: CustomerRow[];
+  query: string;
+  posiflora: PosifloraCustomer[];
+  posifloraError: string | null;
+  bonusesEnabled: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [q, setQ] = useState(query);
@@ -88,7 +100,7 @@ export function CustomersView({ customers, query, posiflora, posifloraError }: {
         )}
       </section>
 
-      {open && <CustomerCard c={open} onClose={() => setOpenId(null)} />}
+      {open && <CustomerCard c={open} bonusesEnabled={bonusesEnabled} onClose={() => setOpenId(null)} />}
     </div>
   );
 }
@@ -142,7 +154,7 @@ function PosifloraImport({ list }: { list: PosifloraCustomer[] }) {
   );
 }
 
-function CustomerCard({ c, onClose }: { c: CustomerRow; onClose: () => void }) {
+function CustomerCard({ c, bonusesEnabled, onClose }: { c: CustomerRow; bonusesEnabled: boolean; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
   const [name, setName] = useState(c.name ?? "");
@@ -150,6 +162,7 @@ function CustomerCard({ c, onClose }: { c: CustomerRow; onClose: () => void }) {
   const [notes, setNotes] = useState(c.notes ?? "");
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<Purchase[] | null>(null);
+  const [bonuses, setBonuses] = useState<BonusMoveRow[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const dirty = name !== (c.name ?? "") || birthday !== (c.birthday ?? "") || notes !== (c.notes ?? "");
 
@@ -158,7 +171,10 @@ function CustomerCard({ c, onClose }: { c: CustomerRow; onClose: () => void }) {
     loadCustomerHistory(c.id)
       .then((r) => {
         if (cancelled) return;
-        if (r.success) setHistory(r.data);
+        if (r.success) {
+          setHistory(r.data.purchases);
+          setBonuses(r.data.bonuses);
+        }
         else setHistoryError(`Не загрузилось: ${r.error}`);
       })
       .catch(() => !cancelled && setHistoryError("Не загрузилось — обновите страницу"));
@@ -242,8 +258,87 @@ function CustomerCard({ c, onClose }: { c: CustomerRow; onClose: () => void }) {
             </ul>
           )}
         </section>
+
+        <BonusSection customerId={c.id} enabled={bonusesEnabled} moves={bonuses} />
       </div>
     </Panel>
+  );
+}
+
+const MOVE_LABEL: Record<string, string> = {
+  earn: "начислено",
+  spend: "оплачено бонусами",
+  reverse: "снято при отмене",
+  return: "возвращено при отмене",
+  manual: "вручную",
+  import: "перенос из Posiflora",
+};
+
+/** История бонусов и ручная правка — только когда бонусы ведёт Учёт. */
+function BonusSection({ customerId, enabled, moves }: { customerId: string; enabled: boolean; moves: BonusMoveRow[] }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [sign, setSign] = useState<1 | -1>(1);
+  const [amount, setAmount] = useState("");
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    const result = await adjustBonus(customerId, sign * Number(amount.replace(/\s/g, "")), comment).catch(() => ({ success: false as const, error: "Не получилось — обновите страницу" }));
+    setBusy(false);
+    if (!result.success) return toast({ tone: "error", text: result.error });
+    toast({ tone: "ok", text: "Бонусы поправлены" });
+    setAmount("");
+    setComment("");
+    router.refresh();
+  }
+
+  if (!enabled) {
+    return (
+      <section>
+        <h3 className={ui.label}>Бонусы</h3>
+        <p className="mt-2 text-sm text-zinc-500">Пока бонусы ведёт Posiflora — история и правка там. Переход — в «Настройках».</p>
+      </section>
+    );
+  }
+  return (
+    <section>
+      <h3 className={ui.label}>Бонусы</h3>
+      {moves.length === 0 ? (
+        <p className="mt-2 text-sm text-zinc-500">Движений пока нет.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-zinc-100 text-sm">
+          {moves.map((m, i) => (
+            <li key={`${m.at}${i}`} className="flex items-baseline justify-between gap-3 py-2">
+              <span className="min-w-0 text-zinc-800">
+                {formatDate(m.at)} · {MOVE_LABEL[m.kind] ?? m.kind}
+                {m.comment && <span className="text-zinc-500"> · {m.comment}</span>}
+              </span>
+              <span className={`shrink-0 tabular-nums ${m.delta > 0 ? "text-emerald-700" : "text-zinc-900"}`}>
+                {m.delta > 0 ? "+" : "−"}
+                {Math.abs(m.delta).toLocaleString("ru-RU")}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <div className="flex overflow-hidden rounded-lg ring-1 ring-zinc-300">
+          <button type="button" onClick={() => setSign(1)} className={`px-3 text-sm font-semibold ${sign > 0 ? "bg-zinc-900 text-white" : "bg-white text-zinc-700"}`}>
+            Начислить
+          </button>
+          <button type="button" onClick={() => setSign(-1)} className={`px-3 text-sm font-semibold ${sign < 0 ? "bg-zinc-900 text-white" : "bg-white text-zinc-700"}`}>
+            Списать
+          </button>
+        </div>
+        <input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="сколько" className={`${ui.fieldInline} w-24`} />
+        <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="за что" className={`${ui.fieldInline} min-w-[120px] flex-1`} />
+        <button type="button" disabled={busy || !amount || !comment.trim()} onClick={save} className={`${ui.btnSecondary} min-h-[38px] px-4`}>
+          {busy ? "…" : "Готово"}
+        </button>
+      </div>
+    </section>
   );
 }
 

@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { findOrCreatePosifloraClient, getPosifloraClientBalance } from "@/lib/posiflora";
 import { requireE164RussianPhone } from "@/lib/phone-mask";
+import { bonusesInUchet } from "@/lib/bonuses";
 
 /** Баланс считается устаревшим и подлежит освежению через это время */
 export const BONUS_SYNC_STALE_MS = 30 * 60 * 1000; // 30 минут
@@ -36,14 +37,26 @@ export async function syncCustomerWithPosiflora(
   });
 
   const supabaseAdmin = getSupabaseAdmin();
+  // После перехода на бонусы Учёта баланс ведёт наш журнал — Posiflora его
+  // больше не переписывает, остаётся только связь с её клиентом.
+  const uchet = await bonusesInUchet();
   const { error } = await supabaseAdmin
     .from("customers")
-    .update({
-      posiflora_client_id: posifloraClient.posifloraClientId,
-      bonus_balance: posifloraClient.bonusBalance,
-      bonus_balance_synced_at: new Date().toISOString(),
-    })
+    .update(
+      uchet
+        ? { posiflora_client_id: posifloraClient.posifloraClientId }
+        : {
+            posiflora_client_id: posifloraClient.posifloraClientId,
+            bonus_balance: posifloraClient.bonusBalance,
+            bonus_balance_synced_at: new Date().toISOString(),
+          }
+    )
     .eq("id", customerId);
+  let bonusBalance = posifloraClient.bonusBalance;
+  if (uchet) {
+    const { data: own } = await supabaseAdmin.from("customers").select("bonus_balance").eq("id", customerId).maybeSingle();
+    bonusBalance = toNumber(own?.bonus_balance);
+  }
 
   if (error) {
     // Тот же клиент Posiflora уже привязан к ДРУГОЙ строке customers —
@@ -61,7 +74,7 @@ export async function syncCustomerWithPosiflora(
       );
       return {
         posifloraClientId: posifloraClient.posifloraClientId,
-        bonusBalance: posifloraClient.bonusBalance,
+        bonusBalance,
       };
     }
 
@@ -70,7 +83,7 @@ export async function syncCustomerWithPosiflora(
 
   return {
     posifloraClientId: posifloraClient.posifloraClientId,
-    bonusBalance: posifloraClient.bonusBalance,
+    bonusBalance,
   };
 }
 
@@ -276,6 +289,8 @@ export async function refreshCustomerBonusBalance(
   posifloraClientId: string
 ): Promise<number | null> {
   try {
+    // Бонусы ведёт Учёт — освежать из Posiflora нечего: свой баланс уже точный.
+    if (await bonusesInUchet()) return null;
     const { bonusBalance } = await getPosifloraClientBalance(posifloraClientId);
 
     const supabaseAdmin = getSupabaseAdmin();

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { PosSettings } from "@/lib/uchet/pos-queries";
 import type { CashReasonKind, CashReasonRow, PaymentMethodRow } from "@/lib/uchet/settings-queries";
-import { saveCashReason, savePaymentMethod, savePosRules } from "@/lib/uchet/settings-actions";
+import { enableBonuses, saveBonusRules, saveCashReason, savePaymentMethod, savePosRules } from "@/lib/uchet/settings-actions";
 import { ui } from "@/components/uchet/ui";
 import { useToast } from "@/components/uchet/Toast";
 
@@ -56,6 +56,7 @@ export function SettingsView({ settings, methods, reasons }: { settings: PosSett
     <div className={`${ui.page} max-w-4xl space-y-5`}>
       <h1 className={ui.h1}>Настройки</h1>
       <Rules settings={settings} />
+      <Bonuses settings={settings} />
       <Methods methods={methods} />
       <Reasons reasons={reasons} />
       <section className={`${ui.cardPad} text-sm leading-relaxed text-zinc-600`}>
@@ -117,16 +118,88 @@ function Rules({ settings }: { settings: PosSettings }) {
           </div>
           <Switch checked={!required} onChange={(v) => setRequired(!v)} label="Продавать букет без состава" />
         </div>
-        <div className="rounded-xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-          Бонусы клиентов ({settings.bonusPercent.toLocaleString("ru-RU")}%) пока ведёт Posiflora: касса Учёта их не начисляет и не списывает, чтобы
-          баланс не жил в двух местах. Включим, когда перенесём балансы.
-        </div>
         {dirty && (
           <button type="button" disabled={busy} onClick={() => run(() => savePosRules(Number(limit.replace(",", ".")), required), "Сохранено")} className={ui.btnPrimary}>
             {busy ? "…" : "Сохранить"}
           </button>
         )}
       </div>
+    </section>
+  );
+}
+
+const sinceFmt = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Simferopol" });
+
+/**
+ * Бонусы: правила и переход с Posiflora на Учёт. Переход — один раз и
+ * только при запуске учёта: пока продажи бьются в Posiflora, бонусы
+ * должна вести она, иначе баланс будет жить в двух местах.
+ */
+function Bonuses({ settings }: { settings: PosSettings }) {
+  const [run, busy] = useRun();
+  const [percent, setPercent] = useState(String(settings.bonusPercent));
+  const [max, setMax] = useState(String(settings.bonusMaxPercent));
+  const [confirming, setConfirming] = useState(false);
+  const num = (v: string) => Number(v.replace(",", "."));
+  const dirty = num(percent) !== settings.bonusPercent || num(max) !== settings.bonusMaxPercent;
+
+  return (
+    <section className={ui.cardPad}>
+      <h2 className={ui.h2}>Бонусы</h2>
+      <p className="mt-1 text-sm text-zinc-600">
+        {settings.bonusesEnabled && settings.bonusesSince
+          ? `Бонусы ведёт Учёт с ${sinceFmt.format(new Date(settings.bonusesSince))}: касса начисляет и списывает, сайт показывает этот же баланс.`
+          : "Сейчас бонусы ведёт Posiflora: касса Учёта их не начисляет и не списывает, сайт показывает баланс Posiflora."}
+      </p>
+
+      <div className="mt-4 space-y-3">
+        <label className="flex flex-wrap items-center gap-2 text-[15px] text-zinc-900">
+          Начислять
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <input inputMode="decimal" value={percent} onChange={(e) => setPercent(e.target.value)} className={`${ui.fieldInline} w-20 text-center`} />%
+          </span>
+          от оплаченного деньгами
+        </label>
+        <label className="flex flex-wrap items-center gap-2 text-[15px] text-zinc-900">
+          Оплатить бонусами можно до
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <input inputMode="decimal" value={max} onChange={(e) => setMax(e.target.value)} className={`${ui.fieldInline} w-20 text-center`} />%
+          </span>
+          чека
+        </label>
+        <p className="text-sm text-zinc-500">1 бонус = 1 ₽. В «Тренировке» бонусы не двигаются. Заказ магазина бонусами не оплачивается.</p>
+        {dirty && (
+          <button type="button" disabled={busy} onClick={() => run(() => saveBonusRules(num(percent), num(max)), "Сохранено")} className={ui.btnPrimary}>
+            {busy ? "…" : "Сохранить"}
+          </button>
+        )}
+      </div>
+
+      {!settings.bonusesEnabled && (
+        <div className="mt-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-950">
+          <p className="font-semibold">Перейти на бонусы Учёта — при запуске, один раз</p>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+            <li>В «Клиентах» перенесите из Posiflora тех, кого здесь нет.</li>
+            <li>Нажмите кнопку ниже: балансы освежатся из Posiflora и перенесутся сюда.</li>
+            <li>С этой минуты не начисляйте и не списывайте бонусы в Posiflora — только здесь.</li>
+          </ol>
+          {confirming ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" disabled={busy} onClick={() => run(() => enableBonuses(), "Бонусы ведёт Учёт").then((ok) => ok && setConfirming(false))} className={ui.btnPrimary}>
+                {busy ? "Переносим…" : "Да, перейти"}
+              </button>
+              <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={ui.btnGhost}>
+                Отмена
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setConfirming(true)} className={`${ui.btnSecondary} mt-3`}>
+              Перейти на бонусы Учёта
+            </button>
+          )}
+          <p className="mt-2 text-xs text-amber-900/80">Обратно — только через разработчика: иначе баланс снова разойдётся.</p>
+        </div>
+      )}
     </section>
   );
 }

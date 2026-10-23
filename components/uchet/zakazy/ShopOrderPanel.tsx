@@ -309,7 +309,7 @@ export function ShopOrderPanel({ order: o, methods, shiftOpen, onClose }: Props)
           }}
         />
       )}
-      {mode === "pay" && <PaySheet amount={payAmount} methods={methods} busy={busy} error={error} onPay={pay} onClose={() => setMode(null)} />}
+      {mode === "pay" && <PaySheet amount={payAmount} methods={methods} bonus={null} busy={busy} error={error} onPay={pay} onClose={() => setMode(null)} />}
       {mode === "edit" && <ShopOrderForm order={o} methods={methods} shiftOpen={shiftOpen} onClose={() => setMode(null)} />}
       {mode === "cancel" && (
         <Dialog label="Отменить заказ" onClose={() => setMode(null)}>

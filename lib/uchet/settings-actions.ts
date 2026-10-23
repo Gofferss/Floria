@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireStaffAction } from "@/lib/auth/server";
 import { isOwnerRole } from "@/lib/auth/roles";
+import { getPosifloraClientBalance } from "@/lib/posiflora";
 
 // ================================================================
 // «Настройки»: правила кассы и её справочники. Только владельцы.
@@ -41,6 +42,52 @@ export async function savePosRules(discountLimitPercent: number, compositionRequ
     .eq("id", true);
   if (error) return fail(`Не сохранилось: ${error.message}`);
   refresh();
+  return { success: true };
+}
+
+/** Правила бонусов: сколько начислять и какую долю чека можно оплатить бонусами. */
+export async function saveBonusRules(percent: number, maxPercent: number): Promise<Result> {
+  await owner();
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) return fail("Начисление — от 0 до 100%");
+  if (!Number.isFinite(maxPercent) || maxPercent < 0 || maxPercent > 100) return fail("Доля чека — от 0 до 100%");
+  const { error } = await getSupabaseAdmin()
+    .from("pos_settings")
+    .update({ bonus_percent: Math.round(percent * 100) / 100, bonus_max_percent: Math.round(maxPercent * 100) / 100, updated_at: new Date().toISOString() })
+    .eq("id", true);
+  if (error) return fail(`Не сохранилось: ${error.message}`);
+  refresh();
+  return { success: true };
+}
+
+/**
+ * Переход на бонусы Учёта — один раз. Сначала освежаем балансы клиентов,
+ * связанных с Posiflora (из неё только читаем): иначе перенеслись бы
+ * устаревшие цифры. Не ответила Posiflora хоть по одному — переход
+ * отменяется целиком, а не делается наполовину.
+ */
+export async function enableBonuses(): Promise<Result> {
+  const staff = await owner();
+  const admin = getSupabaseAdmin();
+  const { data: settings, error } = await admin.from("pos_settings").select("bonuses_enabled").eq("id", true).maybeSingle();
+  if (error) return fail(error.message);
+  if (settings?.bonuses_enabled) return fail("Бонусы уже ведёт Учёт");
+
+  const { data: linked, error: listError } = await admin.from("customers").select("id, full_name, posiflora_client_id").not("posiflora_client_id", "is", null);
+  if (listError) return fail(listError.message);
+  for (const c of linked ?? []) {
+    try {
+      const { bonusBalance } = await getPosifloraClientBalance(c.posiflora_client_id as string);
+      const { error: upd } = await admin.from("customers").update({ bonus_balance: bonusBalance, bonus_balance_synced_at: new Date().toISOString() }).eq("id", c.id);
+      if (upd) return fail(`Не записался баланс клиента «${c.full_name ?? c.id}»: ${upd.message}. Переход отменён.`);
+    } catch {
+      return fail(`Posiflora не ответила по клиенту «${c.full_name ?? c.id}» — переход отменён, попробуйте позже.`);
+    }
+  }
+
+  const { error: rpcError } = await admin.rpc("bonus_enable", { p_staff: staff.id });
+  if (rpcError) return fail(`Не получилось: ${rpcError.message}`);
+  refresh();
+  revalidatePath("/account");
   return { success: true };
 }
 

@@ -4,6 +4,7 @@ import { escapeTelegramHtml } from "@/lib/telegram/bot";
 import { notifyCustomerAboutStatus } from "@/lib/telegram/order-notify";
 import { pushOrderToPosiflora } from "@/lib/posiflora/push-order";
 import { isVtbSandbox } from "@/lib/payments/vtb";
+import { applySiteOrderBonuses } from "@/lib/bonuses";
 
 // ================================================================
 // Перевод заказа в «оплачен» — единственное место, где это происходит.
@@ -32,7 +33,7 @@ export async function confirmPaidOrder(orderNumber: string, paidAmount: number):
   const { data: order, error } = await supabaseAdmin
     .from("orders")
     .select(
-      "id, order_number, customer_name, customer_phone, total_amount, payment_status, delivery_date, is_pickup, staff_notify_details"
+      "id, order_number, customer_id, customer_name, customer_phone, total_amount, bonus_used, payment_status, delivery_date, is_pickup, staff_notify_details"
     )
     .eq("order_number", orderNumber)
     .maybeSingle();
@@ -80,6 +81,28 @@ export async function confirmPaidOrder(orderNumber: string, paidAmount: number):
 
   if (updateError) throw new Error(`отметка оплаты ${orderNumber}: ${updateError.message}`);
   if (!updated || updated.length === 0) return; // кто-то успел раньше
+
+  // Бонусы Учёта (если перешли на них): списать потраченные, начислить
+  // процент. Оплата уже зафиксирована — сбой здесь её не отменяет, но
+  // студия должна узнать, чтобы поправить баланс руками.
+  try {
+    const b = await applySiteOrderBonuses({
+      id: order.id,
+      number: order.order_number,
+      customerId: order.customer_id,
+      bonusUsed: Number(order.bonus_used) || 0,
+      total: expected,
+    });
+    if (b.short > 0) {
+      await notifyStaffTelegram(
+        `⚠️ Заказ ${escapeTelegramHtml(order.order_number)}: клиент платил бонусами ${b.short + b.spent}, а на балансе было только ${b.spent}. ` +
+          `Разница ${b.short} ₽ не покрыта — проверьте заказ.`
+      );
+    }
+  } catch (e) {
+    console.error(`[confirmPaidOrder] бонусы заказа ${orderNumber}:`, e);
+    await notifyStaffTelegram(`⚠️ Заказ ${escapeTelegramHtml(order.order_number)} оплачен, но бонусы клиенту не записались. Поправьте баланс в «Клиентах».`);
+  }
 
   // ================================================================
   // Только теперь сообщаем студии. До оплаты заказ существует, виден в

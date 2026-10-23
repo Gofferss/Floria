@@ -38,6 +38,8 @@ type Props = {
   vitrine: VitrineBouquet[];
   methods: PaymentMethodOption[];
   settings: PosSettings;
+  /** «Тренировка»: бонусы не двигаются, даже если включены. */
+  isTraining: boolean;
   approvers: PickableEmployee[];
 };
 
@@ -64,7 +66,7 @@ function newBouquet(n: number): BouquetLine {
  * Режим «сборка на витрину» — та же касса, но вместо оплаты кнопка «На
  * витрину»: цветы списываются при сборке, на витрине появляется букет.
  */
-export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, frequent, vitrine, methods, settings, approvers }: Props) {
+export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, frequent, vitrine, methods, settings, isTraining, approvers }: Props) {
   const router = useRouter();
   const toast = useToast();
   const assembly = mode === "assembly";
@@ -215,11 +217,11 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
     setActiveKey(target.bouquets.at(-1)?.key ?? null);
   }
 
-  async function pay(payments: { method: string; amount: number }[]) {
+  async function pay(payments: { method: string; amount: number }[], bonusUsed = 0) {
     setBusy(true);
     setError(null);
-    const input = toSaleInput(check, index, payments);
-    const amount = due(check, index);
+    const input = { ...toSaleInput(check, index, payments), bonusUsed };
+    const amount = Math.max(0, due(check, index) - bonusUsed);
     const noComposition = check.bouquets.filter((b) => b.stems.length === 0).length;
     const noCompositionNote = noComposition
       ? `${noComposition === 1 ? "Букет без состава" : `${noComposition} букета без состава`} — цветы не списаны со склада.`
@@ -258,9 +260,29 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
 
     setCheck(newCheck());
     setActiveKey(null);
-    setDialog({ kind: "done", text: `${result.data.saleNo}: оплачено ${formatMoney(amount)}`, note: noCompositionNote });
+    const bonusNote = [
+      result.data.bonusUsed > 0 ? `Бонусами оплачено ${formatMoney(result.data.bonusUsed)}.` : null,
+      result.data.bonusEarned > 0 ? `Клиенту начислено ${formatMoney(result.data.bonusEarned)} бонусов.` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    setDialog({
+      kind: "done",
+      text: `${result.data.saleNo}: оплачено ${formatMoney(amount)}`,
+      note: [bonusNote, noCompositionNote].filter(Boolean).join(" ") || null,
+    });
     router.refresh();
   }
+
+  // Бонусы двигаются только в настоящем магазине, у выбранного клиента и
+  // не за оплату заказа (это решение базы — 033). Предлагаем не больше
+  // баланса и доли чека из «Настроек».
+  const bonusesActive = settings.bonusesEnabled && !isTraining;
+  const checkDue = due(check, index);
+  const bonusOffer =
+    bonusesActive && check.customer && check.customer.bonusBalance > 0
+      ? { balance: check.customer.bonusBalance, max: Math.max(0, Math.min(Math.floor(check.customer.bonusBalance), Math.floor((checkDue * settings.bonusMaxPercent) / 100))) }
+      : null;
 
   async function toVitrine(v: { title: string; price: number; photoUrls: string[] }) {
     const b = check.bouquets[0];
@@ -341,7 +363,7 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
       />
 
       {dialog?.kind === "pay" && (
-        <PaySheet amount={due(check, index)} methods={methods} busy={busy} error={error} onPay={pay} onClose={() => setDialog(null)} />
+        <PaySheet amount={due(check, index)} methods={methods} bonus={bonusOffer} busy={busy} error={error} onPay={pay} onClose={() => setDialog(null)} />
       )}
 
       {priceTarget && (
@@ -405,7 +427,13 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
       {dialog?.kind === "customer" && (
         <CustomerPanel
           current={check.customer}
-          bonusesEnabled={settings.bonusesEnabled}
+          bonusNote={
+            !settings.bonusesEnabled
+              ? "Бонусы пока ведёт Posiflora: здесь видно, сколько их, а списать и начислить — там."
+              : isTraining
+                ? "В «Тренировке» бонусы не начисляются и не списываются."
+                : `Бонусы ведёт Учёт: за покупку начислится ${settings.bonusPercent.toLocaleString("ru-RU")}%, оплатить ими можно в окне оплаты.`
+          }
           onPick={(customer) => update((c) => ({ ...c, customer }))}
           onClose={() => setDialog(null)}
         />

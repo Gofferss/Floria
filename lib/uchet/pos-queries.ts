@@ -190,7 +190,7 @@ export async function getShiftTotals(shiftId: string): Promise<{ count: number; 
 
 export type PaymentMethodOption = { code: string; title: string; isCash: boolean };
 export type CashReasonOption = { id: string; direction: "in" | "out"; title: string; kind: "purchase" | "salary" | "collection" | "other" };
-export type PosSettings = { discountLimitPercent: number; compositionRequired: boolean; bonusesEnabled: boolean; bonusPercent: number };
+export type PosSettings = { discountLimitPercent: number; compositionRequired: boolean; bonusesEnabled: boolean; bonusPercent: number; bonusMaxPercent: number; bonusesSince: string | null };
 
 export async function listPaymentMethods(): Promise<PaymentMethodOption[]> {
   const { data, error } = await getSupabaseAdmin()
@@ -215,7 +215,7 @@ export async function listCashReasons(): Promise<CashReasonOption[]> {
 export async function getPosSettings(): Promise<PosSettings> {
   const { data, error } = await getSupabaseAdmin()
     .from("pos_settings")
-    .select("discount_limit_percent, composition_required, bonuses_enabled, bonus_percent")
+    .select("discount_limit_percent, composition_required, bonuses_enabled, bonus_percent, bonus_max_percent, bonuses_since")
     .eq("id", true)
     .maybeSingle();
   if (error || !data) throw new Error(`Настройки кассы: ${error?.message ?? "нет строки"}`);
@@ -224,6 +224,8 @@ export async function getPosSettings(): Promise<PosSettings> {
     compositionRequired: data.composition_required,
     bonusesEnabled: data.bonuses_enabled,
     bonusPercent: num(data.bonus_percent),
+    bonusMaxPercent: num(data.bonus_max_percent),
+    bonusesSince: data.bonuses_since ?? null,
   };
 }
 

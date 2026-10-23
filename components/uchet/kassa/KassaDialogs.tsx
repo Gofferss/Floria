@@ -181,12 +181,13 @@ export function DiscountDialog({
 
 export function CustomerPanel({
   current,
-  bonusesEnabled,
+  bonusNote,
   onPick,
   onClose,
 }: {
   current: Customer | null;
-  bonusesEnabled: boolean;
+  /** Как сейчас работают бонусы: Posiflora, «Тренировка» или Учёт. */
+  bonusNote: string;
   onPick: (c: Customer | null) => void;
   onClose: () => void;
 }) {
@@ -237,9 +238,7 @@ export function CustomerPanel({
           aria-label="Телефон клиента"
           className={`${ui.field} h-12 text-lg`}
         />
-        {!bonusesEnabled && (
-          <p className="text-xs text-zinc-500">Бонусы пока ведёт Posiflora: здесь видно, сколько их, а списать и начислить — там.</p>
-        )}
+        <p className="text-xs text-zinc-500">{bonusNote}</p>
         {busy && <p className={ui.muted}>Ищем…</p>}
         {!busy && query.replace(/\D/g, "").length >= 4 && hits.length === 0 && (
           <NewCustomerForm

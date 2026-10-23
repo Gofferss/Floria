@@ -6,7 +6,7 @@ import { requireStaffAction } from "@/lib/auth/server";
 import { canUseUchetWork, isOwnerRole } from "@/lib/auth/roles";
 import { toE164RussianPhone } from "@/lib/phone-mask";
 import { MINUTE, jsonRows, posifloraCached } from "@/lib/posiflora/cached";
-import { getCustomerHistory, type Purchase } from "@/lib/uchet/customers";
+import { getBonusHistory, getCustomerHistory, type BonusMoveRow, type Purchase } from "@/lib/uchet/customers";
 
 // ================================================================
 // Клиенты: завести на кассе, поправить карточку, перенести из Posiflora.
@@ -61,14 +61,43 @@ export async function updateCustomer(id: string, input: { name: string; birthday
   return { success: true, data: undefined };
 }
 
-export async function loadCustomerHistory(id: string): Promise<Result<Purchase[]>> {
+export async function loadCustomerHistory(id: string): Promise<Result<{ purchases: Purchase[]; bonuses: BonusMoveRow[] }>> {
   await requireStaffAction(isOwnerRole);
   if (!/^[0-9a-f-]{36}$/i.test(id)) return fail("Клиент не найден");
   try {
-    return { success: true, data: await getCustomerHistory(id) };
+    const [purchases, bonuses] = await Promise.all([getCustomerHistory(id), getBonusHistory(id)]);
+    return { success: true, data: { purchases, bonuses } };
   } catch (e) {
     return fail(e instanceof Error ? e.message : "Не загрузилось");
   }
+}
+
+/**
+ * Ручная правка бонусов: подарок к празднику, исправление ошибки. Только
+ * после перехода на бонусы Учёта — до него баланс ведёт Posiflora, и
+ * правка здесь была бы затёрта.
+ */
+export async function adjustBonus(id: string, delta: number, comment: string): Promise<Result> {
+  const staff = await requireStaffAction(isOwnerRole);
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return fail("Клиент не найден");
+  if (!Number.isFinite(delta) || delta === 0 || Math.abs(delta) > 1_000_000) return fail("Сумма не может быть нулём");
+  if (!comment.trim()) return fail("Напишите, за что");
+  const admin = getSupabaseAdmin();
+  const { data: s } = await admin.from("pos_settings").select("bonuses_enabled").eq("id", true).maybeSingle();
+  if (!s?.bonuses_enabled) return fail("Бонусы пока ведёт Posiflora — поправьте баланс там");
+  const { error } = await admin.rpc("bonus_move", {
+    p_customer: id,
+    p_delta: Math.round(delta),
+    p_kind: "manual",
+    p_sale: null,
+    p_site_order: null,
+    p_staff: staff.id,
+    p_comment: comment.trim().slice(0, 200),
+    p_clamp: false,
+  });
+  if (error) return fail(error.message);
+  revalidatePath("/uchet/klienty");
+  return { success: true, data: undefined };
 }
 
 /**

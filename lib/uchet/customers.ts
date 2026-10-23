@@ -122,6 +122,20 @@ export async function getCustomerHistory(id: string): Promise<Purchase[]> {
   return (await purchasesOf([id])).get(id) ?? [];
 }
 
+export type BonusMoveRow = { at: string; delta: number; kind: string; comment: string | null };
+
+/** Движения бонусов клиента (после перехода на бонусы Учёта), свежие сверху. */
+export async function getBonusHistory(id: string): Promise<BonusMoveRow[]> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("customer_bonus_moves")
+    .select("created_at, delta, kind, comment")
+    .eq("customer_id", id)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) throw new Error(`Бонусы клиента: ${error.message}`);
+  return (data ?? []).map((m) => ({ at: m.created_at, delta: num(m.delta), kind: m.kind, comment: m.comment }));
+}
+
 export type PosifloraCustomer = { id: string; name: string; phone: string | null; points: number; ordersQty: number };
 
 /**

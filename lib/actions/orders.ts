@@ -6,6 +6,7 @@ import { notifyCustomerAboutStatus, sendAssembledPhotoToCustomer } from "@/lib/t
 import { requireStaffAction } from "@/lib/auth/server";
 import { canUseSiteOrders } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { reverseSiteOrderBonuses } from "@/lib/bonuses";
 
 // ================================================================
 // Управление статусом заказа из /admin/orders. Заказы с сайта пока не
@@ -45,6 +46,18 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
     .from("order_status_history")
     .insert({ order_id: orderId, status, changed_by: staff.id });
   if (historyError) console.error("[updateOrderStatus] history", historyError.message);
+
+  // Отменили оплаченный заказ — бонусы Учёта назад: списанные вернуть,
+  // начисленные снять. Если бонусы двигались, это есть в журнале; если нет —
+  // ничего не произойдёт. Сбой не откатывает отмену, но виден в логах.
+  if (status === "cancelled") {
+    try {
+      const { data: o } = await getSupabaseAdmin().from("orders").select("order_number").eq("id", orderId).maybeSingle();
+      await reverseSiteOrderBonuses(orderId, o?.order_number ?? orderId);
+    } catch (e) {
+      console.error("[updateOrderStatus] бонусы при отмене", e instanceof Error ? e.message : e);
+    }
+  }
 
   // Клиенту в бот — если он его подключил. Внутри функция сама решает, о
   // каких статусах писать стоит: «новый» он только что видел на экране, а

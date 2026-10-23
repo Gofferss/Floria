@@ -283,9 +283,11 @@ export type SaleInput = {
   comment: string | null;
   lines: SaleLineInput[];
   payments: { method: string; amount: number }[];
+  /** Сколько оплатить бонусами клиента (целые рубли). База проверит баланс и долю чека. */
+  bonusUsed?: number;
 };
 
-export async function recordSale(input: SaleInput): Promise<Result<{ saleNo: string; repeated: boolean }>> {
+export async function recordSale(input: SaleInput): Promise<Result<{ saleNo: string; repeated: boolean; bonusUsed: number; bonusEarned: number }>> {
   const w = await who();
   if (!w.ok) return { success: false, error: w.error };
   if (!isUuid(input.id)) return { success: false, error: "Нет идентификатора чека" };
@@ -327,6 +329,7 @@ export async function recordSale(input: SaleInput): Promise<Result<{ saleNo: str
       discount_percent: input.discountPercent || 0,
       approved_by: approvedBy,
       comment: input.comment?.trim() || null,
+      bonus_used: Math.max(0, Math.floor(Number(input.bonusUsed) || 0)),
     },
     p_lines: input.lines.map((l) =>
       l.kind === "bouquet"
@@ -344,8 +347,8 @@ export async function recordSale(input: SaleInput): Promise<Result<{ saleNo: str
   if (error || !data) return { success: false, error: dbMessage(error, "Не удалось провести продажу") };
 
   refresh();
-  const r = data as { sale_no: string; repeated: boolean };
-  return { success: true, data: { saleNo: r.sale_no, repeated: r.repeated } };
+  const r = data as { sale_no: string; repeated: boolean; bonus_used?: number | string; bonus_earned?: number | string };
+  return { success: true, data: { saleNo: r.sale_no, repeated: r.repeated, bonusUsed: Number(r.bonus_used) || 0, bonusEarned: Number(r.bonus_earned) || 0 } };
 }
 
 /** Проверить PIN того, кто разрешает скидку, и выдать допуск до оплаты. */
