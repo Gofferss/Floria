@@ -337,8 +337,21 @@ Posiflora — только чтение, не ответила — перехо�
   (`updateOrderStatus`) возвращает списанное и снимает начисленное.
 - **«Клиенты»**: история бонусов и ручная правка (только после перехода).
 
-Тест `033_bonuses_test.sql` (10 проверок) гонялся вместе с 028 и 029 —
+Тест `033_bonuses_test.sql`, `034_posiflora_carryover_test.sql` (10 проверок) гонялся вместе с 028 и 029 —
 все 33 прошли.
+
+### Перенос заказов из Posiflora (миграция 034)
+
+В день запуска будущие заказы из Posiflora заводят в Учёт. Предоплату,
+полученную ещё там, проводят служебным способом `posiflora` («Внесено в
+Posiflora · перенос» в форме заказа): чек закрывает долг по заказу
+(`pos_order_paid`), но помечен `pos_sales.carried_over` — его не считают
+сводка, деньги, зарплата, итоги смены и «продано за день», в наличные он не
+идёт, бонусы за него не начисляются. Способ только для оплаты заказа и не
+смешивается с новыми деньгами; в кассе и «Настройках» его нет. Тест — 4
+проверки, вместе с 028/029/033 — 37/37.
+
+Чек-лист запуска для владельца — https://claude.ai/artifact/9LJbosp6EZk4D2QZz6SL55
 
 ### Продажа без связи
 
@@ -447,7 +460,7 @@ previous_counted_cash` и `counted_cash − expected_cash`. Итог — одн�
 `posiflora_id`).
 
 **Тесты** — `migrations/tests/024_warehouse_core_test.sql`,
-`026_save_draft_test.sql`, `028_shop_floor_test.sql`, `029_shop_orders_test.sql`, `031_owner_summary_test.sql`, `032_payroll_test.sql`, `033_bonuses_test.sql`. Выполняются внутри
+`026_save_draft_test.sql`, `028_shop_floor_test.sql`, `029_shop_orders_test.sql`, `031_owner_summary_test.sql`, `032_payroll_test.sql`, `033_bonuses_test.sql`, `034_posiflora_carryover_test.sql`. Выполняются внутри
 транзакции с `ROLLBACK` в конце, поэтому ничего не оставляют в базе;
 каждое расхождение — `RAISE EXCEPTION`.
 
