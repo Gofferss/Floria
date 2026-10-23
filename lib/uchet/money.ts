@@ -164,6 +164,7 @@ async function uchetMethods(from: string, to: string, locations: string[]): Prom
     .select("amount, pos_payment_methods(title), pos_sales!inner(location_id, status, created_at)")
     .in("pos_sales.location_id", locations)
     .eq("pos_sales.status", "paid")
+    .eq("pos_sales.carried_over", false)
     .gte("pos_sales.created_at", dayStart(from))
     .lt("pos_sales.created_at", dayStart(addDays(to, 1)))
     .limit(20000);

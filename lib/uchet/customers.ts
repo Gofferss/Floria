@@ -59,7 +59,7 @@ async function purchasesOf(ids: string[]): Promise<Map<string, Purchase[]>> {
   const inLocations = locations.length ? locations : ["00000000-0000-0000-0000-000000000000"];
   const [site, sales, shopOrders] = await Promise.all([
     admin.from("orders").select("customer_id, order_number, created_at, paid_at, total_amount, status, payment_status").in("customer_id", ids).limit(5000),
-    admin.from("pos_sales").select("customer_id, sale_no, created_at, total, status").in("customer_id", ids).in("location_id", inLocations).limit(5000),
+    admin.from("pos_sales").select("customer_id, sale_no, created_at, total, status").in("customer_id", ids).in("location_id", inLocations).eq("carried_over", false).limit(5000),
     admin.from("pos_orders").select("customer_id, order_no, created_at, total, status").in("customer_id", ids).in("location_id", inLocations).limit(5000),
   ]);
   for (const r of [site, sales, shopOrders]) if (r.error) throw new Error(`Покупки клиентов: ${r.error.message}`);

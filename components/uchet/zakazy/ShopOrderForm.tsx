@@ -37,6 +37,9 @@ const day = (offset: number) => dayFmt.format(new Date(Date.now() + offset * 86_
 
 type Prepay = "none" | "full" | "part";
 
+/** Служебный способ «Внесено в Posiflora» — для переноса заказов в день запуска (миграция 034). */
+const CARRY_OVER = "posiflora";
+
 type Props = {
   order: WorkOrder | null;
   methods: PaymentMethodOption[];
@@ -288,7 +291,7 @@ export function ShopOrderForm({ order, methods, shiftOpen, onClose }: Props) {
                 value={part}
                 onChange={(e) => setPart(e.target.value.replace(/[^\d]/g, ""))}
                 aria-label="Сколько вносят"
-                className={`${ui.field} mt-3 w-40 tabular-nums`}
+                className={`${ui.fieldInline} mt-3 w-40 text-base tabular-nums`}
                 placeholder="Сколько"
               />
             )}
@@ -300,9 +303,25 @@ export function ShopOrderForm({ order, methods, shiftOpen, onClose }: Props) {
                       {m.title}
                     </button>
                   ))}
+                  {/* Перенос заказа из Posiflora в день запуска (034): деньги уже там. */}
+                  <button
+                    type="button"
+                    onClick={() => setMethod(CARRY_OVER)}
+                    aria-pressed={method === CARRY_OVER}
+                    className={`${ui.chip} ${method === CARRY_OVER ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-900 ring-1 ring-inset ring-amber-200"}`}
+                  >
+                    Внесено в Posiflora · перенос
+                  </button>
                 </div>
                 {!shiftOpen && <p className="mt-3 text-sm text-red-700">Смена не открыта — предоплату не принять. Откройте смену или оформите без предоплаты.</p>}
-                {prepayAmount > 0 && <p className="mt-3 text-sm text-zinc-600">Пробьётся чеком в смене: {formatMoney(prepayAmount)}</p>}
+                {prepayAmount > 0 &&
+                  (method === CARRY_OVER ? (
+                    <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                      Только для заказа, перенесённого из Posiflora: {formatMoney(prepayAmount)} уже получены там. По заказу они засчитаются, а в кассу смены, выручку и бонусы не пойдут.
+                    </p>
+                  ) : (
+                    <p className="mt-3 text-sm text-zinc-600">Пробьётся чеком в смене: {formatMoney(prepayAmount)}</p>
+                  ))}
               </>
             )}
           </div>

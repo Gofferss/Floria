@@ -211,6 +211,7 @@ async function loadMonthFacts(month: string, today: string, since: string | null
             .select("total, created_at, employee_id")
             .in("location_id", inLocations)
             .eq("status", "paid")
+            .eq("carried_over", false)
             .gte("created_at", dayStart(uchetPart.from))
             .lt("created_at", next)
             .range(a, b)

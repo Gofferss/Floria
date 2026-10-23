@@ -276,6 +276,7 @@ async function loadUchetBlock(from: string, to: string, locations: string[]): Pr
           .select("total, created_at, hr_employees!pos_sales_employee_id_fkey(short_name), pos_payments(method, amount, pos_payment_methods(title))")
           .in("location_id", locations)
           .eq("status", "paid")
+          .eq("carried_over", false)
           .gte("created_at", dayStart(from))
           .lt("created_at", dayStart(addDays(to, 1)))
           .order("created_at")

@@ -341,6 +341,8 @@ export async function listHallSales(locationId: string, day: string): Promise<Ha
         "pos_sale_lines(kind, title, qty, amount, sort, pos_orders(order_no)), pos_payments(amount, pos_payment_methods(title))"
     )
     .eq("location_id", locationId)
+    // Перенос предоплаты из Posiflora — не продажа этого дня (034).
+    .eq("carried_over", false)
     .gte("created_at", dayStart(day))
     .lt("created_at", dayStart(next))
     .order("created_at", { ascending: false });

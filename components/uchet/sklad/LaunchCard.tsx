@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { setDefaultLocation } from "@/lib/uchet/actions";
 import { ui } from "@/components/uchet/ui";
@@ -62,10 +63,16 @@ export function LaunchCard({ locations }: { locations: Location[] }) {
           </ol>
         </>
       ) : (
-        <p className={`${ui.muted} mt-2 max-w-2xl`}>
-          Документы идут в «{current?.title}» — это настоящий учёт. Вернуться в тренировку можно, но уже проведённые
-          настоящие документы останутся в журнале.
-        </p>
+        <>
+          <p className={`${ui.muted} mt-2 max-w-2xl`}>
+            Документы идут в «{current?.title}» — это настоящий учёт. Вернуться в тренировку можно, но уже проведённые
+            настоящие документы останутся в журнале.
+          </p>
+          {/* Первый документ настоящего журнала — пересчёт склада в день запуска. Отдельной кнопки на складе нет: нужен один раз. */}
+          <Link href="/uchet/sklad/docs/new?type=opening" className={`${ui.btnPrimary} mt-4`}>
+            Провести начальный остаток
+          </Link>
+        </>
       )}
 
       {target && (

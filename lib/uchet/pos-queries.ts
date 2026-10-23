@@ -97,6 +97,7 @@ export async function listShiftCash(shift: OpenShift): Promise<CashLine[]> {
       .select("id, sale_no, created_at, total, hr_employees!pos_sales_employee_id_fkey(short_name), pos_payments(method, amount, pos_payment_methods(is_cash))")
       .eq("shift_id", shift.id)
       .eq("status", "paid")
+      .eq("carried_over", false)
       .order("created_at", { ascending: false }),
   ]);
   if (moves.error) throw new Error(`Движения наличных: ${moves.error.message}`);
@@ -161,7 +162,9 @@ export async function getShiftTotals(shiftId: string): Promise<{ count: number; 
     .from("pos_sales")
     .select("total, pos_payments(amount, pos_payment_methods(title, sort))")
     .eq("shift_id", shiftId)
-    .eq("status", "paid");
+    .eq("status", "paid")
+    // Предоплата, перенесённая из Posiflora, — не выручка этой смены (034).
+    .eq("carried_over", false);
   if (error) throw new Error(`Итоги смены: ${error.message}`);
 
   type Row = { total: number | string; pos_payments: { amount: number | string; pos_payment_methods: { title: string; sort: number } | { title: string; sort: number }[] | null }[] };
@@ -197,6 +200,8 @@ export async function listPaymentMethods(): Promise<PaymentMethodOption[]> {
     .from("pos_payment_methods")
     .select("code, title, is_cash")
     .eq("is_active", true)
+    // «Внесено в Posiflora» — служебный способ для переноса заказов (034), не для кассы.
+    .neq("code", "posiflora")
     .order("sort");
   if (error) throw new Error(`Способы оплаты: ${error.message}`);
   return (data ?? []).map((m) => ({ code: m.code, title: m.title, isCash: m.is_cash }));

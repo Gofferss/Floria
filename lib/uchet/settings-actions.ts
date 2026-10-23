@@ -111,7 +111,7 @@ export async function savePaymentMethod(input: { code: string | null; title: str
   }
 
   const current = list.find((m) => m.code === input.code);
-  if (!current) return fail("Способ не найден");
+  if (!current || current.code === "posiflora") return fail("Способ не найден");
   if (!input.isActive && current.code === "cash") return fail("«Наличные» не выключаются: на них стоит пересчёт кассы смены");
   if (!input.isActive && current.is_active && list.filter((m) => m.is_active).length <= 1) return fail("Хотя бы один способ оплаты должен остаться");
   if (input.isCash !== current.is_cash) {

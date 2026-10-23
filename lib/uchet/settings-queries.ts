@@ -13,7 +13,7 @@ export type CashReasonRow = { id: string; direction: "in" | "out"; title: string
 export async function listAllPaymentMethods(): Promise<PaymentMethodRow[]> {
   const admin = getSupabaseAdmin();
   const [{ data, error }, { data: used, error: usedError }] = await Promise.all([
-    admin.from("pos_payment_methods").select("code, title, is_cash, is_active, sort").order("sort"),
+    admin.from("pos_payment_methods").select("code, title, is_cash, is_active, sort").neq("code", "posiflora").order("sort"),
     // Каким способом уже платили — у такого не меняют «наличные или нет»:
     // это пересчитало бы ожидаемые наличные в прошлых сменах.
     admin.from("pos_payments").select("method").limit(5000),
