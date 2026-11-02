@@ -1,5 +1,6 @@
 export const TIME_SLOTS = [
   { id: "asap", label: "Как можно скорее", from: null, to: null },
+  { id: "8-10", label: "8:00–10:00", from: "08:00", to: "10:00" },
   { id: "10-13", label: "10:00–13:00", from: "10:00", to: "13:00" },
   { id: "13-16", label: "13:00–16:00", from: "13:00", to: "16:00" },
   { id: "16-19", label: "16:00–19:00", from: "16:00", to: "19:00" },
