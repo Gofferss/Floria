@@ -31,9 +31,6 @@ import {
 
 const hand = Caveat({ subsets: ["latin", "cyrillic"], weight: ["400", "500"], display: "swap" });
 
-/** Адрес так, как он напечатан на карточке студии. */
-const CARD_ADDRESS = "ул. Киевская, 5";
-
 /** Чернила шариковой ручки флориста — сине-фиолетовые, как на фото открыток. */
 const INK = "text-[#2f3590]";
 
@@ -224,7 +221,7 @@ export function CardMessageField({
           </div>
           <p className="flex items-center gap-1">
             <PinIcon className="h-3 w-3 shrink-0" />
-            {CARD_ADDRESS}
+            {CONTACTS.addressLine}
           </p>
         </div>
       </div>
