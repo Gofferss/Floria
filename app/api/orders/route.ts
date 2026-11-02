@@ -10,6 +10,7 @@ import { escapeTelegramHtml } from "@/lib/telegram/bot";
 import { confirmOrderToCustomer } from "@/lib/telegram/order-notify";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
+import { CARD_TEXT_MAX } from "@/lib/card-message";
 import {
   TIME_SLOTS,
   calcDeliveryPrice,
@@ -89,6 +90,12 @@ function validatePayload(body: unknown): ValidationResult {
     return { valid: false, error: "Некорректный интервал доставки" };
   }
   // Самовывоз — адрес не нужен; для доставки он обязателен.
+  // Открытка бумажная: больше CARD_TEXT_MAX символов флорист на неё не
+  // впишет. Форма столько набрать не даёт — это на случай обхода формы.
+  payload.cardText = typeof payload.cardText === "string" ? payload.cardText.trim() : "";
+  if (payload.cardText.length > CARD_TEXT_MAX) {
+    return { valid: false, error: `Текст открытки длиннее ${CARD_TEXT_MAX} символов` };
+  }
   payload.isPickup = payload.isPickup === true;
   if (!payload.isPickup && !payload.deliveryAddress?.trim()) {
     return { valid: false, error: "Не указан адрес доставки" };

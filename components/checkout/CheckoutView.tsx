@@ -13,6 +13,7 @@ import { BloomMark } from "@/components/ui/BloomMark";
 import { ArrowRightIcon, CheckIcon } from "@/components/ui/Icons";
 import { trackEvent } from "@/lib/analytics/track";
 import { CONTACTS } from "@/lib/contacts";
+import { CARD_TEXT_MAX, NO_FILM, composeCardText, isValidFilmTime, type CardFilm } from "@/lib/card-message";
 import {
   calcDeliveryPrice,
   earliestDeliveryDate,
@@ -33,7 +34,10 @@ type FormErrors = Partial<
     | "deliveryDate"
     | "timeSlot"
     | "street"
-    | "house",
+    | "house"
+    | "cardText"
+    | "cardFilm"
+    | "cardFilmTime",
     string
   >
 >;
@@ -55,6 +59,7 @@ export function CheckoutView() {
   const [apartment, setApartment] = useState("");
   const [courierComment, setCourierComment] = useState("");
   const [cardText, setCardText] = useState("");
+  const [cardFilm, setCardFilm] = useState<CardFilm>(NO_FILM);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [consentGiven, setConsentGiven] = useState(false);
   const [bonusInput, setBonusInput] = useState("");
@@ -228,6 +233,16 @@ export function CheckoutView() {
       if (!street.trim()) next.street = "Укажите улицу";
       if (!house.trim()) next.house = "Укажите номер дома";
     }
+    // Время без фильма или время с ошибкой — не выбрасываем молча: человек
+    // рассчитывает, что получатель найдёт сцену, и должен узнать, что
+    // строка на открытку не попадёт.
+    if (cardFilm.on && cardFilm.time) {
+      if (!cardFilm.title.trim()) next.cardFilm = "Укажите фильм";
+      if (!isValidFilmTime(cardFilm.time)) next.cardFilmTime = "Например, 1:55:10";
+    }
+    if (composeCardText(cardText, cardFilm).length > CARD_TEXT_MAX) {
+      next.cardText = `Открытка вмещает ${CARD_TEXT_MAX} символов — сократите текст`;
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -254,7 +269,9 @@ export function CheckoutView() {
       deliveryAddress: isPickup ? "" : `${street}, ${house}`,
       deliveryApartment: isPickup ? "" : apartment,
       courierComment: isPickup ? "" : courierComment,
-      cardText,
+      // Текст и момент из фильма — одной строкой: так открытку видят
+      // флорист, курьер и Учёт, ничего нового им читать не нужно.
+      cardText: composeCardText(cardText, cardFilm),
       // Себе анонимно не дарят: если галочку поставили, а потом
       // переключились на «получатель — я», она не должна уехать в заказ.
       isAnonymous: !isRecipientSelf && isAnonymous,
@@ -465,9 +482,12 @@ export function CheckoutView() {
           <CardMessageField
             value={cardText}
             onChange={setCardText}
+            film={cardFilm}
+            onFilmChange={setCardFilm}
             showAnonymous={!isRecipientSelf}
             anonymous={isAnonymous}
             onAnonymousChange={setIsAnonymous}
+            errors={{ text: errors.cardText, film: errors.cardFilm, filmTime: errors.cardFilmTime }}
           />
         </div>
 
