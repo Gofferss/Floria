@@ -200,7 +200,14 @@ export function StoriesRailClient({ stories }: { stories: Story[] }) {
     dragRef.current = null;
     if (!drag.moved) return;
 
+    // Гасим только «щелчок», который браузер пришлёт следом за этим
+    // отпусканием, — он приходит раньше любого таймера. Дальше флаг не
+    // держим: иначе следующее нажатие с клавиатуры (без указателя, а
+    // значит, без сброса в handlePointerDown) тоже бы пропало.
     suppressClickRef.current = true;
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
     const dx = e.clientX - drag.startX;
     // Листаем на столько кружков, сколько протянули. Короткий рывок — на
     // один: иначе лента откатывалась бы назад, и казалось бы, что жест не
