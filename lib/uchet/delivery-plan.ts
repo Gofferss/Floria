@@ -34,6 +34,8 @@ export type PlanStop = {
   recipientPhone: string;
   courierComment: string | null;
   cardText: string | null;
+  /** Не называть получателю отправителя (галочка в оформлении на сайте). */
+  isAnonymous: boolean;
   /** Сколько взять при получении (у заказов магазина). */
   due: number;
   /** Заказ сайта оплачен в песочнице ВТБ — денег нет. */
@@ -59,7 +61,7 @@ export async function listCouriers(): Promise<Courier[]> {
 const SITE_SELECT =
   "id, order_number, status, payment_status, delivery_date, delivery_time_from, delivery_time_to, delivery_city, delivery_address, " +
   "delivery_apartment, delivery_entrance, delivery_floor, delivery_intercom_code, recipient_name, recipient_phone, courier_comment, card_text, " +
-  "delivery_lat, delivery_lon, geo_quality, courier_staff_id, route_seq, total_amount";
+  "is_anonymous, delivery_lat, delivery_lon, geo_quality, courier_staff_id, route_seq, total_amount";
 
 const SHOP_SELECT =
   "id, order_no, status, delivery_date, time_from, time_to, delivery_address, delivery_details, recipient_name, recipient_phone, customer_name, " +
@@ -83,6 +85,7 @@ type SiteRow = {
   recipient_phone: string;
   courier_comment: string | null;
   card_text: string | null;
+  is_anonymous: boolean;
   delivery_lat: number | string | null;
   delivery_lon: number | string | null;
   geo_quality: number | null;
@@ -166,6 +169,7 @@ export async function loadDayStops(day: string, locationId: string): Promise<Pla
       recipientPhone: r.recipient_phone,
       courierComment: r.courier_comment,
       cardText: r.card_text,
+      isAnonymous: r.is_anonymous === true,
       due: 0,
       testPayment: isVtbSandbox(),
     });
@@ -193,6 +197,7 @@ export async function loadDayStops(day: string, locationId: string): Promise<Pla
       recipientPhone: r.recipient_phone ?? r.customer_phone ?? "",
       courierComment: r.courier_comment,
       cardText: r.card_text,
+      isAnonymous: false,
       due: Math.max(0, (Number(r.total) || 0) - paid),
       testPayment: false,
     });

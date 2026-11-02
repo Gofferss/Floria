@@ -334,6 +334,12 @@ export function OrderPanel({ order: o, onClose }: { order: WorkOrder; onClose: (
               <dd className="italic">«{o.cardText}»</dd>
             </>
           )}
+          {o.isAnonymous && (
+            <>
+              <dt className="text-zinc-500">Анонимно</dt>
+              <dd className="font-semibold text-lavender-700">Открытку не подписывать, курьеру не называть отправителя</dd>
+            </>
+          )}
           {o.courierComment && (
             <>
               <dt className="text-zinc-500">Курьеру</dt>
@@ -353,7 +359,7 @@ export function OrderPanel({ order: o, onClose }: { order: WorkOrder; onClose: (
             <li
               key={s}
               className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-semibold ${
-                i <= at ? "bg-emerald-50 text-emerald-800" : i === at + 1 ? "bg-lavender-50 text-lavender-800" : "bg-zinc-50 text-zinc-400"
+                i <= at ? "bg-emerald-50 text-emerald-800" : i === at + 1 ? "bg-lavender-50 text-lavender-700" : "bg-zinc-50 text-zinc-400"
               }`}
             >
               <span>{s === "completed" && o.isPickup ? "Выдан" : STATUS_LABEL[s]}</span>

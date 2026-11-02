@@ -41,6 +41,7 @@ type OrderDetail = {
   delivery_time_to: string | null;
   courier_comment: string | null;
   card_text: string | null;
+  is_anonymous: boolean;
   items_total: number;
   delivery_price: number;
   discount_total: number;
@@ -167,6 +168,11 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
             <p className="mt-3 rounded-xl bg-gold-500/5 p-3 font-body text-sm text-ink/70">
               <span className="font-semibold text-ink/50">Текст открытки: </span>
               {detail.card_text}
+            </p>
+          )}
+          {detail.is_anonymous && (
+            <p className="mt-3 rounded-xl bg-lavender-100 p-3 font-body text-sm font-semibold text-ink">
+              Анонимный букет: открытку не подписывать, курьеру не называть отправителя
             </p>
           )}
         </section>

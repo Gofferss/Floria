@@ -41,6 +41,8 @@ export type WorkOrder = {
   customerPhone: string;
   isRecipientSelf: boolean;
   cardText: string | null;
+  /** Не называть получателю отправителя (галочка в оформлении на сайте). */
+  isAnonymous: boolean;
   courierComment: string | null;
   adminComment: string | null;
   total: number;
@@ -92,6 +94,7 @@ type Row = {
   customer_phone: string;
   is_recipient_self: boolean;
   card_text: string | null;
+  is_anonymous: boolean;
   courier_comment: string | null;
   admin_comment: string | null;
   total_amount: number | string;
@@ -105,7 +108,7 @@ type Row = {
 const SELECT =
   "id, order_number, status, payment_status, is_pickup, delivery_date, delivery_time_from, delivery_time_to, delivery_address, " +
   "delivery_apartment, delivery_entrance, delivery_floor, delivery_intercom_code, recipient_name, recipient_phone, customer_name, " +
-  "customer_phone, is_recipient_self, card_text, courier_comment, admin_comment, total_amount, florist_accepted_at, assembled_photos, " +
+  "customer_phone, is_recipient_self, card_text, is_anonymous, courier_comment, admin_comment, total_amount, florist_accepted_at, assembled_photos, " +
   "assembled_photo_sent_at, updated_at, order_items(product_name, quantity)";
 
 function toWorkOrder(r: Row): WorkOrder {
@@ -140,6 +143,7 @@ function toWorkOrder(r: Row): WorkOrder {
     customerPhone: r.customer_phone,
     isRecipientSelf: r.is_recipient_self,
     cardText: r.card_text,
+    isAnonymous: r.is_anonymous === true,
     courierComment: r.courier_comment,
     adminComment: r.admin_comment,
     total,
@@ -216,6 +220,8 @@ function toShopOrder(r: ShopRow): WorkOrder {
     customerPhone: r.customer_phone ?? "",
     isRecipientSelf: !r.recipient_phone || r.recipient_phone === r.customer_phone,
     cardText: r.card_text,
+    // В заказах магазина анонимность пишут словами в пожеланиях — отдельной галочки там нет.
+    isAnonymous: false,
     courierComment: r.courier_comment,
     adminComment: null,
     total,

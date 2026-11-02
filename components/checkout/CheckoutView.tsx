@@ -55,6 +55,7 @@ export function CheckoutView() {
   const [apartment, setApartment] = useState("");
   const [courierComment, setCourierComment] = useState("");
   const [cardText, setCardText] = useState("");
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [consentGiven, setConsentGiven] = useState(false);
   const [bonusInput, setBonusInput] = useState("");
   const [promoInput, setPromoInput] = useState("");
@@ -254,6 +255,9 @@ export function CheckoutView() {
       deliveryApartment: isPickup ? "" : apartment,
       courierComment: isPickup ? "" : courierComment,
       cardText,
+      // Себе анонимно не дарят: если галочку поставили, а потом
+      // переключились на «получатель — я», она не должна уехать в заказ.
+      isAnonymous: !isRecipientSelf && isAnonymous,
       bonusUsed: bonusApplied,
       promoCode: appliedPromoCode,
       items: checkoutItems,
@@ -458,7 +462,13 @@ export function CheckoutView() {
               house: errors.house,
             }}
           />
-          <CardMessageField value={cardText} onChange={setCardText} />
+          <CardMessageField
+            value={cardText}
+            onChange={setCardText}
+            showAnonymous={!isRecipientSelf}
+            anonymous={isAnonymous}
+            onAnonymousChange={setIsAnonymous}
+          />
         </div>
 
         <div className="lg:sticky lg:top-28 lg:self-start">

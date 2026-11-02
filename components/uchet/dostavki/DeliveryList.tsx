@@ -101,6 +101,11 @@ export function DeliveryList({ days }: { days: { title: string; stops: PlanStop[
                       )}
                     </p>
                     {s.courierComment && <p className="mt-1 text-sm text-zinc-600">«{s.courierComment}»</p>}
+                    {s.isAnonymous && (
+                      <p className="mt-3 rounded-xl bg-lavender-100 px-3 py-2 text-sm font-semibold text-lavender-700">
+                        Анонимный букет — не называйте получателю, от кого он
+                      </p>
+                    )}
                     {s.testPayment ? (
                       <p className="mt-3 rounded-xl bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-950">Тестовая оплата с сайта — денег нет. Не везти, пока магазин не подтвердит</p>
                     ) : s.due > 0 ? (

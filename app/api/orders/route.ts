@@ -340,6 +340,9 @@ export async function POST(request: Request) {
       courier_comment: payload.courierComment || null,
 
       card_text: payload.cardText || null,
+      // Строго true и только для чужого получателя — старая вкладка
+      // браузера поля не пришлёт, а себе анонимно не дарят.
+      is_anonymous: payload.isAnonymous === true && !payload.isRecipientSelf,
 
       items_total: itemsTotal,
       delivery_price: deliveryPrice,
@@ -484,6 +487,7 @@ export async function POST(request: Request) {
     `${payload.isPickup ? "🏪 <b>САМОВЫВОЗ</b>" : "🚚 Доставка"}: ${escapeTelegramHtml(payload.deliveryDate)}, ${escapeTelegramHtml(deliveryTimeLabel)}\n` +
     `${payload.isPickup ? "Заберут из студии" : `Адрес: ${escapeTelegramHtml(address)}`}\n\n` +
     `<b>Состав:</b>\n${itemsLines}\n` +
+    (order.is_anonymous ? `\n🤫 <b>АНОНИМНО</b> — открытку не подписывать, курьеру не называть отправителя\n` : "") +
     (payload.cardText ? `\n<b>Текст открытки:</b> ${escapeTelegramHtml(payload.cardText)}\n` : "") +
     (payload.courierComment ? `\n<b>Комментарий курьеру:</b> ${escapeTelegramHtml(payload.courierComment)}\n` : "") +
     (discountAmount > 0 ? `\nСкидка по промокоду: −${discountAmount} ₽` : "");

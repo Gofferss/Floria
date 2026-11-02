@@ -89,6 +89,7 @@ type OrderForPush = {
   delivery_intercom_code: string | null;
   courier_comment: string | null;
   card_text: string | null;
+  is_anonymous: boolean | null;
   is_pickup: boolean | null;
   total_amount: number | string | null;
 };
@@ -159,6 +160,9 @@ function buildDescription(order: OrderForPush, items: { product_name: string; qu
   if (order.card_text?.trim()) {
     lines.push("", `Открытка: ${order.card_text.trim()}`);
   }
+  if (order.is_anonymous) {
+    lines.push("", "АНОНИМНО — открытку не подписывать, курьеру не называть отправителя");
+  }
   if (order.is_pickup) {
     lines.push("", "САМОВЫВОЗ — клиент заберёт из студии");
   }
@@ -228,7 +232,7 @@ export async function pushOrderToPosiflora(orderId: string): Promise<string | nu
       "id, order_number, customer_name, customer_phone, recipient_name, recipient_phone, " +
         "delivery_date, delivery_time_from, delivery_time_to, delivery_city, delivery_address, " +
         "delivery_entrance, delivery_floor, delivery_apartment, delivery_intercom_code, " +
-        "courier_comment, card_text, is_pickup, total_amount, posiflora_order_id"
+        "courier_comment, card_text, is_anonymous, is_pickup, total_amount, posiflora_order_id"
     )
     .eq("id", orderId)
     .maybeSingle();

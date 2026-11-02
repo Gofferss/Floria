@@ -99,6 +99,8 @@ export type CheckoutPayload = {
   deliveryApartment: string;
   courierComment: string;
   cardText: string;
+  /** Не называть получателю отправителя. Имеет смысл, только если получатель — не сам заказчик. */
+  isAnonymous: boolean;
   bonusUsed: number;
   /** Промокод как ввёл клиент — сервер перепроверяет его сам, не доверяя скидке с клиента. */
   promoCode: string | null;
