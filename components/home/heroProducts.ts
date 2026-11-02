@@ -17,23 +17,37 @@ export type HeroPhoto = {
 };
 
 /**
- * Берём товары «с просветами» — не первые подряд, а равномерно по каталогу.
- * Подряд идущие карточки часто из одной съёмки: один фон, один ракурс, одни
- * цветы, и главный блок выглядит как брак печати.
+ * Запас фотографий для окон главного блока: на каждое окно — несколько
+ * букетов, а какой из них показать, решает браузер посетителя при каждом
+ * заходе (HeroShuffle). Главная собирается заранее, один раз на всех, —
+ * выбирать на сервере значило бы собирать её на каждого и терять скорость.
+ *
+ * Каталог делится на столько частей, сколько окон, и каждое окно берёт
+ * кандидатов только из своей части, «с просветами». Подряд идущие карточки
+ * часто из одной съёмки: один фон, один ракурс, одни цветы, — и если бы
+ * случай выбирал из всего каталога, рано или поздно в ряд встали бы три
+ * почти одинаковых фото, а это выглядит как брак печати.
+ *
+ * Только букеты: поштучная срезка с ценой «за штуку» в витрине из трёх
+ * фото читалась бы как цена букета.
  */
-export async function getHeroPhotos(count: number): Promise<HeroPhoto[]> {
-  const withPhoto = (await getProducts()).filter((p: Product) => p.images.length > 0);
-  if (withPhoto.length === 0) return [];
+export async function getHeroPool(slots: number, perSlot: number): Promise<HeroPhoto[][]> {
+  const bouquets = (await getProducts()).filter((p: Product) => p.images.length > 0 && p.pricingMode === "bouquet");
+  const pool: HeroPhoto[][] = [];
 
-  const step = Math.max(1, Math.floor(withPhoto.length / count));
-  const picked: HeroPhoto[] = [];
-
-  for (let i = 0; i < withPhoto.length && picked.length < count; i += step) {
-    const p = withPhoto[i];
-    picked.push({ slug: p.slug, name: p.name, price: p.basePrice, src: p.images[0] });
+  for (let s = 0; s < slots; s++) {
+    const part = bouquets.slice(Math.floor((s * bouquets.length) / slots), Math.floor(((s + 1) * bouquets.length) / slots));
+    const count = Math.min(perSlot, part.length);
+    if (count === 0) continue;
+    const picked: HeroPhoto[] = [];
+    for (let i = 0; i < count; i++) {
+      const p = part[Math.floor((i * part.length) / count)];
+      picked.push({ slug: p.slug, name: p.name, price: p.basePrice, src: p.images[0] });
+    }
+    pool.push(picked);
   }
 
-  return picked;
+  return pool;
 }
 
 /** «2 200 ₽» — узкие пробелы, чтобы цена не рвалась на перенос. */

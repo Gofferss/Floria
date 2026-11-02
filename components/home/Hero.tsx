@@ -3,7 +3,8 @@ import { ArrowRightIcon } from "@/components/ui/Icons";
 import { HeroBotanicals } from "@/components/home/HeroBotanicals";
 import { StoriesRail } from "@/components/home/StoriesRail";
 import { TrackedLink } from "@/components/analytics/TrackedLink";
-import { getHeroPhotos, formatPrice } from "@/components/home/heroProducts";
+import { HeroShuffle } from "@/components/home/HeroShuffle";
+import { getHeroPool, formatPrice } from "@/components/home/heroProducts";
 
 // ================================================================
 // Главный блок.
@@ -18,6 +19,11 @@ import { getHeroPhotos, formatPrice } from "@/components/home/heroProducts";
 // трёх одинаковых прямоугольников читается как таблица товаров, а не как
 // витрина; вразнобой видно почерк — что букеты собирают в одном стиле и
 // что их много. Для студии без громкого имени это убедительнее слогана.
+//
+// Букеты в окнах меняются при каждом заходе: в каждом окне лежит запас из
+// своей части каталога, а показать один из них случайно выбирает браузер
+// (HeroShuffle). Вернувшийся покупатель видит не ту же картинку, что
+// вчера, а ещё одну работу студии.
 // ================================================================
 
 /** Что студия обещает. Три пункта: четвёртый уже никто не читает. */
@@ -40,8 +46,11 @@ const FRAMES = [
   "aspect-[3/4] lg:mt-16",
 ];
 
+/** Сколько букетов в запасе у каждого окна: 6³ — больше двухсот разных троек. */
+const PER_SLOT = 6;
+
 export async function Hero() {
-  const photos = await getHeroPhotos(FRAMES.length);
+  const pool = await getHeroPool(FRAMES.length, PER_SLOT);
 
   return (
     <section className="relative">
@@ -92,34 +101,51 @@ export async function Hero() {
           </div>
         </div>
 
-        {photos.length > 0 && (
+        {pool.length > 0 && (
           <div className="grid grid-cols-3 gap-3 sm:gap-4">
-            {photos.map((photo, i) => (
-              <TrackedLink
-                key={photo.slug}
-                href={`/catalog/${photo.slug}`}
-                eventTarget="Фото в шапке"
-                className={`group relative block overflow-hidden rounded-2xl bg-lavender-100 shadow-lg ring-1 ring-black/5 ${FRAMES[i] ?? FRAMES[0]}`}
-              >
-                <Image
-                  src={photo.src}
-                  alt={photo.name}
-                  fill
-                  priority={i === 0}
-                  sizes="(min-width: 1024px) 300px, 31vw"
-                  className="object-cover transition duration-700 group-hover:scale-[1.04]"
-                />
-                {/* Цена видна всегда, а не по наведению: на телефоне наведения
-                    нет вовсе, и спрятанная туда цена просто не существует. */}
-                <div
-                  className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/70 to-transparent"
-                  aria-hidden="true"
-                />
-                <span className="absolute bottom-2.5 left-3 right-3 font-display text-xs font-semibold text-white drop-shadow sm:text-sm">
-                  {formatPrice(photo.price)}
-                </span>
-              </TrackedLink>
+            {pool.map((candidates, i) => (
+              <div key={i} data-hero-slot="" className={`relative ${FRAMES[i] ?? FRAMES[0]}`}>
+                {candidates.map((photo, j) => (
+                  // Какой букет открыть, решает HeroShuffle ещё до отрисовки,
+                  // поэтому hidden в браузере может не совпасть с серверным.
+                  <div
+                    key={photo.slug}
+                    data-hero-photo={photo.slug}
+                    hidden={j > 0}
+                    suppressHydrationWarning
+                    className="absolute inset-0"
+                  >
+                    <TrackedLink
+                      href={`/catalog/${photo.slug}`}
+                      eventTarget="Фото в шапке"
+                      className="group relative block h-full w-full overflow-hidden rounded-2xl bg-lavender-100 shadow-lg ring-1 ring-black/5"
+                    >
+                      {/* Без priority: заранее неизвестно, какое фото окажется
+                          на экране, а предзагрузка всех восемнадцати съела бы
+                          трафик. Ленивые картинки в видимой части экрана
+                          браузер всё равно запрашивает сразу. */}
+                      <Image
+                        src={photo.src}
+                        alt={photo.name}
+                        fill
+                        sizes="(min-width: 1024px) 300px, 31vw"
+                        className="object-cover transition duration-700 group-hover:scale-[1.04]"
+                      />
+                      {/* Цена видна всегда, а не по наведению: на телефоне наведения
+                          нет вовсе, и спрятанная туда цена просто не существует. */}
+                      <div
+                        className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/70 to-transparent"
+                        aria-hidden="true"
+                      />
+                      <span className="absolute bottom-2.5 left-3 right-3 font-display text-xs font-semibold text-white drop-shadow sm:text-sm">
+                        {formatPrice(photo.price)}
+                      </span>
+                    </TrackedLink>
+                  </div>
+                ))}
+              </div>
             ))}
+            <HeroShuffle />
           </div>
         )}
       </div>
