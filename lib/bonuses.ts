@@ -36,6 +36,17 @@ export async function bonusesInUchet(): Promise<boolean> {
   }
 }
 
+/**
+ * Баланс по телефону из Учёта — для бота, когда бонусы уже ведёт Учёт.
+ * null — карточки с таким номером нет. Бросает при ошибке базы: «нет
+ * такого номера» и «база не ответила» — разные ответы человеку.
+ */
+export async function uchetBonusBalanceByPhone(phone: string): Promise<number | null> {
+  const { data, error } = await getSupabaseAdmin().from("customers").select("bonus_balance").eq("phone", phone).maybeSingle();
+  if (error) throw new Error(`Баланс бонусов: ${error.message}`);
+  return data ? Number(data.bonus_balance) || 0 : null;
+}
+
 type Move = { customer: string; delta: number; kind: "earn" | "spend" | "reverse" | "return"; order: string; comment: string; clamp?: boolean };
 
 async function move(m: Move): Promise<number> {

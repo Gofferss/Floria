@@ -15,6 +15,7 @@ import { saveOrderFeedback } from "@/lib/telegram/order-notify";
 import { toE164RussianPhone } from "@/lib/phone-mask";
 import { sendPhoneOtp, verifyPhoneOtp } from "@/lib/auth/otp";
 import { findPosifloraClientByPhone } from "@/lib/posiflora";
+import { bonusesInUchet, uchetBonusBalanceByPhone } from "@/lib/bonuses";
 import {
   ensureBotUser,
   addReminder,
@@ -387,17 +388,25 @@ async function handleBonusPhoneSubmitted(chatId: number, rawText: string, oldMes
 
 /**
  * Второй шаг — код из СМС подтверждён, теперь можно спрашивать баланс.
- * Спрашивает Posiflora напрямую (не наш кэш customers), потому что
+ * До запуска Учёта спрашивает Posiflora напрямую (не наш кэш customers):
  * бонусная карта могла завестись и в шоуруме, без единого захода на
- * сайт. Ошибка Posiflora не должна выглядеть как "такого номера нет" —
+ * сайт. После запуска бонусы ведёт Учёт — тогда баланс из его карточки.
+ * Ошибка источника не должна выглядеть как "такого номера нет" —
  * это разные ответы пользователю.
  */
 async function revealBonusBalance(chatId: number, phone: string, oldMessageId: number | null): Promise<void> {
   const displayPhone = formatPhoneForDisplay(phone);
 
-  let client: { posifloraClientId: string; bonusBalance: number } | null;
+  let client: { bonusBalance: number } | null;
   try {
-    client = await findPosifloraClientByPhone(phone);
+    // После запуска Учёта бонусы ведёт он, и Posiflora их больше не знает —
+    // бот показывал бы устаревший баланс. До запуска — по-прежнему Posiflora.
+    if (await bonusesInUchet()) {
+      const balance = await uchetBonusBalanceByPhone(phone);
+      client = balance === null ? null : { bonusBalance: balance };
+    } else {
+      client = await findPosifloraClientByPhone(phone);
+    }
   } catch (error) {
     console.error("[revealBonusBalance]", error);
     const newId = await render(chatId, { kind: "fresh", oldMessageId }, BONUS_ERROR_TEXT, MAIN_MENU);
