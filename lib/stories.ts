@@ -8,7 +8,12 @@ import { supabase } from "@/lib/supabase";
 // ================================================================
 
 export type StorySlide = {
-  imageUrl: string;
+  mediaType: "image" | "video";
+  /** Фото или ролик (MP4). */
+  mediaUrl: string;
+  /** Кадр ролика — показываем, пока он грузится или если браузер его не осилит. */
+  posterUrl: string | null;
+  /** У фото — сколько секунд показывать; у ролика — его длина. */
   durationSeconds: number;
   /** Куда ведёт кнопка на слайде. null — кнопки нет. */
   linkUrl: string | null;
@@ -26,7 +31,7 @@ export type Story = {
 export async function getActiveStories(): Promise<Story[]> {
   const { data, error } = await supabase
     .from("stories")
-    .select("id, title, cover_image, story_items ( image_url, duration_seconds, sort_order, link_url, link_label )")
+    .select("id, title, cover_image, story_items ( image_url, media_type, poster_url, duration_seconds, sort_order, link_url, link_label )")
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
 
@@ -42,6 +47,8 @@ export async function getActiveStories(): Promise<Story[]> {
     story_items:
       | {
           image_url: string;
+          media_type: string;
+          poster_url: string | null;
           duration_seconds: number;
           sort_order: number;
           link_url: string | null;
@@ -59,12 +66,14 @@ export async function getActiveStories(): Promise<Story[]> {
         .slice()
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((item) => ({
-          imageUrl: item.image_url,
+          mediaType: item.media_type === "video" ? ("video" as const) : ("image" as const),
+          mediaUrl: item.image_url,
+          posterUrl: item.poster_url,
           durationSeconds: item.duration_seconds,
           linkUrl: item.link_url,
           linkLabel: item.link_label,
         })),
     }))
-    // История без фото — нечего показывать, отфильтровываем.
+    // История без слайдов — нечего показывать, отфильтровываем.
     .filter((story) => story.items.length > 0);
 }

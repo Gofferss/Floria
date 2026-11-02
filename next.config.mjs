@@ -56,6 +56,9 @@ const csp = [
   // next/image и предпросмотру загружаемых файлов в админке.
   `img-src 'self' data: blob:${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
   "font-src 'self' data:",
+  // Видео в сторис лежат там же, в хранилище. Без этой строки браузер
+  // берёт правило default-src 'self' и молча не грузит ролик.
+  `media-src 'self'${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
   // Supabase Auth/PostgREST дергается прямо из браузера анонимным ключом.
   `connect-src 'self'${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
   // Виджет Яндекс.Карт на /contacts.

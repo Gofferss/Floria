@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Story } from "@/lib/stories";
-import { ArrowRightIcon, CloseIcon } from "@/components/ui/Icons";
+import { ArrowRightIcon, CloseIcon, SoundOffIcon, SoundOnIcon } from "@/components/ui/Icons";
 
 type StoryViewerProps = {
   stories: Story[];
@@ -52,6 +52,28 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
   const story = stories[storyIndex];
   const item = story?.items[itemIndex];
 
+  // Ролик. Ведёт сам себя: слайд кончается вместе с ним, полоска идёт по
+  // его времени, а не по таймеру — иначе при подгрузке на медленной сети
+  // полоска убегала бы вперёд картинки.
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
+  const slideKey = `${storyIndex}:${itemIndex}`;
+  // Ролик, который браузер не смог показать, заменяется обложкой и
+  // дальше живёт как фото — с таймером на свою длину.
+  const [failedSlide, setFailedSlide] = useState<string | null>(null);
+  const isVideo = item?.mediaType === "video" && failedSlide !== slideKey;
+
+  // Звук — как в Instagram: включён, пока браузер не запретит. Выбор
+  // человека держится между роликами, пока окно открыто.
+  const [muted, setMuted] = useState(false);
+  const mutedRef = useRef(false);
+
+  function toggleMuted() {
+    mutedRef.current = !mutedRef.current;
+    setMuted(mutedRef.current);
+    if (videoRef.current) videoRef.current.muted = mutedRef.current;
+  }
+
   function goToItem(story: number, item: number) {
     if (story < 0) {
       onClose();
@@ -91,7 +113,7 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
   // сохраняется, чтобы после отпускания досчитать ровно его, а не
   // начинать кадр заново.
   useEffect(() => {
-    if (!item || paused) return;
+    if (!item || paused || isVideo) return;
 
     startedAtRef.current = Date.now();
     const timeoutId = window.setTimeout(() => {
@@ -103,7 +125,47 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
       remainingRef.current = Math.max(remainingRef.current - (Date.now() - startedAtRef.current), 0);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storyIndex, itemIndex, paused]);
+  }, [storyIndex, itemIndex, paused, isVideo]);
+
+  // Воспроизведение и пауза по удержанию. Со звуком браузер может не
+  // запустить ролик без отдельного нажатия (Safari на айфоне) — тогда
+  // играем без звука, а кнопка звука остаётся под рукой.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isVideo) return;
+    if (paused) {
+      video.pause();
+      return;
+    }
+    video.muted = mutedRef.current;
+    video.play().catch((error: unknown) => {
+      if ((error as { name?: string })?.name !== "NotAllowedError" || video.muted) return;
+      mutedRef.current = true;
+      setMuted(true);
+      video.muted = true;
+      video.play().catch(() => {});
+    });
+    // mounted — в зависимостях не для порядка: до монтирования окно не
+    // рисуется (портал), ролика ещё нет, и без повтора после монтирования
+    // первое видео так и стояло бы на первом кадре.
+  }, [slideKey, isVideo, paused, mounted]);
+
+  // Полоска ролика — по его текущему времени, прямо в стиль, без
+  // перерисовки компонента на каждом кадре.
+  useEffect(() => {
+    if (!isVideo) return;
+    let frame = 0;
+    const tick = () => {
+      const video = videoRef.current;
+      const bar = progressRef.current;
+      if (video && bar && video.duration > 0) {
+        bar.style.width = `${Math.min(video.currentTime / video.duration, 1) * 100}%`;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [slideKey, isVideo, mounted]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -136,7 +198,26 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
         className="relative aspect-[9/16] h-full max-h-[82vh] w-auto max-w-full overflow-hidden rounded-2xl bg-ink sm:h-[82vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        <img src={item.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        {isVideo ? (
+          <video
+            // Новый ключ — новый элемент: ролик всегда начинается с начала.
+            key={slideKey}
+            ref={videoRef}
+            src={item.mediaUrl}
+            poster={item.posterUrl ?? undefined}
+            playsInline
+            preload="auto"
+            className="absolute inset-0 h-full w-full object-cover"
+            onEnded={() => goToItem(storyIndex, itemIndex + 1)}
+            onError={() => setFailedSlide(slideKey)}
+          />
+        ) : (
+          <img
+            src={item.mediaType === "video" ? item.posterUrl ?? "" : item.mediaUrl}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
 
         {/* Затемнение сверху — чтобы прогресс-бар и заголовок читались на любом фото */}
         <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-ink/60 to-transparent" aria-hidden="true" />
@@ -145,32 +226,56 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
         <div className="absolute inset-x-3 top-3 z-20 flex gap-1.5">
           {story.items.map((slide, i) => (
             <div key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
-              <div
-                className={
-                  i < itemIndex
-                    ? "h-full w-full bg-white"
-                    : i === itemIndex
-                    ? "h-full w-0 bg-white motion-safe:animate-story-progress motion-reduce:w-full"
-                    : "h-full w-0 bg-white"
-                }
-                style={
-                  i === itemIndex
-                    ? {
-                        animationDuration: `${slide.durationSeconds}s`,
-                        // Полоска замирает вместе с таймером — иначе она
-                        // добежала бы до конца, пока история стоит на паузе.
-                        animationPlayState: paused ? "paused" : "running",
-                      }
-                    : undefined
-                }
-              />
+              {/* Разные ключи — разные элементы: ширину полоске ролика
+                  пишем прямо в DOM, и React, не зная о ней, оставил бы
+                  её на полоске, ставшей «пройденной». */}
+              {i === itemIndex && isVideo ? (
+                <div key="video" ref={progressRef} className="h-full w-0 bg-white" />
+              ) : (
+                <div
+                  key="timer"
+                  className={
+                    i < itemIndex
+                      ? "h-full w-full bg-white"
+                      : i === itemIndex
+                      ? "h-full w-0 bg-white motion-safe:animate-story-progress motion-reduce:w-full"
+                      : "h-full w-0 bg-white"
+                  }
+                  style={
+                    i === itemIndex
+                      ? {
+                          animationDuration: `${slide.durationSeconds}s`,
+                          // Полоска замирает вместе с таймером — иначе она
+                          // добежала бы до конца, пока история стоит на паузе.
+                          animationPlayState: paused ? "paused" : "running",
+                        }
+                      : undefined
+                  }
+                />
+              )}
             </div>
           ))}
         </div>
 
-        <div className="absolute left-3 right-12 top-7 z-20 font-display text-sm font-semibold text-white drop-shadow">
+        <div
+          className={`absolute left-3 top-7 z-20 font-display text-sm font-semibold text-white drop-shadow ${
+            isVideo ? "right-[5.5rem]" : "right-12"
+          }`}
+        >
           {story.title}
         </div>
+
+        {isVideo && (
+          <button
+            type="button"
+            onClick={toggleMuted}
+            aria-label={muted ? "Включить звук" : "Выключить звук"}
+            aria-pressed={!muted}
+            className="absolute right-12 top-6 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white transition hover:bg-black/50"
+          >
+            {muted ? <SoundOffIcon className="h-4 w-4" /> : <SoundOnIcon className="h-4 w-4" />}
+          </button>
+        )}
 
         <button
           type="button"

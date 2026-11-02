@@ -10,5 +10,11 @@
 # свежий коммит ветки nixos-26.05 и проверить версию Node в
 # pkgs/development/web/nodejs/v22.nix. Выкладка безопасна: Coolify
 # заменяет контейнер, только когда новый отвечает на /api/live.
+#
+# ffmpeg — для видео в сторис: сервер пережимает ролики с телефона в MP4
+# 720p (lib/video/story-video.ts). Сборка «headless» — без X11 и звуковых
+# систем, но с H.264 и переводом HDR в обычный цвет. "..." — оставить
+# пакеты, которые nixpacks ставит сам (Node и npm).
 [phases.setup]
 nixpkgsArchive = "cd4ea8d57de16f4810bc5f14207bac45fbf19f67"
+nixPkgs = ["...", "ffmpeg-headless"]

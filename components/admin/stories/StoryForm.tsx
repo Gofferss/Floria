@@ -12,7 +12,9 @@ import {
 } from "@/lib/actions/stories";
 import { FormField } from "@/components/ui/FormField";
 import { inputClass } from "@/components/ui/input-styles";
-import { ArrowRightIcon, CloseIcon } from "@/components/ui/Icons";
+import { ArrowRightIcon, CloseIcon, PlayIcon } from "@/components/ui/Icons";
+import { looksLikeVideo, MAX_STORY_VIDEO_SECONDS, STORY_VIDEO_ACCEPT } from "@/lib/video/story-video-limits";
+import { uploadStoryVideo } from "@/components/admin/stories/upload-story-video";
 
 const DEFAULT_DURATION = 5;
 
@@ -32,6 +34,9 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
   const [items, setItems] = useState<StoryItemInput[]>(story?.items ?? []);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  /** Что сейчас происходит с роликом — загрузка идёт минутами, молчать нельзя. */
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [uploadNote, setUploadNote] = useState<string | null>(null);
 
   const [titleError, setTitleError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -43,27 +48,52 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
 
     setUploading(true);
     setUploadError(null);
+    setUploadNote(null);
 
-    const uploaded: StoryItemInput[] = [];
-    for (const file of files) {
+    // Каждый слайд добавляем сразу по готовности: если третий файл из
+    // пяти не прошёл, первые два уже в форме, и грузить их снова не нужно.
+    const add = (item: StoryItemInput) => setItems((prev) => [...prev, item]);
+    const many = files.length > 1;
+
+    for (const [index, file] of files.entries()) {
+      const prefix = many ? `Файл ${index + 1} из ${files.length}: ` : "";
+
+      if (looksLikeVideo(file)) {
+        const result = await uploadStoryVideo(file, (s) =>
+          setUploadStatus(
+            s.stage === "upload"
+              ? `${prefix}загружаем видео — ${Math.round(s.progress * 100)}%`
+              : `${prefix}сжимаем видео для сайта — обычно до минуты`
+          )
+        );
+        if (!result.ok) {
+          setUploadError(`${prefix}${result.error}`);
+          break;
+        }
+        const { videoUrl, posterUrl, durationSeconds, trimmed } = result.video;
+        add({ mediaType: "video", mediaUrl: videoUrl, posterUrl, durationSeconds, linkUrl: "", linkLabel: "" });
+        if (trimmed) setUploadNote(`Видео длиннее минуты — оставили первые ${MAX_STORY_VIDEO_SECONDS} секунд`);
+        continue;
+      }
+
+      setUploadStatus(`${prefix}загружаем фото`);
       const ready = await prepareImageForUpload(file);
       if (!ready.ok) {
-        setUploadError(ready.error);
+        setUploadError(`${prefix}${ready.error}`);
         break;
       }
-      const prepared = ready.file;
 
       const formData = new FormData();
-      formData.append("file", prepared);
+      formData.append("file", ready.file);
       const result = await uploadStoryImage(formData);
       if (!result.success) {
-        setUploadError(result.error);
+        setUploadError(`${prefix}${result.error}`);
         break;
       }
-      uploaded.push({ imageUrl: result.data.url, durationSeconds: DEFAULT_DURATION, linkUrl: "", linkLabel: "" });
+      add({ mediaType: "image", mediaUrl: result.data.url, posterUrl: null, durationSeconds: DEFAULT_DURATION, linkUrl: "", linkLabel: "" });
     }
 
-    if (uploaded.length > 0) setItems((prev) => [...prev, ...uploaded]);
+    setUploadStatus(null);
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
@@ -102,7 +132,7 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
       setTitleError(null);
     }
     if (items.length === 0) {
-      setFormError("Добавьте хотя бы одно фото");
+      setFormError("Добавьте хотя бы одно фото или видео");
       hasError = true;
     } else {
       setFormError(null);
@@ -172,24 +202,46 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
       <div className="rounded-3xl border border-lavender-100 bg-white p-5 sm:p-7">
         <h2 className="font-display text-base font-semibold text-ink">Слайды</h2>
         <p className="mt-1 font-body text-xs text-ink/50">
-          Показываются по порядку сверху вниз. «Секунды» — сколько слайд виден, прежде чем переключится следующий.
+          Показываются по порядку сверху вниз. «Секунды» — сколько фото видно, прежде чем переключится следующий
+          слайд; видео идёт до конца.
         </p>
 
         <div className="mt-5 flex flex-col gap-3">
           {items.map((item, index) => (
-            <div key={item.imageUrl + index} className="flex flex-col gap-3 rounded-2xl border border-lavender-100 p-3">
+            <div key={item.mediaUrl + index} className="flex flex-col gap-3 rounded-2xl border border-lavender-100 p-3">
               <div className="flex items-center gap-3">
-              <img src={item.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
-              <div className="flex flex-1 items-center gap-2">
-                <span className="font-body text-xs text-ink/50">Слайд {index + 1}</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={item.durationSeconds}
-                  onChange={(e) => updateDuration(index, e.target.value)}
-                  className={`${inputClass()} w-20`}
+              <div className="relative h-16 w-16 shrink-0">
+                <img
+                  src={item.mediaType === "video" ? item.posterUrl ?? "" : item.mediaUrl}
+                  alt=""
+                  className="h-16 w-16 rounded-xl object-cover"
                 />
-                <span className="font-body text-xs text-ink/50">сек</span>
+                {item.mediaType === "video" && (
+                  <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-ink/25 text-white">
+                    <PlayIcon className="h-6 w-6 drop-shadow" />
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-1 items-center gap-2">
+                <span className="whitespace-nowrap font-body text-xs text-ink/50">Слайд {index + 1}</span>
+                {item.mediaType === "video" ? (
+                  <span className="font-body text-xs text-ink/70">видео · {item.durationSeconds} сек</span>
+                ) : (
+                  <>
+                    {/* Ширина — обёрткой: inputClass задаёт w-full, и w-20
+                        рядом с ним проигрывал — поле растягивалось на всю строку. */}
+                    <div className="w-20 shrink-0">
+                      <input
+                        type="number"
+                        min={1}
+                        value={item.durationSeconds}
+                        onChange={(e) => updateDuration(index, e.target.value)}
+                        className={`${inputClass()} px-3`}
+                      />
+                    </div>
+                    <span className="font-body text-xs text-ink/50">сек</span>
+                  </>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <button
@@ -260,21 +312,25 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
             className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-lavender-300 bg-lavender-50 px-4 py-8 text-center transition hover:bg-lavender-100"
           >
             <span className="font-body text-sm font-medium text-ink/70">
-              {uploading ? "Загружаем..." : "Нажмите, чтобы добавить фото"}
+              {uploading ? uploadStatus ?? "Загружаем..." : "Нажмите, чтобы добавить фото или видео"}
             </span>
-            <span className="font-body text-xs text-ink/40">Можно выбрать сразу несколько — JPG, PNG, до 5 МБ каждое</span>
+            <span className="font-body text-xs text-ink/40">
+              Можно выбрать сразу несколько. Фото — JPG, PNG, до 5 МБ; видео — MP4 или MOV с телефона, до 200 МБ и
+              до минуты, сайт сам сожмёт его для быстрого показа
+            </span>
           </label>
           <input
             ref={fileInputRef}
             id="storyItemUpload"
             type="file"
-            accept="image/*,.heic,.heif"
+            accept={`image/*,.heic,.heif,${STORY_VIDEO_ACCEPT}`}
             multiple
             onChange={handleFilesChange}
             disabled={uploading}
             className="sr-only"
           />
           {uploadError && <p className="font-body text-xs text-red-600">{uploadError}</p>}
+          {uploadNote && <p className="font-body text-xs text-ink/60">{uploadNote}</p>}
         </div>
       </div>
 
