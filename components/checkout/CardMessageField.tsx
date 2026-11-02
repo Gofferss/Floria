@@ -65,6 +65,10 @@ export function CardMessageField({
   const [picked, setPicked] = useState<{ label: string; index: number } | null>(null);
   // Свой текст человека, который подсказка затёрла, — чтобы его можно было вернуть.
   const [ownText, setOwnText] = useState<string | null>(null);
+  // Сколько букв подсказки уже «написано». В заказ фраза уходит сразу
+  // целиком (onChange), а письмо — только показ: нажми человек «Перейти к
+  // оплате» посреди анимации, в заказ не попадёт обрывок фразы.
+  const [shownLen, setShownLen] = useState<number | null>(null);
   const writing = useRef<number | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
 
@@ -79,7 +83,7 @@ export function CardMessageField({
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   };
-  useLayoutEffect(fit, [value]);
+  useLayoutEffect(fit, [value, shownLen]);
   useEffect(() => {
     window.addEventListener("resize", fit);
     document.fonts?.ready.then(fit).catch(() => {});
@@ -89,27 +93,32 @@ export function CardMessageField({
   const stopWriting = () => {
     if (writing.current !== null) window.clearInterval(writing.current);
     writing.current = null;
+    setShownLen(null);
   };
-  useEffect(() => stopWriting, []);
+  useEffect(() => () => {
+    if (writing.current !== null) window.clearInterval(writing.current);
+  }, []);
 
   function write(phrase: string) {
     stopWriting();
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      onChange(phrase);
-      return;
-    }
-    let shown = 0;
+    onChange(phrase);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    // Буквы считаются по прошедшему времени, а не по числу срабатываний:
+    // в фоновой вкладке браузер редко будит таймер, и письмо иначе
+    // растянулось бы на минуту.
+    const start = performance.now();
+    setShownLen(0);
     writing.current = window.setInterval(() => {
-      shown += 1;
-      onChange(phrase.slice(0, shown));
+      const shown = Math.floor((performance.now() - start) / WRITE_MS_PER_CHAR) + 1;
       if (shown >= phrase.length) stopWriting();
+      else setShownLen(shown);
     }, WRITE_MS_PER_CHAR);
   }
 
   function pickOccasion(label: string, phrases: string[]) {
     const index = picked?.label === label ? (picked.index + 1) % phrases.length : 0;
     const isHint = CARD_OCCASIONS.some((o) => o.phrases.includes(value));
-    if (writing.current === null && value.trim() && !isHint) setOwnText(value);
+    if (value.trim() && !isHint) setOwnText(value);
     setPicked({ label, index });
     trackEvent("button_click", `Открытка: ${label}`);
     write(phrases[index]);
@@ -188,7 +197,7 @@ export function CardMessageField({
         <textarea
           ref={area}
           id="cardText"
-          value={value}
+          value={shownLen === null ? value : value.slice(0, shownLen)}
           maxLength={Math.max(0, CARD_TEXT_MAX - (line ? line.length + 1 : 0))}
           onChange={(e) => {
             stopWriting();
