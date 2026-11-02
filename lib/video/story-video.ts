@@ -114,28 +114,37 @@ export async function transcodeStoryVideo(input: string, workDir: string): Promi
   const videoFile = path.join(workDir, "story.mp4");
   const posterFile = path.join(workDir, "poster.jpg");
 
-  const encode = await run(
-    "ffmpeg",
-    [
-      "-hide_banner", "-nostdin", "-y",
-      "-protocol_whitelist", "file",
-      "-i", input,
-      "-t", String(MAX_STORY_VIDEO_SECONDS),
-      "-map", "0:v:0", "-map", "0:a:0?",
-      "-vf", videoFilter(hdr),
-      "-fpsmax", String(MAX_FPS),
-      "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
-      "-profile:v", "high", "-level:v", "4.0",
-      ...(hdr ? ["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"] : []),
-      "-c:a", "aac", "-b:a", "128k", "-ac", "2",
-      "-map_metadata", "-1",
-      "-movflags", "+faststart",
-      // Сервер общий с базой — не забираем все ядра под одно видео.
-      "-threads", "2",
-      videoFile,
-    ],
-    TIMEOUT_MS
-  );
+  const encodeWith = (toneMap: boolean) =>
+    run(
+      "ffmpeg",
+      [
+        "-hide_banner", "-nostdin", "-y",
+        "-protocol_whitelist", "file",
+        "-i", input,
+        "-t", String(MAX_STORY_VIDEO_SECONDS),
+        "-map", "0:v:0", "-map", "0:a:0?",
+        "-vf", videoFilter(toneMap),
+        "-fpsmax", String(MAX_FPS),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
+        "-profile:v", "high", "-level:v", "4.0",
+        ...(toneMap ? ["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"] : []),
+        "-c:a", "aac", "-b:a", "128k", "-ac", "2",
+        "-map_metadata", "-1",
+        "-movflags", "+faststart",
+        // Сервер общий с базой — не забираем все ядра под одно видео.
+        "-threads", "2",
+        videoFile,
+      ],
+      TIMEOUT_MS
+    );
+
+  let encode = await encodeWith(hdr);
+  if (encode.code !== 0 && hdr) {
+    // Перевод HDR капризен: файл с необычной разметкой цвета он не берёт
+    // («no path between colorspaces»). Блёклый ролик лучше, чем никакого.
+    console.error("[transcodeStoryVideo] HDR не перевёлся, пережимаем как есть:", encode.stderr.slice(-1_000));
+    encode = await encodeWith(false);
+  }
   if (encode.code !== 0) {
     console.error("[transcodeStoryVideo] ffmpeg:", encode.stderr.slice(-2_000));
     throw new StoryVideoError("Не удалось обработать видео. Попробуйте другой файл или пришлите его разработчику");
