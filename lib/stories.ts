@@ -24,6 +24,8 @@ export type StorySlide = {
 export type Story = {
   id: string;
   title: string;
+  /** Когда историю меняли — по нему просмотренная снова становится новой. */
+  updatedAt: string;
   coverImage: string | null;
   items: StorySlide[];
 };
@@ -31,7 +33,7 @@ export type Story = {
 export async function getActiveStories(): Promise<Story[]> {
   const { data, error } = await supabase
     .from("stories")
-    .select("id, title, cover_image, story_items ( image_url, media_type, poster_url, duration_seconds, sort_order, link_url, link_label )")
+    .select("id, title, cover_image, updated_at, story_items ( image_url, media_type, poster_url, duration_seconds, sort_order, link_url, link_label )")
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
 
@@ -44,6 +46,7 @@ export async function getActiveStories(): Promise<Story[]> {
     id: string;
     title: string;
     cover_image: string | null;
+    updated_at: string;
     story_items:
       | {
           image_url: string;
@@ -61,6 +64,7 @@ export async function getActiveStories(): Promise<Story[]> {
     .map((row) => ({
       id: row.id,
       title: row.title,
+      updatedAt: row.updated_at,
       coverImage: row.cover_image,
       items: (row.story_items ?? [])
         .slice()

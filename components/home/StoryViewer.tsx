@@ -33,15 +33,42 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
    */
   const HOLD_MS = 220;
 
-  function handlePressStart() {
+  /**
+   * Свайп вбок — сразу к соседней истории, не досматривая эту: в ролике на
+   * полминуты иначе пришлось бы ждать или тыкать. Вертикальный жест не
+   * считаем — это человек промахнулся, а не листает.
+   */
+  const SWIPE_PX = 50;
+  const pressAtRef = useRef<{ x: number; y: number } | null>(null);
+
+  function handlePressStart(e: React.PointerEvent) {
     pressedAtRef.current = Date.now();
+    pressAtRef.current = { x: e.clientX, y: e.clientY };
+    // Захват — чтобы свайп мышью через границу зон не обрывался уходом
+    // указателя: отпускание придёт сюда же, куда нажали.
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
     setPaused(true);
   }
 
-  function handlePressEnd(direction: -1 | 1) {
+  function handlePressEnd(e: React.PointerEvent, direction: -1 | 1) {
     const held = Date.now() - pressedAtRef.current;
+    const start = pressAtRef.current;
+    pressAtRef.current = null;
     setPaused(false);
+    const dx = start ? e.clientX - start.x : 0;
+    const dy = start ? e.clientY - start.y : 0;
+    if (Math.abs(dx) > SWIPE_PX && Math.abs(dx) > Math.abs(dy)) {
+      goToStory(dx < 0 ? 1 : -1);
+      return;
+    }
     if (held < HOLD_MS) goToItem(storyIndex, itemIndex + direction);
+  }
+
+  /** Соседняя история с первого слайда; за краем списка — закрыть. */
+  function goToStory(delta: -1 | 1) {
+    const next = storyIndex + delta;
+    if (next < 0 || next >= stories.length) return onClose();
+    onNavigate(next, 0);
   }
 
   /** Палец ушёл за пределы зоны или жест прерван — снимаем паузу, но не листаем. */
@@ -293,7 +320,7 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
         <button
           type="button"
           onPointerDown={handlePressStart}
-          onPointerUp={() => handlePressEnd(-1)}
+          onPointerUp={(e) => handlePressEnd(e, -1)}
           onPointerLeave={handlePressCancel}
           onPointerCancel={handlePressCancel}
           // Клавиатура сюда тоже приходит — но не через указатель, поэтому
@@ -302,19 +329,19 @@ export function StoryViewer({ stories, storyIndex, itemIndex, onNavigate, onClos
             if (e.detail === 0) goToItem(storyIndex, itemIndex - 1);
           }}
           aria-label="Предыдущий слайд"
-          className="absolute inset-y-0 left-0 z-10 w-1/3 touch-manipulation"
+          className="absolute inset-y-0 left-0 z-10 w-1/3 touch-none"
         />
         <button
           type="button"
           onPointerDown={handlePressStart}
-          onPointerUp={() => handlePressEnd(1)}
+          onPointerUp={(e) => handlePressEnd(e, 1)}
           onPointerLeave={handlePressCancel}
           onPointerCancel={handlePressCancel}
           onClick={(e) => {
             if (e.detail === 0) goToItem(storyIndex, itemIndex + 1);
           }}
           aria-label="Следующий слайд"
-          className="absolute inset-y-0 right-0 z-10 w-2/3 touch-manipulation"
+          className="absolute inset-y-0 right-0 z-10 w-2/3 touch-none"
         />
 
         {/* Кнопка слайда. z-20 — над зонами листания, иначе нажать её было
