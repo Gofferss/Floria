@@ -91,6 +91,10 @@ function validateStoryInput(input: StoryInput): string | null {
     if (!link.ok) return `Слайд ${index + 1}: ${link.error}`;
   }
 
+  if (input.coverImage && !isOwnStorageUrl(input.coverImage)) {
+    return "Обложка не загружена — выберите её заново";
+  }
+
   return null;
 }
 

@@ -15,8 +15,15 @@ import { inputClass } from "@/components/ui/input-styles";
 import { ArrowRightIcon, CloseIcon, PlayIcon } from "@/components/ui/Icons";
 import { looksLikeVideo, MAX_STORY_VIDEO_SECONDS, STORY_VIDEO_ACCEPT } from "@/lib/video/story-video-limits";
 import { uploadStoryVideo } from "@/components/admin/stories/upload-story-video";
+import { StoryCoverField } from "@/components/admin/stories/StoryCoverField";
 
 const DEFAULT_DURATION = 5;
+
+/** Картинка слайда: у ролика — его кадр. */
+function slideImage(item: StoryItemInput | undefined): string | null {
+  if (!item) return null;
+  return item.mediaType === "video" ? item.posterUrl : item.mediaUrl;
+}
 
 type StoryFormProps = {
   story?: AdminStoryDetail;
@@ -32,6 +39,13 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
   const [sortOrder, setSortOrder] = useState(String(story?.sortOrder ?? nextSortOrder ?? 0));
   const [isActive, setIsActive] = useState(story?.isActive ?? true);
   const [items, setItems] = useState<StoryItemInput[]>(story?.items ?? []);
+  // Обложка, совпадающая с первым слайдом, — не своя: она поставлена сама и
+  // должна меняться вместе со слайдом. Всё остальное сохраняем как есть:
+  // раньше форма слала null, и любое сохранение стирало подобранную обложку.
+  const [coverImage, setCoverImage] = useState<string | null>(
+    story?.coverImage && story.coverImage !== slideImage(story.items[0]) ? story.coverImage : null
+  );
+  const [coverEditing, setCoverEditing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   /** Что сейчас происходит с роликом — загрузка идёт минутами, молчать нельзя. */
@@ -143,7 +157,7 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
 
     const payload = {
       title: title.trim(),
-      coverImage: null,
+      coverImage,
       sortOrder: Number(sortOrder) || 0,
       isActive,
       items,
@@ -334,6 +348,15 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
         </div>
       </div>
 
+      <StoryCoverField
+        value={coverImage}
+        autoCover={slideImage(items[0])}
+        slides={items.map(slideImage).filter((url): url is string => !!url)}
+        title={title}
+        onChange={setCoverImage}
+        onEditingChange={setCoverEditing}
+      />
+
       <div className="flex flex-col gap-5 rounded-3xl border border-lavender-100 bg-white p-5 sm:p-7 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <button
@@ -359,15 +382,22 @@ export function StoryForm({ story, nextSortOrder }: StoryFormProps) {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={status === "submitting" || uploading}
-          className="flex items-center justify-center gap-2 rounded-full bg-gold-500 px-8 py-4 font-display text-sm font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-gold-600 disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {status === "submitting" ? "Сохраняем..." : isEditing ? "Сохранить изменения" : "Создать историю"}
-          {status !== "submitting" && <ArrowRightIcon className="h-4 w-4" />}
-        </button>
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={status === "submitting" || uploading || coverEditing}
+            className="flex items-center justify-center gap-2 rounded-full bg-gold-500 px-8 py-4 font-display text-sm font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-gold-600 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {status === "submitting" ? "Сохраняем..." : isEditing ? "Сохранить изменения" : "Создать историю"}
+            {status !== "submitting" && <ArrowRightIcon className="h-4 w-4" />}
+          </button>
+          {coverEditing && (
+            <span className="text-center font-body text-xs text-ink/50 sm:text-right">
+              Сначала нажмите «Готово» или «Отмена» у обложки
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
