@@ -9,6 +9,8 @@ import { ProductSchema } from "@/components/seo/ProductSchema";
 import { ArrowRightIcon } from "@/components/ui/Icons";
 import { getCategories } from "@/lib/categories";
 import { getProductBySlug, getProductSlugs, getRelatedProducts } from "@/lib/products";
+import { isInSeason, returnsInPhrase } from "@/lib/season";
+import { CONTACTS } from "@/lib/contacts";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }>;
@@ -39,6 +41,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   const [categories, relatedProducts] = await Promise.all([getCategories(), getRelatedProducts(product)]);
   const category = categories.find((c) => c.slug === product.categorySlug);
+  const inSeason = isInSeason(product.seasonMonths);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
@@ -49,6 +52,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         images={product.images}
         price={product.basePrice}
         availabilityMode={product.availabilityMode}
+        outOfSeason={!inSeason}
       />
       <ProductViewTracker productName={product.name} />
 
@@ -89,7 +93,29 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </p>
 
           <div className="mt-8 border-t border-lavender-100 pt-8">
-            <ProductPurchasePanel product={product} />
+            {inSeason ? (
+              <ProductPurchasePanel product={product} />
+            ) : (
+              // Страница открывается по старым ссылкам и из поиска: лучше честно
+              // сказать, что цветов сейчас нет, чем принять заказ на них.
+              <div className="rounded-2xl bg-gold-500/10 px-5 py-4">
+                <p className="font-display text-base font-semibold text-ink">Сейчас не сезон этих цветов</p>
+                <p className="mt-1 font-body text-sm leading-relaxed text-ink/70">
+                  Букет вернётся {returnsInPhrase(product.seasonMonths)}. Посмотрите, что есть сейчас, или позвоните{" "}
+                  <a href={`tel:${CONTACTS.phoneHref}`} className="font-medium text-gold-700 underline underline-offset-2">
+                    {CONTACTS.phone}
+                  </a>
+                  : подскажем, что собрать похожее.
+                </p>
+                <Link
+                  href="/catalog"
+                  className="mt-4 inline-flex items-center gap-2 rounded-full bg-lavender-600 px-6 py-3 font-display text-sm font-semibold text-white transition hover:bg-lavender-700"
+                >
+                  Букеты этого сезона
+                  <ArrowRightIcon className="h-4 w-4" />
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Состав */}

@@ -7,6 +7,7 @@ import { ArrowRightIcon, EditIcon } from "@/components/ui/Icons";
 import { ToggleActiveButton } from "@/components/admin/catalog/ToggleActiveButton";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { deleteProduct } from "@/lib/actions/catalog";
+import { isInSeason, seasonSummary } from "@/lib/season";
 
 export const metadata: Metadata = {
   title: "Каталог — Админка Floria",
@@ -22,6 +23,7 @@ type AdminProductRow = {
   price: number;
   is_active: boolean;
   availability_mode: string | null;
+  season_months: number[] | null;
   /** seed:/admin: — заведён у нас; всё остальное приходит из Posiflora. */
   posiflora_product_id: string | null;
   product_categories: { name: string } | { name: string }[] | null;
@@ -43,7 +45,7 @@ export default async function AdminCatalogListPage() {
 
   const { data, error } = await getSupabaseAdmin()
     .from("products")
-    .select("id, name, slug, price, is_active, availability_mode, posiflora_product_id, product_categories ( name )")
+    .select("id, name, slug, price, is_active, availability_mode, season_months, posiflora_product_id, product_categories ( name )")
     .order("created_at", { ascending: false });
 
   if (error) console.error("[AdminCatalogListPage]", error.message);
@@ -120,9 +122,17 @@ export default async function AdminCatalogListPage() {
                       <span className="inline-flex items-center rounded-full bg-lavender-100 px-3 py-1 font-body text-xs font-medium text-ink/70">
                         {AVAILABILITY_MODE_LABELS[(product.availability_mode as AvailabilityMode) ?? "in_stock"]}
                       </span>
+                      {product.season_months && (
+                        <span className="mt-1 block font-body text-xs text-ink/50">{seasonSummary(product.season_months)}</span>
+                      )}
                     </td>
                     <td className="px-5 py-4">
-                      {product.is_active ? (
+                      {product.is_active && !isInSeason(product.season_months) ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-gold-500/10 px-3 py-1 font-body text-xs font-medium text-gold-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-gold-500" aria-hidden="true" />
+                          Не сезон
+                        </span>
+                      ) : product.is_active ? (
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1 font-body text-xs font-medium text-green-700">
                           <span className="h-1.5 w-1.5 rounded-full bg-green-500" aria-hidden="true" />
                           В каталоге

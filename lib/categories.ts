@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { inSeasonFilter } from "@/lib/season";
 
 // ================================================================
 // Категории каталога — читаем анонимным ключом из product_categories
@@ -66,6 +67,7 @@ export async function getCategories(): Promise<Category[]> {
     .from("products")
     .select("category_id")
     .eq("is_active", true)
+    .or(inSeasonFilter())
     .not("category_id", "is", null);
 
   if (productsError) {

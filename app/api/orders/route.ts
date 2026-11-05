@@ -11,6 +11,7 @@ import { confirmOrderToCustomer } from "@/lib/telegram/order-notify";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { CARD_TEXT_MAX } from "@/lib/card-message";
+import { isInSeason } from "@/lib/season";
 import {
   TIME_SLOTS,
   calcDeliveryPrice,
@@ -178,6 +179,14 @@ export async function POST(request: Request) {
     if (!product) {
       return NextResponse.json(
         { error: `Товар «${item.name}» больше недоступен — обновите корзину` },
+        { status: 400 }
+      );
+    }
+    // Корзина живёт в браузере неделями: букет мог уйти из сезона уже после
+    // того, как его туда положили, а цветов для него теперь нет.
+    if (!isInSeason(product.seasonMonths)) {
+      return NextResponse.json(
+        { error: `Букет «${product.name}» сейчас не в сезоне — уберите его из корзины` },
         { status: 400 }
       );
     }

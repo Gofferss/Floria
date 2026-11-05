@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { inSeasonFilter, normalizeSeasonMonths } from "@/lib/season";
 
 // ================================================================
 // Каталог товаров: выборка из Supabase (таблицы products и
@@ -41,6 +42,8 @@ export type Product = {
   availabilityMode: AvailabilityMode;
   /** За что назначена цена: за букет целиком или за одну штуку. */
   pricingMode: PricingMode;
+  /** Месяцы (1–12), когда букет виден на витрине; null — весь год. */
+  seasonMonths: number[] | null;
 };
 
 /**
@@ -77,6 +80,7 @@ const PRODUCT_SELECT = `
   images,
   availability_mode,
   pricing_mode,
+  season_months,
   product_categories ( slug )
 `;
 
@@ -91,6 +95,7 @@ type ProductRow = {
   images: unknown;
   availability_mode: string | null;
   pricing_mode: string | null;
+  season_months: number[] | null;
   // supabase-js типизирует вложенный джойн как объект или массив в
   // зависимости от кардинальности — обрабатываем оба варианта
   product_categories: { slug: string } | { slug: string }[] | null;
@@ -157,6 +162,7 @@ function mapRow(row: ProductRow): Product {
     images: parseStringArray(row.images),
     availabilityMode: parseAvailabilityMode(row.availability_mode),
     pricingMode: parsePricingMode(row.pricing_mode),
+    seasonMonths: normalizeSeasonMonths(row.season_months),
   };
 }
 
@@ -175,12 +181,13 @@ function handleError(context: string, error: { message: string } | null): boolea
 // Публичное API
 // ---------------------------------------------------------------
 
-/** Все активные товары каталога */
+/** Все активные товары каталога, которые сейчас в сезоне */
 export async function getProducts(): Promise<Product[]> {
   const { data, error } = await supabase
     .from("products")
     .select(PRODUCT_SELECT)
     .eq("is_active", true)
+    .or(inSeasonFilter())
     .order("created_at", { ascending: true });
 
   if (handleError("getProducts", error) || !data) return [];
@@ -202,7 +209,12 @@ export async function getProductSlugs(): Promise<string[]> {
   return data.map((row) => row.slug as string);
 }
 
-/** Один товар по слагу. null, если не найден или снят с публикации. */
+/**
+ * Один товар по слагу. null, если не найден или снят с публикации.
+ * Сезон не проверяем: страница букета вне сезона открывается по старой
+ * ссылке и объясняет, когда он вернётся. Заказать такой букет нельзя —
+ * это проверяют страница и app/api/orders.
+ */
 export async function getProductBySlug(slug: string): Promise<Product | null> {
   const { data, error } = await supabase
     .from("products")
@@ -221,6 +233,7 @@ export async function getProductsByCategory(categorySlug: string): Promise<Produ
     .from("products")
     .select(PRODUCT_SELECT)
     .eq("is_active", true)
+    .or(inSeasonFilter())
     .eq("product_categories.slug", categorySlug)
     .not("product_categories", "is", null)
     .order("created_at", { ascending: true });
@@ -249,7 +262,8 @@ export async function getProductsBySlugs(slugs: string[]): Promise<Product[]> {
     .from("products")
     .select(PRODUCT_SELECT)
     .in("slug", slugs)
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .or(inSeasonFilter());
 
   if (handleError("getProductsBySlugs", error) || !data) return [];
 
@@ -268,6 +282,7 @@ export async function getPriceBounds(): Promise<{ min: number; max: number }> {
       .from("products")
       .select("price")
       .eq("is_active", true)
+      .or(inSeasonFilter())
       .order("price", { ascending: true })
       .limit(1)
       .maybeSingle(),
@@ -275,6 +290,7 @@ export async function getPriceBounds(): Promise<{ min: number; max: number }> {
       .from("products")
       .select("price")
       .eq("is_active", true)
+      .or(inSeasonFilter())
       .order("price", { ascending: false })
       .limit(1)
       .maybeSingle(),

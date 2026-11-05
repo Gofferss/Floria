@@ -4,6 +4,10 @@ import { CategoryGrid } from "@/components/home/CategoryGrid";
 import { BlogPreview } from "@/components/home/BlogPreview";
 import { SectionDivider } from "@/components/ui/SectionDivider";
 
+// Главная собирается заранее. Раз в 10 минут она пересобирается, иначе букеты
+// не по сезону и новые истории дожидались бы следующей выкладки сайта.
+export const revalidate = 600;
+
 export default function HomePage() {
   return (
     // Один градиент на всю главную (.home-canvas в globals.css). До этого

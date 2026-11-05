@@ -8,6 +8,7 @@ import { canUseSiteAdmin } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { searchInventoryItems, recomputeProductAvailability, type InventoryItemOption } from "@/lib/posiflora";
 import { parsePricingMode, type AvailabilityMode, type PricingMode, type ProductSize } from "@/lib/products";
+import { normalizeSeasonMonths } from "@/lib/season";
 
 // ================================================================
 // Server Actions для ручного редактирования каталога в /admin/catalog.
@@ -71,6 +72,8 @@ export type ProductInput = {
   images: string[];
   composition: string[];
   sizes: ProductSize[];
+  /** Месяцы (1–12), когда букет виден на сайте; null — весь год. */
+  seasonMonths: number[] | null;
 };
 
 function validateProductInput(input: ProductInput): string | null {
@@ -147,6 +150,7 @@ export async function createProduct(
       availability_mode: input.availabilityMode,
       pricing_mode: input.pricingMode,
       availability_source: input.availabilitySource,
+      season_months: normalizeSeasonMonths(input.seasonMonths),
       images: input.images,
       attributes: buildAttributes(input),
     })
@@ -206,6 +210,7 @@ export async function updateProduct(
       availability_mode: input.availabilityMode,
       pricing_mode: input.pricingMode,
       availability_source: input.availabilitySource,
+      season_months: normalizeSeasonMonths(input.seasonMonths),
       images: input.images,
       attributes: buildAttributes(input),
     })
@@ -294,7 +299,7 @@ export async function getProductForEdit(id: string): Promise<AdminProductDetail 
   const { data, error } = await supabaseAdmin
     .from("products")
     .select(
-      "id, name, slug, category_id, description, price, old_price, stock_quantity, is_active, availability_mode, availability_source, pricing_mode, images, attributes"
+      "id, name, slug, category_id, description, price, old_price, stock_quantity, is_active, availability_mode, availability_source, pricing_mode, season_months, images, attributes"
     )
     .eq("id", id)
     .maybeSingle();
@@ -330,6 +335,7 @@ export async function getProductForEdit(id: string): Promise<AdminProductDetail 
       quantity: Number(r.quantity),
     })),
     isActive: data.is_active,
+    seasonMonths: normalizeSeasonMonths(data.season_months as number[] | null),
     images: (data.images as string[]) ?? [],
     composition: attributes.composition ?? [],
     sizes: attributes.sizes?.length ? attributes.sizes : [{ id: "std", label: "Стандарт", priceModifier: 0 }],

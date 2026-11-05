@@ -2,6 +2,7 @@
 
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { inSeasonFilter } from "@/lib/season";
 
 // ================================================================
 // «Повторить заказ» из личного кабинета.
@@ -72,7 +73,8 @@ export async function repeatOrder(orderId: string): Promise<RepeatResult> {
     .from("products")
     .select("id, slug, name, price, images, availability_mode")
     .in("id", productIds.length ? productIds : ["00000000-0000-0000-0000-000000000000"])
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .or(inSeasonFilter());
 
   const byId = new Map((products ?? []).map((p) => [p.id as string, p]));
 
@@ -82,7 +84,7 @@ export async function repeatOrder(orderId: string): Promise<RepeatResult> {
   for (const row of orderItems) {
     const product = row.product_id ? byId.get(row.product_id as string) : undefined;
 
-    // Товар удалён, скрыт или заказ был оформлен до того, как появилась
+    // Товар удалён, скрыт, не в сезоне или заказ был оформлен до того, как появилась
     // связь с карточкой — повторить нечего, но скажем какой именно.
     if (!product) {
       unavailable.push(row.product_name as string);

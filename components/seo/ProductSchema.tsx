@@ -14,6 +14,7 @@ export function ProductSchema({
   images,
   price,
   availabilityMode,
+  outOfSeason = false,
 }: {
   name: string;
   description: string;
@@ -21,6 +22,7 @@ export function ProductSchema({
   images: string[];
   price: number;
   availabilityMode: AvailabilityMode;
+  outOfSeason?: boolean;
 }) {
   const schema = {
     "@context": "https://schema.org",
@@ -36,7 +38,7 @@ export function ProductSchema({
       url: `${CONTACTS.siteUrl}/catalog/${slug}`,
       priceCurrency: "RUB",
       price,
-      availability: SCHEMA_AVAILABILITY[availabilityMode],
+      availability: outOfSeason ? "https://schema.org/OutOfStock" : SCHEMA_AVAILABILITY[availabilityMode],
     },
   };
 

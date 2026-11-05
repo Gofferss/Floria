@@ -18,6 +18,8 @@ import type { AvailabilityMode, PricingMode, ProductSize } from "@/lib/products"
 import { FormField } from "@/components/ui/FormField";
 import { inputClass } from "@/components/ui/input-styles";
 import { ArrowRightIcon, CloseIcon } from "@/components/ui/Icons";
+import { ProductSeasonField } from "@/components/admin/catalog/ProductSeasonField";
+import { normalizeSeasonMonths } from "@/lib/season";
 
 type Errors = Partial<Record<"name" | "slug" | "categoryId" | "price", string>>;
 
@@ -64,6 +66,7 @@ export function ProductForm({ categories, product }: ProductFormProps) {
   const [recipeSearchResults, setRecipeSearchResults] = useState<{ id: string; title: string }[]>([]);
   const [recipeSearchLoading, setRecipeSearchLoading] = useState(false);
   const [isActive, setIsActive] = useState(product?.isActive ?? true);
+  const [seasonMonths, setSeasonMonths] = useState<number[]>(product?.seasonMonths ?? []);
 
   const [images, setImages] = useState<string[]>(product?.images ?? []);
   const [imagesUploading, setImagesUploading] = useState(false);
@@ -256,6 +259,7 @@ export function ProductForm({ categories, product }: ProductFormProps) {
         quantity: Math.max(Number(quantity) || 0, 1),
       })),
       isActive,
+      seasonMonths: normalizeSeasonMonths(seasonMonths),
       images,
       composition: composition.map((c) => c.trim()).filter(Boolean),
       sizes: sizes
@@ -501,6 +505,8 @@ export function ProductForm({ categories, product }: ProductFormProps) {
           </div>
         )}
       </div>
+
+      <ProductSeasonField months={seasonMonths} onChange={setSeasonMonths} />
 
       <div className="rounded-3xl border border-lavender-100 bg-white p-5 sm:p-7">
         <h2 className="font-display text-base font-semibold text-ink">Цена</h2>
