@@ -209,6 +209,15 @@ export async function createSiteProductFromRecipe(id: string): Promise<Result<{ 
   if (price.unpriced.length || !(price.price > 0)) return { success: false, error: "У рецепта нет полной цены — проверьте цены позиций на складе" };
 
   const admin = getSupabaseAdmin();
+  // Букет уже создавали, а связь не записалась — связываем, а не создаём второй.
+  const sourceId = `recipe:${r.id}`;
+  const { data: already } = await admin.from("products").select("id, slug").eq("posiflora_product_id", sourceId).maybeSingle();
+  if (already) {
+    const link = await admin.from("pos_recipes").update({ product_id: already.id }).eq("id", r.id);
+    if (link.error) return { success: false, error: `Букет на сайте есть, но связь с рецептом не записалась: ${link.error.message}` };
+    refreshUchet();
+    return { success: true, data: { slug: already.slug as string } };
+  }
   const categorySlug = mainFlowerKinds(items) <= 1 ? "mono-buket" : "avtorskie-bukety";
   const { data: cat } = await admin.from("product_categories").select("id").eq("slug", categorySlug).maybeSingle();
   if (!cat) return { success: false, error: `На сайте нет раздела «${categorySlug}»` };
@@ -217,7 +226,7 @@ export async function createSiteProductFromRecipe(id: string): Promise<Result<{ 
   const { data, error } = await admin
     .from("products")
     .insert({
-      posiflora_product_id: `recipe:${r.id}`,
+      posiflora_product_id: sourceId,
       category_id: cat.id,
       name: r.title,
       nickname: r.nickname,
@@ -227,8 +236,8 @@ export async function createSiteProductFromRecipe(id: string): Promise<Result<{ 
       stock_quantity: 0,
       is_available: true,
       is_active: true,
-      // Букет по рецепту собирают из того, что в магазине, — в тот же день.
-      availability_mode: "in_stock",
+      // Как у остальных букетов сайта; «в наличии» ставят в админке, когда решат.
+      availability_mode: "made_to_order",
       pricing_mode: "bouquet",
       availability_source: "manual",
       images: [r.photo_url],
@@ -237,8 +246,9 @@ export async function createSiteProductFromRecipe(id: string): Promise<Result<{ 
     .select("id, slug")
     .single();
   if (error || !data) return { success: false, error: `Букет на сайте не создался: ${error?.message ?? "нет ответа"}` };
-  await admin.from("pos_recipes").update({ product_id: data.id }).eq("id", r.id);
   refreshSite(data.slug);
+  const link = await admin.from("pos_recipes").update({ product_id: data.id }).eq("id", r.id);
+  if (link.error) return { success: false, error: `Букет на сайте создан, но связь с рецептом не записалась — нажмите кнопку ещё раз (${link.error.message})` };
   refreshUchet();
   return { success: true, data: { slug: data.slug } };
 }
@@ -325,7 +335,8 @@ export async function importRecipesFromPosiflora(): Promise<Result<ImportReport>
   }
   specs = specs.filter((s) => s.attributes?.status === "on");
 
-  const { data: existing } = await admin.from("pos_recipes").select("posiflora_spec_id").not("posiflora_spec_id", "is", null);
+  const { data: existing, error: existingError } = await admin.from("pos_recipes").select("posiflora_spec_id").not("posiflora_spec_id", "is", null);
+  if (existingError) return { success: false, error: "Не удалось прочитать уже перенесённые рецепты — попробуйте ещё раз" };
   const done = new Set((existing ?? []).map((r) => r.posiflora_spec_id as string));
   const todo = specs.filter((s) => !done.has(s.id));
   report.skipped = specs.length - todo.length;
@@ -368,7 +379,9 @@ export async function importRecipesFromPosiflora(): Promise<Result<ImportReport>
 
   // Позиции склада: найти, недостающие завести, до запуска — освежить.
   const posiIds = [...new Set(parsed.flatMap((p) => p.items.map((i) => i.posiId)))];
-  const { data: known } = await admin.from("inv_items").select("id, posiflora_id, title, sale_price, is_active").in("posiflora_id", posiIds.length ? posiIds : ["-"]);
+  const { data: known, error: knownError } = await admin.from("inv_items").select("id, posiflora_id, title, sale_price, is_active").in("posiflora_id", posiIds.length ? posiIds : ["-"]);
+  // Без этого списка каждая позиция показалась бы новой — лучше остановиться сразу.
+  if (knownError) return { success: false, error: "Не удалось прочитать склад — попробуйте ещё раз" };
   const byPosi = new Map((known ?? []).map((k) => [k.posiflora_id as string, k]));
   for (const p of parsed) {
     for (const it of p.items) {
@@ -414,7 +427,8 @@ export async function importRecipesFromPosiflora(): Promise<Result<ImportReport>
   }
 
   // Фото букетов сайта — для автосвязи по совпадению фото.
-  const { data: products } = await admin.from("products").select("id, images").eq("is_active", true);
+  const { data: products, error: productsError } = await admin.from("products").select("id, images").eq("is_active", true);
+  if (productsError) report.problems.push("Букеты сайта не прочитались — связи с сайтом выберите вручную");
   const productHashes: { id: string; hash: number[] }[] = [];
   await pool(
     (products ?? []).filter((p) => (p.images as string[] | null)?.[0]),
@@ -473,7 +487,16 @@ export async function importRecipesFromPosiflora(): Promise<Result<ImportReport>
       continue;
     }
     const ins = await admin.from("pos_recipe_items").insert([...merged.entries()].map(([itemId, qty], i) => ({ recipe_id: rec.id, item_id: itemId, qty, sort: i })));
-    if (ins.error) report.problems.push(`«${rawTitle}»: состав не сохранился — ${ins.error.message}`);
+    if (ins.error) {
+      // Рецепт без состава не нужен: убираем только что созданную строку,
+      // чтобы следующий импорт перенёс его заново, а не пропустил.
+      const undo = await admin.from("pos_recipes").delete().eq("id", rec.id);
+      report.problems.push(
+        `«${rawTitle}»: состав не сохранился — ${ins.error.message}.` +
+          (undo.error ? " Рецепт остался пустым — заполните состав вручную." : " Нажмите «Загрузить» ещё раз.")
+      );
+      continue;
+    }
     report.created.push(cleanBouquetTitle(rawTitle));
     if (productId) report.linked++;
   }
