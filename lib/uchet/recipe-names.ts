@@ -34,7 +34,10 @@ function joinList(parts: string[]): string {
 
 /** Опечатки, которые встречались в названиях. В JS \b не работает с кириллицей — граница руками. */
 function fixTypos(s: string): string {
-  return s.replace(/кустовой роза(?=[\s,.]|$)/gi, "кустовой розы");
+  return s
+    .replace(/кустовой роза(?=[\s,.]|$)/gi, "кустовой розы")
+    // Сорт Pink Avalanche: так он назван и на сайте.
+    .replace(/пин[чк]\s+аваланш/gi, "Пинк Аваланж");
 }
 
 /**

@@ -189,7 +189,8 @@ export async function applyRecipeToSite(id: string): Promise<Result<{ slug: stri
   };
   const { error } = await admin
     .from("products")
-    .update({ name: r.title, nickname: r.nickname, price: Math.round(price.price), attributes: next })
+    // Пустое маленькое название в рецепте не стирает то, что уже есть на сайте.
+    .update({ name: r.title, nickname: r.nickname ?? product.nickname ?? null, price: Math.round(price.price), attributes: next })
     .eq("id", product.id);
   if (error) return { success: false, error: `Сайт не обновился: ${error.message}` };
   refreshSite(product.slug);
@@ -427,8 +428,18 @@ export async function importRecipesFromPosiflora(): Promise<Result<ImportReport>
   }
 
   // Фото букетов сайта — для автосвязи по совпадению фото.
-  const { data: products, error: productsError } = await admin.from("products").select("id, images").eq("is_active", true);
+  const { data: products, error: productsError } = await admin.from("products").select("id, name, images, nickname").eq("is_active", true);
   if (productsError) report.problems.push("Букеты сайта не прочитались — связи с сайтом выберите вручную");
+  // Маленькое название букета сайта переходит в рецепт — чтобы «Обновить на сайте» его не стёрло.
+  const siteNickname = new Map((products ?? []).map((p) => [p.id as string, (p.nickname as string | null) ?? null]));
+  const siteName = new Map((products ?? []).map((p) => [p.id as string, String(p.name ?? "")]));
+  // Название рецепта — «Букет из …»; если в Posiflora оно другого вида
+  // («Букет Хризантема бигуди 25 штук»), берём название связанного букета сайта.
+  const recipeTitle = (raw: string, productId: string | null) => {
+    const cleaned = cleanBouquetTitle(raw);
+    const site = productId ? siteName.get(productId) : undefined;
+    return !/^Букет из /.test(cleaned) && site && /^Букет из /.test(site) ? site : cleaned;
+  };
   const productHashes: { id: string; hash: number[] }[] = [];
   await pool(
     (products ?? []).filter((p) => (p.images as string[] | null)?.[0]),
@@ -471,7 +482,8 @@ export async function importRecipesFromPosiflora(): Promise<Result<ImportReport>
     const { data: rec, error } = await admin
       .from("pos_recipes")
       .insert({
-        title: cleanBouquetTitle(rawTitle),
+        title: recipeTitle(rawTitle, productId),
+        nickname: productId ? siteNickname.get(productId) ?? null : null,
         photo_url: photoUrl,
         price_mode: p.fixed && p.price ? "fixed" : "composition",
         fixed_price: p.fixed && p.price ? p.price : null,
@@ -497,7 +509,7 @@ export async function importRecipesFromPosiflora(): Promise<Result<ImportReport>
       );
       continue;
     }
-    report.created.push(cleanBouquetTitle(rawTitle));
+    report.created.push(recipeTitle(rawTitle, productId));
     if (productId) report.linked++;
   }
 
