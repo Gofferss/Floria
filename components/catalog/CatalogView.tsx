@@ -76,7 +76,9 @@ export function CatalogView({
   const filteredProducts = useMemo(() => {
     const from = priceFrom ? Number(priceFrom) : null;
     const to = priceTo ? Number(priceTo) : null;
-    const query = searchQuery.trim().toLowerCase();
+    // Слова запроса без кавычек и с «е» вместо «ё»: «Огонек» находит «Огонёк»,
+    // а «букет солнышко» — букет «Солнышко» (каждое слово ищется отдельно).
+    const words = normalizeSearch(searchQuery).split(" ").filter(Boolean);
 
     return products.filter((product) => {
       if (selectedCategories.size > 0 && !selectedCategories.has(product.categorySlug)) {
@@ -87,15 +89,13 @@ export function CatalogView({
       }
       if (from !== null && product.basePrice < from) return false;
       if (to !== null && product.basePrice > to) return false;
-      if (query) {
-        // Ищем по названию и составу — по названию мало кто вспомнит
-        // точно, а вот "розы" или "тюльпаны" в составе введут почти все.
-        const matchesName = product.name.toLowerCase().includes(query);
-        const matchesComposition = product.composition.some((line) =>
-          line.toLowerCase().includes(query)
+      if (words.length) {
+        // Ищем по названию, маленькому названию («Солнышко»), составу и
+        // описанию: кто-то помнит имя букета, а кто-то введёт «розы».
+        const haystack = normalizeSearch(
+          [product.name, product.nickname ?? "", ...product.composition, product.description].join(" ")
         );
-        const matchesDescription = product.description.toLowerCase().includes(query);
-        if (!matchesName && !matchesComposition && !matchesDescription) return false;
+        if (!words.every((word) => haystack.includes(word))) return false;
       }
       return true;
     });
@@ -245,6 +245,16 @@ export function CatalogView({
       </div>
     </div>
   );
+}
+
+/** Нижний регистр, «ё» → «е», без кавычек и знаков препинания, одиночные пробелы. */
+function normalizeSearch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[«»"'“”„.,!?;:()—–-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function pluralizeProducts(count: number): string {
