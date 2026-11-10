@@ -6,6 +6,7 @@ import { getOpenShift, getPosSettings, listKassaAssortment, listPaymentMethods, 
 import { listApprovers } from "@/lib/uchet/people";
 import { getShopOrder } from "@/lib/uchet/order-queries";
 import { Kassa } from "@/components/uchet/kassa/Kassa";
+import { listKassaRecipes } from "@/lib/uchet/recipes";
 
 export const metadata: Metadata = {
   title: "Касса",
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function KassaPage({ searchParams }: { searchParams: Promise<{ mode?: string; vitrine?: string; order?: string }> }) {
+export default async function KassaPage({ searchParams }: { searchParams: Promise<{ mode?: string; vitrine?: string; order?: string; recipe?: string }> }) {
   await requireStaffUser("/uchet/kassa", canUseUchetWork);
   const params = await searchParams;
   const location = await getDefaultLocation();
@@ -22,7 +23,7 @@ export default async function KassaPage({ searchParams }: { searchParams: Promis
   const order = params.mode === "assembly" && params.order && /^[0-9a-f-]{36}$/i.test(params.order) ? await getShopOrder(params.order) : null;
   const forOrder = order && ["new", "assembling", "ready"].includes(order.status) ? { id: order.id, number: order.number, wishes: order.wishes } : null;
 
-  const [shift, assortment, vitrine, methods, settings, approvers] = await Promise.all([
+  const [shift, assortment, vitrine, methods, settings, approvers, recipes] = await Promise.all([
     getOpenShift(location.id),
     listKassaAssortment(location.id, location.isTraining),
     // Себестоимость кассе не нужна — флорист её не видит.
@@ -30,12 +31,15 @@ export default async function KassaPage({ searchParams }: { searchParams: Promis
     listPaymentMethods(),
     getPosSettings(),
     listApprovers(),
+    listKassaRecipes(),
   ]);
 
   return (
     <Kassa
       mode={params.mode === "assembly" ? "assembly" : "sale"}
       addVitrineId={params.vitrine ?? null}
+      addRecipeId={params.recipe && /^[0-9a-f-]{36}$/i.test(params.recipe) ? params.recipe : null}
+      recipes={recipes}
       forOrder={forOrder}
       shiftOpen={!!shift}
       items={assortment.items}

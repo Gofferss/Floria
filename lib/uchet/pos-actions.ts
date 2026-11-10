@@ -347,9 +347,59 @@ export async function recordSale(input: SaleInput): Promise<Result<{ saleNo: str
   });
   if (error || !data) return { success: false, error: dbMessage(error, "Не удалось провести продажу") };
 
+  // Чек мог быть отложен (pos_held_checks) — оплачен, значит, больше не отложен.
+  // Сбой здесь продажу не отменяет: забытая строка через сутки перестаёт учитываться сама.
+  const held = await getSupabaseAdmin().from("pos_held_checks").delete().eq("id", input.id);
+  if (held.error) console.error("[recordSale] снять отложенный чек", held.error.message);
+
   refresh();
   const r = data as { sale_no: string; repeated: boolean; bonus_used?: number | string; bonus_earned?: number | string };
   return { success: true, data: { saleNo: r.sale_no, repeated: r.repeated, bonusUsed: Number(r.bonus_used) || 0, bonusEarned: Number(r.bonus_earned) || 0 } };
+}
+
+// ---------------------------------------------------------------
+// Отложенные чеки (039): чтобы второй айпад и владелец видели, что
+// цветы уже обещаны. Сам чек живёт на айпаде, здесь — что в нём отложено.
+// ---------------------------------------------------------------
+
+/** Через столько отложенный чек считается забытым и перестаёт учитываться. */
+const HELD_TTL_MS = 24 * 60 * 60 * 1000;
+
+export async function holdCheck(input: { id: string; title: string; total: number; items: CompositionLine[] }): Promise<Result> {
+  const w = await who();
+  if (!w.ok) return { success: false, error: w.error };
+  if (!isUuid(input.id)) return { success: false, error: "Нет идентификатора чека" };
+  const bad = validComposition(input.items);
+  if (bad) return { success: false, error: bad };
+
+  const location = await getDefaultLocation();
+  const admin = getSupabaseAdmin();
+  const { error } = await admin.from("pos_held_checks").upsert({
+    id: input.id,
+    location_id: location.id,
+    title: input.title.trim().slice(0, 120) || "Чек",
+    total: Math.max(0, Math.round((Number(input.total) || 0) * 100) / 100),
+    items: input.items.map((l) => ({ item_id: l.itemId, qty: l.qty })),
+    employee_id: w.actor.employee?.id ?? null,
+    staff_id: w.actor.staff.id,
+  });
+  if (error) return { success: false, error: dbMessage(error, "Не удалось отложить чек") };
+
+  // Заодно убрать забытые: их уже не считают, а строки копятся.
+  await admin.from("pos_held_checks").delete().lt("updated_at", new Date(Date.now() - HELD_TTL_MS).toISOString());
+  refresh();
+  return { success: true, data: undefined };
+}
+
+/** Чек вернули в работу или убрали — он больше не отложен. */
+export async function releaseHeld(id: string): Promise<Result> {
+  const w = await who();
+  if (!w.ok) return { success: false, error: w.error };
+  if (!isUuid(id)) return { success: false, error: "Нет идентификатора чека" };
+  const { error } = await getSupabaseAdmin().from("pos_held_checks").delete().eq("id", id);
+  if (error) return { success: false, error: dbMessage(error, "Не удалось снять отложенный чек") };
+  refresh();
+  return { success: true, data: undefined };
 }
 
 /** Проверить PIN того, кто разрешает скидку, и выдать допуск до оплаты. */

@@ -6,6 +6,7 @@ import {
   ChartBarIcon,
   ClockIcon,
   EditIcon,
+  LeafIcon,
   PackageIcon,
   PinIcon,
   StarIcon,
@@ -40,6 +41,7 @@ export const WORK_NAV: NavItem[] = [
   { href: "/uchet/zakazy", label: "Заказы", icon: TruckIcon, ready: true },
   { href: "/uchet/dostavki", label: "Доставки", icon: PinIcon, ready: true },
   { href: "/uchet/vitrina", label: "Витрина", icon: BouquetIcon, ready: true },
+  { href: "/uchet/recepty", label: "Рецепты", icon: LeafIcon, ready: true },
   { href: "/uchet/sklad", label: "Склад", icon: PackageIcon, ready: true },
   { href: "/uchet/smena", label: "Смена", icon: ClockIcon, ready: true },
 ];

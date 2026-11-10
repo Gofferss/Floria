@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { approveDiscount, searchCustomers, uploadBouquetPhoto } from "@/lib/uchet/pos-actions";
 import { createCustomerAtTill } from "@/lib/uchet/customer-actions";
-import type { CustomerHit, VitrineBouquet } from "@/lib/uchet/pos-queries";
+import type { CustomerHit, KassaItem, VitrineBouquet } from "@/lib/uchet/pos-queries";
+import type { KassaRecipe } from "@/lib/uchet/recipes";
+import { recipePrice } from "@/lib/uchet/recipe-price";
 import type { PickableEmployee } from "@/lib/uchet/people";
 import { formatDate, formatMoney } from "@/lib/uchet/format";
 import { prepareImageForUpload } from "@/lib/prepare-image";
@@ -26,6 +28,8 @@ export function AmountDialog({
   confirm,
   onDone,
   onClose,
+  resetLabel,
+  onReset,
 }: {
   title: string;
   hint?: string;
@@ -33,6 +37,9 @@ export function AmountDialog({
   confirm: string;
   onDone: (value: number) => void;
   onClose: () => void;
+  /** Вернуть как было (цену по прайсу) — одной кнопкой, без набора. */
+  resetLabel?: string;
+  onReset?: () => void;
 }) {
   const [value, setValue] = useState(initial ? String(Math.round(initial)) : "");
   return (
@@ -53,7 +60,84 @@ export function AmountDialog({
       <button type="button" disabled={!value || Number(value) <= 0} onClick={() => onDone(Number(value))} className={`${ui.btnPrimary} mt-4 min-h-[52px] w-full text-base`}>
         {confirm}
       </button>
+      {resetLabel && onReset && (
+        <button type="button" onClick={onReset} className={`${ui.btnGhost} mt-2 w-full`}>
+          {resetLabel}
+        </button>
+      )}
     </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------
+// Рецепты в кассе: фото, название, цена — касание кладёт букет в чек
+// ---------------------------------------------------------------
+
+export function RecipePicker({
+  recipes,
+  index,
+  assembly,
+  onPick,
+  onClose,
+}: {
+  recipes: KassaRecipe[];
+  index: Map<string, KassaItem>;
+  assembly: boolean;
+  onPick: (r: KassaRecipe) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const list = q ? recipes.filter((r) => `${r.title} ${r.nickname ?? ""}`.toLowerCase().includes(q)) : recipes;
+  return (
+    <Sheet label="Рецепты" onClose={onClose}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg font-semibold">Рецепты</h2>
+          <p className="mt-0.5 text-sm text-zinc-500">
+            {assembly ? "Состав рецепта ляжет в букет для витрины — его можно поменять." : "Букет ляжет в чек с составом и ценой по рецепту."}
+          </p>
+        </div>
+        <CloseButton onClose={onClose} />
+      </div>
+      {recipes.length > 6 && (
+        <input
+          id="recipe-search"
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Поиск рецепта"
+          aria-label="Поиск рецепта"
+          className={`${ui.field} mt-4 h-11`}
+        />
+      )}
+      {list.length === 0 ? (
+        <p className="mt-6 text-center text-sm text-zinc-500">{recipes.length ? "Ничего не нашлось." : "Рецептов пока нет — их заводят в разделе «Рецепты»."}</p>
+      ) : (
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {list.map((r) => {
+            const price = recipePrice(r, (id) => index.get(id)?.price);
+            return (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => onPick(r)}
+                className="overflow-hidden rounded-2xl text-left ring-1 ring-inset ring-zinc-200 transition hover:ring-lavender-300"
+              >
+                <span className="relative block aspect-[4/4.3] bg-zinc-100">
+                  {r.photoUrl && <Image src={r.photoUrl} alt="" fill sizes="200px" className="object-cover" />}
+                  <span className="absolute bottom-2 left-2 rounded-full bg-white px-2 py-0.5 text-sm font-bold tabular-nums">{formatMoney(price.price)}</span>
+                </span>
+                <span className="block px-3 py-2">
+                  <span className="line-clamp-2 text-sm font-semibold leading-snug">{r.title}</span>
+                  {r.nickname && <span className="mt-0.5 block truncate text-xs text-zinc-500">«{r.nickname}»</span>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Sheet>
   );
 }
 
@@ -381,6 +465,7 @@ export function VitrinePicker({
 
 export function ToVitrineDialog({
   forOrder,
+  initialTitle = "",
   suggested,
   busy,
   error,
@@ -388,6 +473,8 @@ export function ToVitrineDialog({
   onClose,
 }: {
   forOrder: string | null;
+  /** Собран по рецепту — его название, можно поменять. */
+  initialTitle?: string;
   suggested: number;
   busy: boolean;
   error: string | null;
@@ -395,7 +482,7 @@ export function ToVitrineDialog({
   onClose: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(initialTitle);
   const [price, setPrice] = useState(suggested ? String(Math.round(suggested)) : "");
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);

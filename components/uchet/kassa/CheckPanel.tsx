@@ -10,11 +10,34 @@ import {
   discountAmount,
   due,
   isEmpty,
+  stemPrice,
   subtotal,
   unpricedStems,
   type Check,
   type ItemIndex,
 } from "@/components/uchet/kassa/check";
+
+/**
+ * Цена за штуку — касанием меняется только для этого чека. Своя цена
+ * выделена и показывает прайсовую: видно, где уступили.
+ */
+function UnitPrice({ price, list, onClick }: { price: number | null; list: number | null; onClick: () => void }) {
+  const changed = price !== null && list !== null && price !== list;
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={`shrink-0 rounded-lg px-1.5 py-1 text-xs tabular-nums transition ${changed ? "bg-leaf-50 font-semibold text-leaf-700" : "text-zinc-500 hover:bg-lavender-50 hover:text-zinc-800"}`}
+      title={changed ? `Своя цена, по прайсу ${formatMoney(list ?? 0)}` : "Изменить цену за штуку"}
+    >
+      {price !== null ? `${formatMoney(price)}/шт` : "цена?"}
+      {changed && <span className="ml-1 font-normal text-zinc-400 line-through">{formatMoney(list ?? 0)}</span>}
+    </button>
+  );
+}
 
 type Props = {
   assembly: boolean;
@@ -25,6 +48,7 @@ type Props = {
   shiftOpen: boolean;
   onActivate: (key: string) => void;
   onStem: (bouquetKey: string, itemId: string, delta: number) => void;
+  onStemPrice: (bouquetKey: string, itemId: string) => void;
   onBouquetPrice: (bouquetKey: string) => void;
   onRemoveBouquet: (bouquetKey: string) => void;
   onRemoveVitrine: (key: string) => void;
@@ -137,7 +161,7 @@ export function CheckPanel(p: Props) {
               <span className="block text-xs text-zinc-500">с витрины · уже собран</span>
             </span>
             <span className="text-sm font-semibold tabular-nums">{formatMoney(v.price)}</span>
-            <button type="button" onClick={() => p.onRemoveVitrine(v.key)} className="h-8 w-8 rounded-lg bg-zinc-100 text-zinc-500" aria-label="Убрать из чека">
+            <button type="button" onClick={() => p.onRemoveVitrine(v.key)} className={ui.btnRemove} aria-label="Убрать из чека">
               ✕
             </button>
           </div>
@@ -183,7 +207,7 @@ export function CheckPanel(p: Props) {
                         e.stopPropagation();
                         p.onRemoveBouquet(b.key);
                       }}
-                      className="h-8 w-8 rounded-lg bg-white text-zinc-500 ring-1 ring-inset ring-zinc-200"
+                      className={ui.btnRemove}
                       aria-label="Убрать букет"
                     >
                       ✕
@@ -192,8 +216,9 @@ export function CheckPanel(p: Props) {
                 </span>
               </div>
               {b.stems.map((s) => (
-                <div key={s.itemId} className="flex items-center justify-between gap-2 border-t border-zinc-100 px-3 py-1.5 text-sm">
+                <div key={s.itemId} className="flex items-center justify-between gap-1.5 border-t border-zinc-100 px-3 py-1.5 text-sm">
                   <span className="min-w-0 flex-1 truncate">{index.get(s.itemId)?.title ?? "—"}</span>
+                  <UnitPrice price={stemPrice(s, index)} list={index.get(s.itemId)?.price ?? null} onClick={() => p.onStemPrice(b.key, s.itemId)} />
                   <Stepper
                     label={index.get(s.itemId)?.title ?? "позиция"}
                     value={s.qty}
@@ -217,8 +242,9 @@ export function CheckPanel(p: Props) {
         })}
 
         {check.items.map((i) => (
-          <div key={i.itemId} className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm ring-1 ring-inset ring-zinc-200">
+          <div key={i.itemId} className="flex items-center justify-between gap-1.5 rounded-xl px-3 py-2 text-sm ring-1 ring-inset ring-zinc-200">
             <span className="min-w-0 flex-1 truncate">{index.get(i.itemId)?.title ?? "—"}</span>
+            <UnitPrice price={i.price} list={index.get(i.itemId)?.price ?? null} onClick={() => p.onItemPrice(i.itemId)} />
             <Stepper label={index.get(i.itemId)?.title ?? "позиция"} value={i.qty} onMinus={() => p.onItemQty(i.itemId, -1)} onPlus={() => p.onItemQty(i.itemId, 1)} />
             <button type="button" onClick={() => p.onItemPrice(i.itemId)} className="min-w-[4.5rem] rounded-lg px-1.5 py-1 text-right font-semibold tabular-nums hover:bg-lavender-50" title="Изменить цену">
               {formatMoney(i.price * i.qty)}
@@ -241,7 +267,7 @@ export function CheckPanel(p: Props) {
               <span className="font-display text-2xl font-bold tabular-nums">{formatMoney(check.bouquets[0] ? bouquetPrice(check.bouquets[0], index) : 0)}</span>
             </div>
             <div className="grid grid-cols-[1fr_2fr] gap-2">
-              <button type="button" onClick={p.onCancelAssembly} className={`${ui.btnSecondary} min-h-[52px]`}>
+              <button type="button" onClick={p.onCancelAssembly} className={`${ui.btnCancel} min-h-[52px]`}>
                 Отмена
               </button>
               <button
@@ -284,7 +310,7 @@ export function CheckPanel(p: Props) {
               <button type="button" onClick={p.onPark} disabled={empty} className={`${ui.btnSecondary} min-h-[52px]`}>
                 Отложить
               </button>
-              <button type="button" onClick={p.onPay} disabled={empty || !p.shiftOpen} className={`${ui.btnPrimary} min-h-[52px] text-base`}>
+              <button type="button" onClick={p.onPay} disabled={empty || !p.shiftOpen} className={`${ui.btnSell} min-h-[52px] text-base`}>
                 Оплата
               </button>
             </div>

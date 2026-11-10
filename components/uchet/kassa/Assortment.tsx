@@ -17,10 +17,16 @@ import { GroupIcon } from "@/components/uchet/GroupIcon";
 
 type State = "" | "low" | "neg";
 
+/** Свободно — что можно продать прямо сейчас: остаток минус отложенное в чеках. */
+function freeQty(i: KassaItem): number {
+  return i.qty - i.held;
+}
+
 function stockState(i: KassaItem): State {
   if (!i.isTracked) return "";
-  if (i.qty <= 0) return "neg";
-  if (i.minQty !== null && i.qty < i.minQty) return "low";
+  const free = freeQty(i);
+  if (free <= 0) return "neg";
+  if (i.minQty !== null && free < i.minQty) return "low";
   return "";
 }
 
@@ -28,11 +34,26 @@ function isOld(i: KassaItem): boolean {
   return i.freshDays !== null && i.oldestDays !== null && i.oldestDays >= i.freshDays;
 }
 
+/**
+ * «Всего» — сколько этого цветка в магазине: на складе плюс в букетах на
+ * витрине (их цветы со склада уже списаны сборкой, но они здесь, в вазах).
+ */
 function stockText(i: KassaItem): string {
   if (!i.isTracked) return "";
   if (i.qty < 0) return `минус ${formatQty(-i.qty)}`;
-  if (i.qty === 0) return "нет";
-  return `ост. ${formatQty(i.qty)}`;
+  const total = i.qty + i.inBouquets;
+  return total === 0 ? "нет" : `всего ${formatQty(total)}`;
+}
+
+/** Отложено и в букетах — только когда есть: пустые метки только шумят. */
+function HeldBadges({ item }: { item: KassaItem }) {
+  if (!item.isTracked || (item.held <= 0 && item.inBouquets <= 0)) return null;
+  return (
+    <span className="flex flex-wrap gap-1 text-[10px] font-semibold tabular-nums">
+      {item.held > 0 && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-amber-900">отложено {formatQty(item.held)}</span>}
+      {item.inBouquets > 0 && <span className="rounded-full bg-lavender-100 px-1.5 py-0.5 text-lavender-700">в букетах {formatQty(item.inBouquets)}</span>}
+    </span>
+  );
 }
 
 const STRIPE: Record<State, string> = {
@@ -73,35 +94,31 @@ function ItemTile({ item, icon, onAdd }: { item: KassaItem; icon: string | null;
           <span className="font-semibold text-zinc-900">{item.price ? formatMoney(item.price) : <span className="text-amber-700">без цены</span>}</span>
           <span className={st === "neg" ? "font-semibold text-red-600" : st === "low" ? "font-semibold text-amber-700" : "text-zinc-500"}>{stockText(item)}</span>
         </span>
+        <HeldBadges item={item} />
       </span>
     </button>
   );
 }
 
-/** Частые — одной строкой: маленькое фото, название и цена. Остаток — только если с ним что-то не так. */
-function FrequentChip({ item, icon, onAdd }: { item: KassaItem; icon: string | null; onAdd: (i: KassaItem) => void }) {
+/**
+ * Частые — мелкой строкой «название · цена» под группами: подсказка, а не
+ * главное на экране (владелец 10.11.2026). Метка — только если с остатком
+ * что-то не так.
+ */
+function FrequentChip({ item, onAdd }: { item: KassaItem; onAdd: (i: KassaItem) => void }) {
   const st = stockState(item);
-  const tag = st === "neg" ? stockText(item) : st === "low" ? "мало" : isOld(item) ? `${item.oldestDays} дн.` : null;
+  const tag = st === "neg" ? (item.qty < 0 ? "минус" : item.held > 0 ? "занято" : "нет") : st === "low" ? "мало" : isOld(item) ? `${item.oldestDays} дн.` : null;
   return (
     <button
       type="button"
       onClick={() => onAdd(item)}
-      className={`relative flex h-11 items-center gap-2 overflow-hidden rounded-lg bg-white pl-1 pr-2.5 text-left text-[13px] ring-1 ring-inset ring-zinc-200 transition hover:ring-lavender-300 active:scale-[0.98] ${STRIPE[st]}`}
+      className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full bg-white px-3 text-left text-xs ring-1 ring-inset ring-zinc-200 transition hover:ring-lavender-300 active:scale-[0.98]"
     >
-      <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-100">
-        {item.photoUrl ? (
-          <Image src={item.photoUrl} alt="" fill sizes="36px" className="object-cover" />
-        ) : (
-          <span className="absolute inset-0 flex items-center justify-center text-zinc-300">
-            <GroupIcon icon={icon} className="h-5 w-5" />
-          </span>
-        )}
-      </span>
-      <span className="min-w-0 flex-1 truncate font-medium text-zinc-900">{item.title}</span>
+      <span className="truncate font-medium text-zinc-800">{item.title}</span>
+      <span className="shrink-0 tabular-nums text-zinc-500">· {item.price ? formatMoney(item.price) : "—"}</span>
       {tag && (
-        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${st === "neg" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900"}`}>{tag}</span>
+        <span className={`shrink-0 rounded-full px-1.5 py-px text-[10px] font-bold ${st === "neg" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900"}`}>{tag}</span>
       )}
-      <span className="shrink-0 font-semibold tabular-nums text-zinc-900">{item.price ? formatMoney(item.price) : "—"}</span>
     </button>
   );
 }
@@ -120,9 +137,39 @@ type Props = {
   onOpenVitrine: () => void;
   /** Нет — продавать букет без состава запрещено в «Настройках», плитки нет. */
   onPriceBouquet?: () => void;
+  /** Рецепты: готовый состав и цена одним касанием. */
+  recipes: { id: string; photoUrl: string | null }[];
+  onOpenRecipes: () => void;
 };
 
-export function Assortment({ assembly, items, groups, frequent, vitrine, query, onQuery, group, onGroup, onAdd, onOpenVitrine, onPriceBouquet }: Props) {
+function RecipesTile({ recipes, onOpen }: { recipes: { id: string; photoUrl: string | null }[]; onOpen: () => void }) {
+  const thumbs = recipes.filter((r) => r.photoUrl).slice(0, 3);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex min-h-[72px] items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-left ring-1 ring-inset ring-zinc-200 transition hover:ring-lavender-300"
+    >
+      <span className="flex shrink-0">
+        {thumbs.length ? (
+          thumbs.map((r, i) => (
+            <span key={r.id} className={`relative h-12 w-10 overflow-hidden rounded-lg bg-zinc-100 ring-2 ring-white ${i ? "-ml-3" : ""}`}>
+              <Image src={r.photoUrl as string} alt="" fill sizes="40px" className="object-cover" />
+            </span>
+          ))
+        ) : (
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-lavender-50 font-display text-lg font-bold text-lavender-700">Р</span>
+        )}
+      </span>
+      <span className="min-w-0">
+        <span className="block font-display text-[15px] font-semibold text-zinc-900">Рецепты · {recipes.length}</span>
+        <span className="block text-xs text-zinc-500">готовый состав и цена</span>
+      </span>
+    </button>
+  );
+}
+
+export function Assortment({ assembly, items, groups, frequent, vitrine, query, onQuery, group, onGroup, onAdd, onOpenVitrine, onPriceBouquet, recipes, onOpenRecipes }: Props) {
   // В сборку на витрину кладут только то, что ведётся по складу и идёт в букет.
   const pool = assembly ? items.filter((i) => i.isTracked && !i.standalone) : items;
   const byId = new Map(pool.map((i) => [i.id, i]));
@@ -185,8 +232,13 @@ export function Assortment({ assembly, items, groups, frequent, vitrine, query, 
         </section>
       ) : (
         <>
+          {assembly && recipes.length > 0 && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <RecipesTile recipes={recipes} onOpen={onOpenRecipes} />
+            </div>
+          )}
           {!assembly && (
-            <div className="mt-3 grid gap-2 lg:grid-cols-[1.4fr_1fr]">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[1.3fr_1fr_1fr]">
               <button
                 type="button"
                 onClick={onOpenVitrine}
@@ -220,18 +272,8 @@ export function Assortment({ assembly, items, groups, frequent, vitrine, query, 
                   </span>
                 </button>
               )}
+              {recipes.length > 0 && <RecipesTile recipes={recipes} onOpen={onOpenRecipes} />}
             </div>
-          )}
-
-          {freq.length > 0 && (
-            <section className="mt-5">
-              <h2 className={`${ui.label} mb-2`}>Частые</h2>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-1.5">
-                {freq.map((i) => (
-                  <FrequentChip key={i.id} item={i} icon={iconOf(i)} onAdd={onAdd} />
-                ))}
-              </div>
-            </section>
           )}
 
           <section className="mt-5">
@@ -257,6 +299,17 @@ export function Assortment({ assembly, items, groups, frequent, vitrine, query, 
               ))}
             </div>
           </section>
+
+          {freq.length > 0 && (
+            <section className="mt-5">
+              <h2 className={`${ui.label} mb-1.5`}>Часто берут</h2>
+              <div className="flex flex-wrap gap-1.5">
+                {freq.map((i) => (
+                  <FrequentChip key={i.id} item={i} onAdd={onAdd} />
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>

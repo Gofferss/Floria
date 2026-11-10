@@ -315,6 +315,10 @@ export type KassaItem = {
   freshDays: number | null;
   /** Фото — чтобы находить глазами, а не читать названия. */
   photoUrl: string | null;
+  /** Отложено в чеках на любом айпаде (039): ещё в остатке, но уже обещано. */
+  held: number;
+  /** Стоит в букетах на витрине: со склада уже списано, но в магазине есть. */
+  inBouquets: number;
 };
 
 export type KassaGroup = { id: string; title: string; icon: string | null; kind: string };
@@ -326,7 +330,7 @@ export async function listKassaAssortment(
   isTraining: boolean
 ): Promise<{ items: KassaItem[]; groups: KassaGroup[]; frequent: string[] }> {
   const admin = getSupabaseAdmin();
-  const [items, groups, fresh, freq] = await Promise.all([
+  const [items, groups, fresh, freq, held, vitrineStems] = await Promise.all([
     admin
       .from("inv_items")
       .select("id, title, group_id, sale_price, min_qty, is_tracked, fresh_days, photo_url, inv_groups(kind), inv_stock(qty, location_id), inv_posiflora_snapshot(qty, movements)")
@@ -344,9 +348,32 @@ export async function listKassaAssortment(
       .eq("inv_documents.status", "posted")
       .gte("inv_documents.doc_date", new Date(Date.now() - 30 * 86_400_000).toISOString())
       .limit(5000),
+    // Отложенные чеки за сутки — старше считаются забытыми (так же решает holdCheck).
+    admin
+      .from("pos_held_checks")
+      .select("items")
+      .eq("location_id", locationId)
+      .gte("updated_at", new Date(Date.now() - 86_400_000).toISOString()),
+    admin
+      .from("pos_bouquet_items")
+      .select("item_id, qty, pos_bouquets!inner(status, location_id)")
+      .eq("pos_bouquets.status", "vitrine")
+      .eq("pos_bouquets.location_id", locationId),
   ]);
   if (items.error) throw new Error(`Ассортимент: ${items.error.message}`);
   if (groups.error) throw new Error(`Группы: ${groups.error.message}`);
+  // Без этих чисел плитка показала бы, что всё свободно, — это хуже, чем ошибка.
+  if (held.error) throw new Error(`Отложенные чеки: ${held.error.message}`);
+  if (vitrineStems.error) throw new Error(`Состав витрины: ${vitrineStems.error.message}`);
+
+  const heldBy = new Map<string, number>();
+  for (const row of (held.data ?? []) as { items: { item_id?: string; qty?: number | string }[] | null }[]) {
+    for (const l of row.items ?? []) if (l.item_id) heldBy.set(l.item_id, (heldBy.get(l.item_id) ?? 0) + num(l.qty));
+  }
+  const inVitrine = new Map<string, number>();
+  for (const l of (vitrineStems.data ?? []) as { item_id: string; qty: number | string }[]) {
+    inVitrine.set(l.item_id, (inVitrine.get(l.item_id) ?? 0) + num(l.qty));
+  }
 
   const freshMap = new Map((fresh.data ?? []).map((f) => [f.item_id as string, f.oldest_batch_days as number]));
 
@@ -383,6 +410,8 @@ export async function listKassaAssortment(
       oldestDays: freshMap.get(r.id) ?? null,
       freshDays: r.fresh_days,
       photoUrl: r.photo_url,
+      held: heldBy.get(r.id) ?? 0,
+      inBouquets: inVitrine.get(r.id) ?? 0,
     };
   });
 

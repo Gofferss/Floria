@@ -2,19 +2,22 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { assembleBouquet, recordSale } from "@/lib/uchet/pos-actions";
+import { assembleBouquet, holdCheck, recordSale, releaseHeld } from "@/lib/uchet/pos-actions";
 import type { KassaGroup, KassaItem, PaymentMethodOption, PosSettings, VitrineBouquet } from "@/lib/uchet/pos-queries";
+import type { KassaRecipe } from "@/lib/uchet/recipes";
 import type { PickableEmployee } from "@/lib/uchet/people";
 import { formatMoney } from "@/lib/uchet/format";
 import { useToast } from "@/components/uchet/Toast";
 import { Assortment } from "@/components/uchet/kassa/Assortment";
 import { CheckPanel } from "@/components/uchet/kassa/CheckPanel";
 import { PaySheet } from "@/components/uchet/kassa/PaySheet";
-import { AmountDialog, CustomerPanel, DiscountDialog, DoneSheet, ToVitrineDialog, VitrinePicker } from "@/components/uchet/kassa/KassaDialogs";
+import { AmountDialog, CustomerPanel, DiscountDialog, DoneSheet, RecipePicker, ToVitrineDialog, VitrinePicker } from "@/components/uchet/kassa/KassaDialogs";
 import { SERVER_FAILURE, classifyFailure, enqueueSale, pendingVitrineIds, setPendingError, useOutbox } from "@/components/uchet/kassa/outbox";
 import {
   bouquetPrice,
+  checkTitle,
   due,
+  heldItems,
   isEmpty,
   loadSaved,
   newCheck,
@@ -29,6 +32,9 @@ type Props = {
   mode: "sale" | "assembly";
   /** Пришли с витрины кнопкой «Продать» — этот букет сразу в чек. */
   addVitrineId: string | null;
+  /** Пришли из «Рецептов»: продать или собрать этот рецепт. */
+  addRecipeId: string | null;
+  recipes: KassaRecipe[];
   /** Сборка к заказу магазина, а не на витрину. */
   forOrder: { id: string; number: string; wishes: string | null } | null;
   shiftOpen: boolean;
@@ -48,6 +54,8 @@ type Dialog =
   | { kind: "pay" }
   | { kind: "price"; bouquetKey: string }
   | { kind: "itemPrice"; itemId: string }
+  | { kind: "stemPrice"; bouquetKey: string; itemId: string }
+  | { kind: "recipes" }
   | { kind: "priceBouquet" }
   | { kind: "discount" }
   | { kind: "customer" }
@@ -66,12 +74,29 @@ function newBouquet(n: number): BouquetLine {
  * Режим «сборка на витрину» — та же касса, но вместо оплаты кнопка «На
  * витрину»: цветы списываются при сборке, на витрине появляется букет.
  */
-export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, frequent, vitrine, methods, settings, isTraining, approvers }: Props) {
+export function Kassa({ mode, addVitrineId, addRecipeId, recipes, forOrder, shiftOpen, items, groups, frequent, vitrine, methods, settings, isTraining, approvers }: Props) {
   const router = useRouter();
   const toast = useToast();
   const assembly = mode === "assembly";
 
   const index = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+
+  /**
+   * Букет по рецепту. Позиции, которых в кассе нет (скрыли на складе), в
+   * букет не попадают — и об этом говорится, а не молча: иначе цена по
+   * составу оказалась бы ниже, чем в рецепте.
+   */
+  function recipeBouquet(r: KassaRecipe): { line: BouquetLine; missing: number } {
+    const stems = r.items.filter((s) => index.has(s.itemId)).map((s) => ({ itemId: s.itemId, qty: s.qty }));
+    return {
+      line: { key: crypto.randomUUID(), title: r.title, manualPrice: r.priceMode === "fixed" ? r.fixedPrice : null, stems, recipeId: r.id },
+      missing: r.items.length - stems.length,
+    };
+  }
+
+  function warnMissing(r: KassaRecipe, missing: number) {
+    if (missing > 0) toast({ tone: "error", text: `В «${r.title}» ${missing === 1 ? "одной позиции" : `${missing} позиций`} нет в кассе — проверьте состав и цену` });
+  }
   const [check, setCheck] = useState<Check>(() => newCheck());
   const [parked, setParked] = useState<Check[]>([]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -86,9 +111,15 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
   // Чек продажи переживает перезагрузку и закрытие приложения. Сборка —
   // нет: она короткая и всегда начинается с чистого листа.
   useEffect(() => {
+    const startRecipe = addRecipeId ? recipes.find((r) => r.id === addRecipeId) ?? null : null;
     if (assembly) {
-      const b = newBouquet(1);
+      let b = newBouquet(1);
       b.title = forOrder ? `Букет к заказу ${forOrder.number}` : "Букет на витрину";
+      if (startRecipe) {
+        const made = recipeBouquet(startRecipe);
+        b = made.line;
+        warnMissing(startRecipe, made.missing);
+      }
       setCheck({ ...newCheck(), bouquets: [b] });
       setActiveKey(b.key);
       restored.current = true;
@@ -122,11 +153,16 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
       const b = vitrine.find((v) => v.id === addVitrineId);
       if (b) current = { ...current, vitrine: [...current.vitrine, vitrineLine(b)] };
     }
+    if (startRecipe) {
+      const made = recipeBouquet(startRecipe);
+      current = { ...current, bouquets: [...current.bouquets, made.line] };
+      warnMissing(startRecipe, made.missing);
+    }
     setCheck(current);
     setParked(saved?.parked ?? []);
     setActiveKey(current.bouquets.at(-1)?.key ?? null);
     restored.current = true;
-    if (addVitrineId) router.replace("/uchet/kassa");
+    if (addVitrineId || addRecipeId) router.replace("/uchet/kassa");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assembly]);
 
@@ -200,21 +236,65 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
     setActiveKey(b.key);
   }
 
+  /**
+   * Отложенный чек записывается и на сервер — чтобы второй айпад и владелец
+   * видели на плитках, что эти цветы уже обещаны. Без связи чек всё равно
+   * откладывается на этом айпаде, но об этом говорится: на других плитках
+   * его не будет.
+   */
+  function publishHeld(c: Check) {
+    holdCheck({ id: c.id, title: checkTitle(c), total: due(c, index), items: heldItems(c) })
+      .then((r) => {
+        if (!r.success) toast({ tone: "error", text: `Чек отложен только на этом айпаде: ${r.error}` });
+        else router.refresh();
+      })
+      .catch(() => toast({ tone: "error", text: "Сервер не принял отложенный чек — он отложен только на этом айпаде, другие кассы его не видят" }));
+  }
+
+  function unpublishHeld(id: string) {
+    releaseHeld(id)
+      .then((r) => {
+        if (r.success) router.refresh();
+      })
+      // Не снялся — через сутки перестанет учитываться сам; кассу не останавливаем.
+      .catch(() => undefined);
+  }
+
   function park() {
-    setParked((p) => [...p, check]);
+    const parkedCheck = check;
+    setParked((p) => [...p, parkedCheck]);
     setCheck(newCheck());
     setActiveKey(null);
     toast({ tone: "ok", text: "Чек отложен — он над новым чеком" });
+    publishHeld(parkedCheck);
   }
 
   function unpark(i: number) {
     const target = parked[i];
+    const current = check;
     setParked((p) => {
       const rest = p.filter((_, j) => j !== i);
-      return isEmpty(check) ? rest : [...rest, check];
+      return isEmpty(current) ? rest : [...rest, current];
     });
     setCheck(target);
     setActiveKey(target.bouquets.at(-1)?.key ?? null);
+    unpublishHeld(target.id);
+    // Набранный чек ушёл в отложенные вместо открытого — он теперь тоже отложен.
+    if (!isEmpty(current)) publishHeld(current);
+  }
+
+  function addRecipe(r: KassaRecipe) {
+    const made = recipeBouquet(r);
+    if (assembly) {
+      const key = check.bouquets[0]?.key ?? made.line.key;
+      update((c) => ({ ...c, bouquets: [{ ...made.line, key }] }));
+      setActiveKey(key);
+    } else {
+      update((c) => ({ ...c, bouquets: [...c.bouquets, made.line] }));
+      setActiveKey(made.line.key);
+      toast({ tone: "ok", text: `«${r.title}» в чеке — состав и цена по рецепту` });
+    }
+    warnMissing(r, made.missing);
   }
 
   async function pay(payments: { method: string; amount: number }[], bonusUsed = 0) {
@@ -309,6 +389,14 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
   const takenVitrine = new Set([...check.vitrine.map((v) => v.bouquetId), ...pendingVitrineIds(outbox)]);
   const priceTarget = dialog?.kind === "price" ? check.bouquets.find((b) => b.key === dialog.bouquetKey) : null;
   const itemTarget = dialog?.kind === "itemPrice" ? check.items.find((i) => i.itemId === dialog.itemId) : null;
+  const stemTarget =
+    dialog?.kind === "stemPrice"
+      ? (() => {
+          const b = check.bouquets.find((x) => x.key === dialog.bouquetKey);
+          const s = b?.stems.find((x) => x.itemId === dialog.itemId);
+          return b && s ? { bouquet: b, stem: s } : null;
+        })()
+      : null;
 
   // Планшет и компьютер — две колонки, каждая прокручивается сама. Телефон —
   // одна страница: ассортимент, под ним чек.
@@ -328,6 +416,8 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
           onAdd={addItem}
           onOpenVitrine={() => setDialog({ kind: "vitrine" })}
           onPriceBouquet={settings.compositionRequired ? undefined : () => setDialog({ kind: "priceBouquet" })}
+          recipes={recipes}
+          onOpenRecipes={() => setDialog({ kind: "recipes" })}
         />
       </div>
 
@@ -340,6 +430,7 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
         shiftOpen={shiftOpen}
         onActivate={setActiveKey}
         onStem={stem}
+        onStemPrice={(bouquetKey, itemId) => setDialog({ kind: "stemPrice", bouquetKey, itemId })}
         onBouquetPrice={(key) => setDialog({ kind: "price", bouquetKey: key })}
         onRemoveBouquet={removeBouquet}
         onRemoveVitrine={(key) => update((c) => ({ ...c, vitrine: c.vitrine.filter((v) => v.key !== key) }))}
@@ -382,13 +473,64 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
 
       {itemTarget && (
         <AmountDialog
-          title={`Цена: ${index.get(itemTarget.itemId)?.title ?? ""}`}
-          hint="За одну штуку"
+          title={`Цена за штуку: ${index.get(itemTarget.itemId)?.title ?? ""}`}
+          hint={`По прайсу ${formatMoney(index.get(itemTarget.itemId)?.price ?? 0)}. Новая цена — только для этого чека, на складе не меняется.`}
           initial={itemTarget.price}
           confirm="Готово"
+          resetLabel={index.get(itemTarget.itemId)?.price ? `Вернуть ${formatMoney(index.get(itemTarget.itemId)?.price ?? 0)}` : undefined}
+          onReset={() => {
+            const list = index.get(itemTarget.itemId)?.price ?? 0;
+            update((c) => ({ ...c, items: c.items.map((i) => (i.itemId === itemTarget.itemId ? { ...i, price: list } : i)) }));
+            setDialog(null);
+          }}
           onClose={() => setDialog(null)}
           onDone={(v) => {
             update((c) => ({ ...c, items: c.items.map((i) => (i.itemId === itemTarget.itemId ? { ...i, price: v } : i)) }));
+            setDialog(null);
+          }}
+        />
+      )}
+
+      {stemTarget && (
+        <AmountDialog
+          title={`Цена за штуку: ${index.get(stemTarget.stem.itemId)?.title ?? ""}`}
+          hint={`По прайсу ${formatMoney(index.get(stemTarget.stem.itemId)?.price ?? 0)}. Новая цена — только в этом букете, на складе не меняется. Цена букета пересчитается.${stemTarget.bouquet.manualPrice !== null ? " Сейчас у букета своя цена — она станет по составу." : ""}`}
+          initial={stemTarget.stem.price ?? index.get(stemTarget.stem.itemId)?.price ?? null}
+          confirm="Готово"
+          resetLabel={stemTarget.stem.price != null ? "Вернуть цену по прайсу" : undefined}
+          onReset={() => {
+            update((c) => ({
+              ...c,
+              bouquets: c.bouquets.map((b) =>
+                b.key !== stemTarget.bouquet.key ? b : { ...b, stems: b.stems.map((s) => (s.itemId === stemTarget.stem.itemId ? { ...s, price: null } : s)) }
+              ),
+            }));
+            setDialog(null);
+          }}
+          onClose={() => setDialog(null)}
+          onDone={(v) => {
+            // Своя цена стебля имеет смысл только для цены по составу — иначе её не видно в сумме.
+            update((c) => ({
+              ...c,
+              bouquets: c.bouquets.map((b) =>
+                b.key !== stemTarget.bouquet.key
+                  ? b
+                  : { ...b, manualPrice: null, stems: b.stems.map((s) => (s.itemId === stemTarget.stem.itemId ? { ...s, price: v } : s)) }
+              ),
+            }));
+            setDialog(null);
+          }}
+        />
+      )}
+
+      {dialog?.kind === "recipes" && (
+        <RecipePicker
+          recipes={recipes}
+          index={index}
+          assembly={assembly}
+          onClose={() => setDialog(null)}
+          onPick={(r) => {
+            addRecipe(r);
             setDialog(null);
           }}
         />
@@ -455,6 +597,7 @@ export function Kassa({ mode, addVitrineId, forOrder, shiftOpen, items, groups, 
       {dialog?.kind === "toVitrine" && check.bouquets[0] && (
         <ToVitrineDialog
           forOrder={forOrder?.number ?? null}
+          initialTitle={check.bouquets[0].recipeId ? check.bouquets[0].title : ""}
           suggested={bouquetPrice(check.bouquets[0], index)}
           busy={busy}
           error={error}
