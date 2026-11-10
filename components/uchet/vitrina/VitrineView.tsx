@@ -126,7 +126,7 @@ export function VitrineView({ bouquets, withCosts }: { bouquets: VitrineBouquet[
                   </p>
                 </div>
                 <div className="mt-auto flex gap-2">
-                  <Link href={`/uchet/kassa?vitrine=${b.id}`} className={`${ui.btnPrimary} min-h-[40px] flex-1 px-3`}>
+                  <Link href={`/uchet/kassa?vitrine=${b.id}`} className={`${ui.btnSell} min-h-[40px] flex-1 px-3`}>
                     Продать
                   </Link>
                   <button type="button" onClick={() => setOpenId(b.id)} className={`${ui.btnSecondary} min-h-[40px] px-3`} aria-label="Ещё">
@@ -239,7 +239,7 @@ function BouquetPanel({ bouquet, withCosts, onClose }: { bouquet: VitrineBouquet
         </div>
 
         <div className="grid gap-2">
-          <Link href={`/uchet/kassa?vitrine=${bouquet.id}`} className={`${ui.btnPrimary} min-h-[48px]`}>
+          <Link href={`/uchet/kassa?vitrine=${bouquet.id}`} className={`${ui.btnSell} min-h-[48px]`}>
             Продать
           </Link>
           <button type="button" onClick={() => setMode("price")} className={`${ui.btnSecondary} min-h-[48px]`}>
@@ -249,7 +249,7 @@ function BouquetPanel({ bouquet, withCosts, onClose }: { bouquet: VitrineBouquet
             {busy ? "Загружаем…" : "Добавить фото"}
           </button>
           <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => addPhotos(e.target.files)} />
-          <button type="button" onClick={() => setMode("disassemble")} className={`${ui.btnSecondary} min-h-[48px]`}>
+          <button type="button" onClick={() => setMode("disassemble")} className={`${ui.btnCancel} min-h-[48px]`}>
             Разобрать — цветы на склад
           </button>
           <button type="button" onClick={() => setMode("writeoff")} className={`${ui.btnDanger} min-h-[48px]`}>
@@ -289,7 +289,7 @@ function BouquetPanel({ bouquet, withCosts, onClose }: { bouquet: VitrineBouquet
           <p className="mt-2 text-sm text-zinc-600">Цветы вернутся на склад по той цене, по которой ушли в букет. Букет пропадёт с витрины.</p>
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
           <div className="mt-4 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setMode(null)} className={ui.btnSecondary}>
+            <button type="button" onClick={() => setMode(null)} className={ui.btnCancel}>
               Отмена
             </button>
             <button type="button" disabled={busy} onClick={() => run(() => disassembleBouquet(bouquet.id), "Букет разобран — цветы на складе")} className={ui.btnPrimary}>
@@ -312,7 +312,7 @@ function BouquetPanel({ bouquet, withCosts, onClose }: { bouquet: VitrineBouquet
           </div>
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
           <div className="mt-4 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setMode(null)} className={ui.btnSecondary}>
+            <button type="button" onClick={() => setMode(null)} className={ui.btnCancel}>
               Отмена
             </button>
             <button type="button" disabled={busy} onClick={() => run(() => writeoffBouquet(bouquet.id, reason), "Букет списан")} className={ui.btnDanger}>

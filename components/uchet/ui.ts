@@ -32,8 +32,18 @@ export const ui = {
     "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-lavender-600 px-5 text-sm font-semibold text-white transition hover:bg-lavender-700 disabled:cursor-not-allowed disabled:opacity-40",
   btnSecondary:
     "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-800 transition hover:border-zinc-400 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40",
+  // Цвет по смыслу (решение владельца 10.11.2026): всё, что продаёт, —
+  // зелёное, всё, что отменяет, — малиновое. Сразу видно, какая кнопка
+  // доводит продажу до конца, а какая её обрывает.
+  btnSell:
+    "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-leaf-600 px-5 text-sm font-semibold text-white transition hover:bg-leaf-700 disabled:cursor-not-allowed disabled:opacity-40",
+  btnCancel:
+    "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-berry-200 bg-white px-5 text-sm font-semibold text-berry-700 transition hover:border-berry-600 hover:bg-berry-50 disabled:cursor-not-allowed disabled:opacity-40",
   btnDanger:
-    "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-red-600 px-5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-40",
+    "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-berry-600 px-5 text-sm font-semibold text-white transition hover:bg-berry-700 disabled:opacity-40",
+  /** Убрать строку из чека — маленький крестик тем же малиновым. */
+  btnRemove:
+    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-berry-50 text-berry-700 transition hover:bg-berry-100",
   btnGhost:
     "inline-flex min-h-[40px] items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900",
 

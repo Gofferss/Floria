@@ -54,7 +54,7 @@ export function SourceNote({ since, canSwitch, today }: { since: string | null; 
                 Вернуть Posiflora
               </button>
             )}
-            <button type="button" onClick={() => setOpen(false)} className={`${ui.btnGhost} min-h-[38px]`}>
+            <button type="button" onClick={() => setOpen(false)} className={`${ui.btnCancel} min-h-[38px]`}>
               Отмена
             </button>
           </div>

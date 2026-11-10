@@ -215,7 +215,7 @@ export function PaySheet({ amount, methods, bonus, busy, error, onPay, onClose }
         type="button"
         disabled={busy || (split && rest !== 0) || (!split && !!current?.isCash && givenN > 0 && givenN < toPay)}
         onClick={submit}
-        className="mt-5 min-h-[56px] w-full rounded-2xl bg-emerald-600 text-lg font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-40"
+        className="mt-5 min-h-[56px] w-full rounded-2xl bg-leaf-600 text-lg font-semibold text-white transition hover:bg-leaf-700 disabled:opacity-40"
       >
         {busy ? "Проводим…" : `Оплачено ${formatMoney(toPay)}`}
       </button>

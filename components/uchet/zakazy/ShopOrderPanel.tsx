@@ -179,7 +179,7 @@ export function ShopOrderPanel({ order: o, methods, shiftOpen, onClose }: Props)
                 setMode("amount");
               }}
               disabled={!shiftOpen}
-              className={`${ui.btnPrimary} mt-3 w-full`}
+              className={`${ui.btnSell} mt-3 w-full`}
             >
               Принять оплату
             </button>
@@ -287,7 +287,7 @@ export function ShopOrderPanel({ order: o, methods, shiftOpen, onClose }: Props)
                 setError(null);
                 setMode("cancel");
               }}
-              className="font-medium text-red-600 hover:text-red-700"
+              className="font-medium text-berry-600 hover:text-berry-700"
             >
               Отменить заказ
             </button>

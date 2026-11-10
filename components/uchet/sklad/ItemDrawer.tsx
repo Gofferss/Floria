@@ -261,7 +261,7 @@ export function ItemDrawer({ row, groups, reasons, withCosts, isTraining, onClos
                     </div>
                   </div>
                   <input id="dw-comment" aria-label="Комментарий" placeholder="Комментарий, если нужно" value={comment} onChange={(e) => setComment(e.target.value)} className={ui.fieldSm} />
-                  <button type="button" disabled={busy} onClick={submitWriteoff} className={ui.btnPrimary}>
+                  <button type="button" disabled={busy} onClick={submitWriteoff} className={ui.btnDanger}>
                     {busy ? "Проводим…" : qty ? `Списать ${qty} ${row.unit}` : "Списать"}
                   </button>
                 </div>

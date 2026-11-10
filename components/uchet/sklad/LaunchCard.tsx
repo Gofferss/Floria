@@ -88,7 +88,7 @@ export function LaunchCard({ locations }: { locations: Location[] }) {
                 <button type="button" disabled={busy} onClick={switchTo} className={ui.btnPrimary}>
                   {busy ? "Переключаем…" : isTraining ? "Да, запустить" : "Да, в тренировку"}
                 </button>
-                <button type="button" disabled={busy} onClick={() => setConfirm(false)} className={ui.btnSecondary}>
+                <button type="button" disabled={busy} onClick={() => setConfirm(false)} className={ui.btnCancel}>
                   Отмена
                 </button>
               </div>

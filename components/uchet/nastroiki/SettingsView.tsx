@@ -188,7 +188,7 @@ function Bonuses({ settings }: { settings: PosSettings }) {
               <button type="button" disabled={busy} onClick={() => run(() => enableBonuses(), "Бонусы ведёт Учёт").then((ok) => ok && setConfirming(false))} className={ui.btnPrimary}>
                 {busy ? "Переносим…" : "Да, перейти"}
               </button>
-              <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={ui.btnGhost}>
+              <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={ui.btnCancel}>
                 Отмена
               </button>
             </div>
@@ -278,7 +278,7 @@ function MethodForm(p: { title: string; setTitle: (v: string) => void; isCash: b
         <button type="button" disabled={p.busy || !p.title.trim()} onClick={p.onSave} className={`${ui.btnPrimary} min-h-[38px] px-4`}>
           {p.busy ? "…" : "Сохранить"}
         </button>
-        <button type="button" onClick={p.onCancel} className={`${ui.btnGhost} min-h-[38px]`}>
+        <button type="button" onClick={p.onCancel} className={`${ui.btnCancel} min-h-[38px]`}>
           Отмена
         </button>
       </div>
@@ -393,7 +393,7 @@ function ReasonForm({ name, setName, busy, onSave, onCancel, children }: { name:
         <button type="button" disabled={busy || !name.trim()} onClick={onSave} className={`${ui.btnPrimary} min-h-[38px] px-4`}>
           {busy ? "…" : "Сохранить"}
         </button>
-        <button type="button" onClick={onCancel} className={`${ui.btnGhost} min-h-[38px]`}>
+        <button type="button" onClick={onCancel} className={`${ui.btnCancel} min-h-[38px]`}>
           Отмена
         </button>
       </div>

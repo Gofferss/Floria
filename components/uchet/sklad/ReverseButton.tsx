@@ -60,7 +60,7 @@ export function ReverseButton({ id, docNo }: { id: string; docNo: string }) {
           type="button"
           onClick={handleReverse}
           disabled={busy}
-          className="rounded-full bg-red-600 px-6 py-2.5 font-display text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+          className="rounded-full bg-berry-600 px-6 py-2.5 font-display text-sm font-semibold text-white transition hover:bg-berry-700 disabled:opacity-50"
         >
           {busy ? "Сторнируем…" : "Сторнировать"}
         </button>
@@ -68,7 +68,7 @@ export function ReverseButton({ id, docNo }: { id: string; docNo: string }) {
           type="button"
           onClick={() => setOpen(false)}
           disabled={busy}
-          className="rounded-full border border-zinc-300 bg-white px-6 py-2.5 font-display text-sm font-semibold text-ink"
+          className="rounded-full border border-berry-200 bg-white px-6 py-2.5 font-display text-sm font-semibold text-berry-700 transition hover:border-berry-600 hover:bg-berry-50"
         >
           Отмена
         </button>

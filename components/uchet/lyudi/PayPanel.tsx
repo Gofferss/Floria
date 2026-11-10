@@ -195,7 +195,7 @@ function Scheme({ e, month, busy, run }: { e: EmployeePay; month: string; busy: 
             <button type="button" disabled={busy || !from} onClick={save} className={`${ui.btnPrimary} flex-1`}>
               {busy ? "…" : "Сохранить схему"}
             </button>
-            <button type="button" onClick={() => setEditing(false)} className={ui.btnGhost}>
+            <button type="button" onClick={() => setEditing(false)} className={ui.btnCancel}>
               Отмена
             </button>
           </div>

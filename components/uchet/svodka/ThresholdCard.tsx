@@ -185,7 +185,7 @@ function ExtraIncome({ t, gap }: { t: Threshold; gap: string | null }) {
           {busy ? "…" : "Сохранить"}
         </button>
         {!t.needsExtra && (
-          <button type="button" onClick={() => setOpen(false)} className={ui.btnGhost}>
+          <button type="button" onClick={() => setOpen(false)} className={ui.btnCancel}>
             Отмена
           </button>
         )}

@@ -394,7 +394,7 @@ export function OrderPanel({ order: o, onClose }: { order: WorkOrder; onClose: (
             (confirmCancel ? (
               <span className="flex items-center gap-2">
                 <span className="text-red-700">{o.paid ? "Отменить? Деньги вернуть отдельно, в кабинете ВТБ" : "Отменить заказ?"}</span>
-                <button type="button" disabled={busy} onClick={() => go("cancelled")} className="rounded-lg bg-red-600 px-3 py-1.5 font-semibold text-white">
+                <button type="button" disabled={busy} onClick={() => go("cancelled")} className="rounded-lg bg-berry-600 px-3 py-1.5 font-semibold text-white hover:bg-berry-700">
                   Да
                 </button>
                 <button type="button" onClick={() => setConfirmCancel(false)} className="rounded-lg px-3 py-1.5 text-zinc-600 hover:bg-zinc-100">
@@ -402,7 +402,7 @@ export function OrderPanel({ order: o, onClose }: { order: WorkOrder; onClose: (
                 </button>
               </span>
             ) : (
-              <button type="button" onClick={() => setConfirmCancel(true)} className="font-medium text-red-600 hover:text-red-700">
+              <button type="button" onClick={() => setConfirmCancel(true)} className="font-medium text-berry-600 hover:text-berry-700">
                 Отменить заказ
               </button>
             ))}

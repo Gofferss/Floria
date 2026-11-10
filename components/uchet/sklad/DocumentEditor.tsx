@@ -450,7 +450,7 @@ export function DocumentEditor({ docType, initial, prefill, items, suppliers, re
                 type="button"
                 onClick={() => setConfirm(null)}
                 disabled={working}
-                className="rounded-full border border-zinc-300 bg-white px-6 py-2.5 font-display text-sm font-semibold text-ink transition hover:border-gold-400"
+                className="rounded-full border border-berry-200 bg-white px-6 py-2.5 font-display text-sm font-semibold text-berry-700 transition hover:border-berry-600 hover:bg-berry-50"
               >
                 Отмена
               </button>
@@ -472,7 +472,7 @@ export function DocumentEditor({ docType, initial, prefill, items, suppliers, re
                 type="button"
                 onClick={() => setConfirm(null)}
                 disabled={working}
-                className="rounded-full border border-zinc-300 bg-white px-6 py-2.5 font-display text-sm font-semibold text-ink"
+                className="rounded-full border border-berry-200 bg-white px-6 py-2.5 font-display text-sm font-semibold text-berry-700 transition hover:border-berry-600 hover:bg-berry-50"
               >
                 Отмена
               </button>

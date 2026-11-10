@@ -92,7 +92,7 @@ function NameForm({ id, initial, onDone }: { id: string; initial: string; onDone
         <button type="button" disabled={busy} onClick={() => save(title)} className={`${ui.btnPrimary} min-h-[38px] px-4`}>
           {busy ? "…" : "OK"}
         </button>
-        <button type="button" onClick={onDone} className={`${ui.btnGhost} min-h-[38px]`}>
+        <button type="button" onClick={onDone} className={`${ui.btnCancel} min-h-[38px]`}>
           Отмена
         </button>
       </div>
