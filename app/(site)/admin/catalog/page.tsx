@@ -24,6 +24,8 @@ type AdminProductRow = {
   is_active: boolean;
   availability_mode: string | null;
   season_months: number[] | null;
+  nickname: string | null;
+  images: string[] | null;
   /** seed:/admin: — заведён у нас; всё остальное приходит из Posiflora. */
   posiflora_product_id: string | null;
   product_categories: { name: string } | { name: string }[] | null;
@@ -45,7 +47,7 @@ export default async function AdminCatalogListPage() {
 
   const { data, error } = await getSupabaseAdmin()
     .from("products")
-    .select("id, name, slug, price, is_active, availability_mode, season_months, posiflora_product_id, product_categories ( name )")
+    .select("id, name, slug, price, is_active, availability_mode, season_months, nickname, images, posiflora_product_id, product_categories ( name )")
     .order("created_at", { ascending: false });
 
   if (error) console.error("[AdminCatalogListPage]", error.message);
@@ -109,11 +111,21 @@ export default async function AdminCatalogListPage() {
                     className="border-b border-lavender-50 transition last:border-0 hover:bg-lavender-50/50"
                   >
                     <td className="px-5 py-4">
-                      <Link href={`/admin/catalog/${product.id}/edit`} className="group block">
-                        <span className="block font-display text-sm font-semibold text-ink transition group-hover:text-gold-600">
-                          {product.name}
+                      <Link href={`/admin/catalog/${product.id}/edit`} className="group flex items-center gap-3">
+                        {/* Миниатюра — чтобы узнавать букет глазами, а не по названию. */}
+                        <span className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-lavender-50 ring-1 ring-lavender-100">
+                          {product.images?.[0] && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={product.images[0]} alt="" loading="lazy" className="h-full w-full object-cover" />
+                          )}
                         </span>
-                        <span className="mt-0.5 block font-body text-xs text-ink/40">/catalog/{product.slug}</span>
+                        <span className="min-w-0">
+                          <span className="block font-display text-sm font-semibold text-ink transition group-hover:text-gold-600">
+                            {product.name}
+                          </span>
+                          {product.nickname && <span className="block font-body text-xs text-ink/55">«{product.nickname}»</span>}
+                          <span className="mt-0.5 block font-body text-xs text-ink/40">/catalog/{product.slug}</span>
+                        </span>
                       </Link>
                     </td>
                     <td className="px-5 py-4 font-body text-sm text-ink/60">{categoryName(product)}</td>

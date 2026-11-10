@@ -77,6 +77,7 @@ export function ProductCard({ product }: { product: Product }) {
         <h3 className="font-display text-sm font-semibold leading-snug text-ink sm:text-base">
           {product.name}
         </h3>
+        {product.nickname && <p className="mt-0.5 font-body text-xs text-ink/50">«{product.nickname}»</p>}
 
         <div className="mt-auto flex items-baseline gap-2 pt-3">
           <span className="font-display text-base font-semibold text-ink sm:text-lg">

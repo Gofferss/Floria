@@ -74,6 +74,8 @@ export type ProductInput = {
   sizes: ProductSize[];
   /** Месяцы (1–12), когда букет виден на сайте; null — весь год. */
   seasonMonths: number[] | null;
+  /** Маленькое название («Солнышко»); пусто — нет. */
+  nickname: string;
 };
 
 function validateProductInput(input: ProductInput): string | null {
@@ -151,6 +153,7 @@ export async function createProduct(
       pricing_mode: input.pricingMode,
       availability_source: input.availabilitySource,
       season_months: normalizeSeasonMonths(input.seasonMonths),
+      nickname: input.nickname.replace(/\s+/g, " ").trim().slice(0, 60) || null,
       images: input.images,
       attributes: buildAttributes(input),
     })
@@ -211,6 +214,7 @@ export async function updateProduct(
       pricing_mode: input.pricingMode,
       availability_source: input.availabilitySource,
       season_months: normalizeSeasonMonths(input.seasonMonths),
+      nickname: input.nickname.replace(/\s+/g, " ").trim().slice(0, 60) || null,
       images: input.images,
       attributes: buildAttributes(input),
     })
@@ -299,7 +303,7 @@ export async function getProductForEdit(id: string): Promise<AdminProductDetail 
   const { data, error } = await supabaseAdmin
     .from("products")
     .select(
-      "id, name, slug, category_id, description, price, old_price, stock_quantity, is_active, availability_mode, availability_source, pricing_mode, season_months, images, attributes"
+      "id, name, slug, category_id, description, price, old_price, stock_quantity, is_active, availability_mode, availability_source, pricing_mode, season_months, nickname, images, attributes"
     )
     .eq("id", id)
     .maybeSingle();
@@ -336,6 +340,7 @@ export async function getProductForEdit(id: string): Promise<AdminProductDetail 
     })),
     isActive: data.is_active,
     seasonMonths: normalizeSeasonMonths(data.season_months as number[] | null),
+    nickname: (data.nickname as string | null) ?? "",
     images: (data.images as string[]) ?? [],
     composition: attributes.composition ?? [],
     sizes: attributes.sizes?.length ? attributes.sizes : [{ id: "std", label: "Стандарт", priceModifier: 0 }],

@@ -45,6 +45,7 @@ export function ProductForm({ categories, product }: ProductFormProps) {
   const imagesInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(product?.name ?? "");
+  const [nickname, setNickname] = useState(product?.nickname ?? "");
   const [slug, setSlug] = useState(product?.slug ?? "");
   const [slugTouched, setSlugTouched] = useState(isEditing);
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? categories[0]?.id ?? "");
@@ -241,6 +242,7 @@ export function ProductForm({ categories, product }: ProductFormProps) {
 
     const payload = {
       name: name.trim(),
+      nickname,
       slug: slug.trim(),
       categoryId,
       description,
@@ -303,8 +305,24 @@ export function ProductForm({ categories, product }: ProductFormProps) {
               type="text"
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
-              placeholder="Например: Букет невесты «Классика»"
+              placeholder="Например: Букет из хризантемы бигуди и кустовой розы"
               className={inputClass(!!errors.name)}
+            />
+          </FormField>
+
+          <FormField
+            label="Маленькое название"
+            htmlFor="productNickname"
+            hint="Необязательно. Показывается мелко под основным: «Солнышко». Помогает различать похожие букеты."
+          >
+            <input
+              id="productNickname"
+              type="text"
+              value={nickname}
+              maxLength={60}
+              onChange={(e) => setNickname(e.target.value)}
+              placeholder="Солнышко"
+              className={inputClass()}
             />
           </FormField>
 

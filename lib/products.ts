@@ -44,6 +44,8 @@ export type Product = {
   pricingMode: PricingMode;
   /** Месяцы (1–12), когда букет виден на витрине; null — весь год. */
   seasonMonths: number[] | null;
+  /** Маленькое название букета («Солнышко») — показывается мелко рядом с основным. */
+  nickname: string | null;
 };
 
 /**
@@ -81,6 +83,7 @@ const PRODUCT_SELECT = `
   availability_mode,
   pricing_mode,
   season_months,
+  nickname,
   product_categories ( slug )
 `;
 
@@ -96,6 +99,7 @@ type ProductRow = {
   availability_mode: string | null;
   pricing_mode: string | null;
   season_months: number[] | null;
+  nickname: string | null;
   // supabase-js типизирует вложенный джойн как объект или массив в
   // зависимости от кардинальности — обрабатываем оба варианта
   product_categories: { slug: string } | { slug: string }[] | null;
@@ -163,6 +167,7 @@ function mapRow(row: ProductRow): Product {
     availabilityMode: parseAvailabilityMode(row.availability_mode),
     pricingMode: parsePricingMode(row.pricing_mode),
     seasonMonths: normalizeSeasonMonths(row.season_months),
+    nickname: row.nickname?.trim() || null,
   };
 }
 
