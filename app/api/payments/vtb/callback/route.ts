@@ -58,6 +58,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: true }, { status: 200 });
   }
 
+  // Уведомления не подписаны, адрес может дёргать кто угодно — и каждый
+  // запрос стоил бы обращения к банку (песочница отвечает 429 на частые).
+  // Поэтому в банк спрашиваем только про наш неоплаченный заказ: номер
+  // нашего вида (FL-…, см. generateOrderNumber) и такой заказ в базе есть.
+  if (typeof orderId !== "string" || !/^FL-[A-Z0-9]{6,24}$/.test(orderId)) {
+    console.warn("[vtb-callback] номер не нашего вида — пропускаю");
+    return NextResponse.json({ received: true }, { status: 200 });
+  }
+  const { data: known, error: knownError } = await getSupabaseAdmin()
+    .from("orders")
+    .select("payment_status")
+    .eq("order_number", orderId)
+    .maybeSingle();
+  if (knownError) {
+    // База не ответила — не теряем уведомление молча: сверка раз в 5 минут
+    // спросит банк сама, а здесь просим шлюз повторить.
+    console.error(`[vtb-callback] заказ ${orderId}: база не ответила:`, knownError.message);
+    return NextResponse.json({ received: false }, { status: 503 });
+  }
+  if (!known || known.payment_status === "paid") {
+    return NextResponse.json({ received: true }, { status: 200 });
+  }
+
   // Статус из уведомления только логируем — решение принимаем не по нему.
   const claimed = payload.object?.status?.value ?? payload.object?.Status?.value ?? "?";
   console.log(`[vtb-callback] заказ ${orderId}: шлюз сообщает "${claimed}", проверяем сами`);
