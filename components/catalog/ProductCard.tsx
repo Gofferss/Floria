@@ -61,6 +61,16 @@ export function ProductCard({ product }: { product: Product }) {
               Под заказ
             </span>
           )}
+          {/* «В наличии» заметнее «Под заказ»: такой букет можно получить сегодня. */}
+          {product.availabilityMode === "in_stock" && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-700 px-3 py-1 font-display text-xs font-semibold text-white shadow-sm ring-1 ring-white/50">
+              <span className="relative flex h-2 w-2" aria-hidden="true">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-lime-300 opacity-75 motion-safe:animate-ping" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-lime-300" />
+              </span>
+              В наличии
+            </span>
+          )}
         </div>
 
         <button
