@@ -10,6 +10,7 @@ import { toE164RussianPhone } from "@/lib/phone-mask";
 import { CONTACTS } from "@/lib/contacts";
 import { setSession } from "@/lib/telegram/reminders";
 import { notifyStaffTelegram } from "@/lib/n8n";
+import { refreshOrderWidget, sendOrderWidget } from "@/lib/telegram/order-widget";
 
 // ================================================================
 // Сообщения КЛИЕНТУ о его заказе.
@@ -83,6 +84,10 @@ const STATUS_MESSAGES: Record<string, (n: string) => string> = {
 };
 
 export async function notifyCustomerAboutStatus(orderId: string, status: string): Promise<void> {
+  // Живая карточка заказа меняется при любом этапе, в том числе молчаливом
+  // («готов», «отменён»): там нет сообщения, а этап на карточке должен быть верным.
+  await refreshOrderWidget(orderId);
+
   const build = STATUS_MESSAGES[status];
   if (!build) return;
 
@@ -318,13 +323,15 @@ export async function confirmOrderToCustomer(
       month: "long",
     });
 
-    await sendMessage(
-      target.chatId,
+    const text =
       `Спасибо! Мы приняли заказ <b>${target.orderNumber}</b>.\n\n` +
-        `${details.isPickup ? "🏪 Самовывоз" : "🚗 Доставка"}: ${when}, ${details.timeLabel}\n` +
-        `💰 К оплате: ${details.total} ₽\n\n` +
-        `Скоро свяжемся, чтобы подтвердить детали. Здесь же пришлём фото собранного букета до выезда курьера.`
-    );
+      `${details.isPickup ? "🏪 Самовывоз" : "🚗 Доставка"}: ${when}, ${details.timeLabel}\n` +
+      `💰 К оплате: ${details.total} ₽\n\n` +
+      `Скоро свяжемся, чтобы подтвердить детали. Здесь же пришлём фото собранного букета до выезда курьера.`;
+
+    // Живая карточка с этим же текстом в подписи; не вышло — обычное сообщение.
+    if (await sendOrderWidget(orderId, target.chatId, `${text}\n\nКарточка выше обновляется сама — этап заказа виден в ней.`)) return;
+    await sendMessage(target.chatId, text);
   } catch (error) {
     console.error(`[confirmOrderToCustomer] заказ ${orderId}:`, error);
   }

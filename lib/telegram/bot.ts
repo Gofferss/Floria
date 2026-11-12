@@ -125,6 +125,40 @@ export async function sendMessage(
 }
 
 /**
+ * Виджет — живая HTML-карточка в переписке с ботом (Bot API 10.4). Только
+ * личные чаты; HTML до 32 КБ / 4 КБ после zlib, данные до 1024 байт.
+ * Старые версии Telegram показывают вместо карточки подпись (caption).
+ */
+export async function sendWidget(params: {
+  chatId: number;
+  html: string;
+  chatData: string;
+  caption?: string;
+  disableNotification?: boolean;
+}): Promise<{ message_id: number }> {
+  return callTelegramApi("sendWidget", {
+    chat_id: params.chatId,
+    html: params.html,
+    chat_data: params.chatData,
+    caption: params.caption,
+    parse_mode: params.caption ? "HTML" : undefined,
+    protect_content: true,
+    disable_notification: params.disableNotification,
+  });
+}
+
+/** Новые данные карточки — Telegram перерисует её молча, без нового сообщения. */
+export async function editMessageWidgetData(chatId: number, messageId: number, chatData: string): Promise<void> {
+  try {
+    await callTelegramApi("editMessageWidgetData", { chat_id: chatId, message_id: messageId, chat_data: chatData });
+  } catch (error) {
+    // Данные не изменились — это не сбой.
+    if (error instanceof TelegramApiError && /not modified/i.test(error.message)) return;
+    throw error;
+  }
+}
+
+/**
  * photoUrl — публичный URL (например, из Supabase Storage), Telegram сам
  * скачивает файл по ссылке, отдельно загружать байты не нужно. caption
  * ограничен Telegram'ом 1024 символами — длиннее API вернёт ошибку.
