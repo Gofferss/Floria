@@ -28,7 +28,7 @@ const currency = new Intl.NumberFormat("ru-RU", {
 
 export const metadata: Metadata = {
   title: "Доставка и оплата — студия цветов Floria",
-  description: `Доставка букетов по Симферополю — ${DELIVERY_PRICE} ₽, интервалы с 8:00 до 22:00, самовывоз бесплатно. Оплата наличными, картой и через СБП.`,
+  description: `Доставка букетов по Симферополю — от ${DELIVERY_PRICE} ₽, интервалы с 8:00 до 22:00, самовывоз бесплатно. Оплата наличными, картой и через СБП.`,
 };
 
 // Интервалы берём из тех же констант, что и форма оформления заказа,
@@ -49,7 +49,7 @@ export default function DeliveryPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
           <HighlightCard
             icon={<TruckIcon className="h-6 w-6" />}
-            title={currency.format(DELIVERY_PRICE)}
+            title={`от ${currency.format(DELIVERY_PRICE)}`}
             subtitle="доставка по Симферополю"
           />
           <HighlightCard
@@ -74,7 +74,7 @@ export default function DeliveryPage() {
             <InfoBlock title="Зона и стоимость">
               <ul className="flex flex-col gap-3">
                 <Bullet>
-                  Доставляем по Симферополю в пределах города — стоимость{" "}
+                  Доставляем по Симферополю в пределах города — стоимость от{" "}
                   {currency.format(DELIVERY_PRICE)}.
                 </Bullet>
                 <Bullet>
