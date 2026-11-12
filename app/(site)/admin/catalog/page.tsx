@@ -28,8 +28,50 @@ type AdminProductRow = {
   images: string[] | null;
   /** seed:/admin: — заведён у нас; всё остальное приходит из Posiflora. */
   posiflora_product_id: string | null;
-  product_categories: { name: string } | { name: string }[] | null;
+  product_categories: { name: string; slug: string } | { name: string; slug: string }[] | null;
 };
+
+// Разделы списка. «В наличии» и «Под заказ» — среди тех, что не скрыты:
+// скрытые собраны в своём разделе, чтобы не путались с видимыми.
+const VIEWS = [
+  { id: "all", label: "Все" },
+  { id: "site", label: "На сайте" },
+  { id: "in_stock", label: "В наличии" },
+  { id: "made_to_order", label: "Под заказ" },
+  { id: "season", label: "Не сезон" },
+  { id: "hidden", label: "Скрытые" },
+  { id: "no_photo", label: "Без фото" },
+] as const;
+type ViewId = (typeof VIEWS)[number]["id"];
+
+function inView(row: AdminProductRow, view: ViewId): boolean {
+  const inSeason = isInSeason(row.season_months);
+  const mode = row.availability_mode === "made_to_order" ? "made_to_order" : "in_stock";
+  switch (view) {
+    case "all":
+      return true;
+    case "site":
+      return row.is_active && inSeason;
+    case "in_stock":
+    case "made_to_order":
+      return row.is_active && mode === view;
+    case "season":
+      return row.is_active && !inSeason;
+    case "hidden":
+      return !row.is_active;
+    case "no_photo":
+      return !row.images?.[0];
+  }
+}
+
+/** Нижний регистр, «ё» → «е», без кавычек — как в поиске на сайте. */
+function normalize(text: string): string {
+  return text.toLowerCase().replace(/ё/g, "е").replace(/[«»"'.,!?;:()—–-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function categoryOf(row: AdminProductRow): { name: string; slug: string } | null {
+  return (Array.isArray(row.product_categories) ? row.product_categories[0] : row.product_categories) ?? null;
+}
 
 const currency = new Intl.NumberFormat("ru-RU", {
   style: "currency",
@@ -38,21 +80,48 @@ const currency = new Intl.NumberFormat("ru-RU", {
 });
 
 function categoryName(row: AdminProductRow): string {
-  const category = Array.isArray(row.product_categories) ? row.product_categories[0] : row.product_categories;
-  return category?.name ?? "Без категории";
+  return categoryOf(row)?.name ?? "Без категории";
 }
 
-export default async function AdminCatalogListPage() {
+type SearchParams = { view?: string; cat?: string; q?: string };
+
+export default async function AdminCatalogListPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requireStaffUser();
+  const params = await searchParams;
 
   const { data, error } = await getSupabaseAdmin()
     .from("products")
-    .select("id, name, slug, price, is_active, availability_mode, season_months, nickname, images, posiflora_product_id, product_categories ( name )")
+    .select("id, name, slug, price, is_active, availability_mode, season_months, nickname, images, posiflora_product_id, product_categories ( name, slug )")
     .order("created_at", { ascending: false });
 
   if (error) console.error("[AdminCatalogListPage]", error.message);
 
-  const products = (data ?? []) as unknown as AdminProductRow[];
+  const allProducts = (data ?? []) as unknown as AdminProductRow[];
+
+  const view: ViewId = VIEWS.some((v) => v.id === params.view) ? (params.view as ViewId) : "all";
+  const categories = [...new Map(allProducts.map((p) => categoryOf(p)).filter((c): c is { name: string; slug: string } => !!c).map((c) => [c.slug, c])).values()];
+  const cat = categories.some((c) => c.slug === params.cat) ? params.cat! : "";
+  const query = (params.q ?? "").slice(0, 100);
+  const words = normalize(query).split(" ").filter(Boolean);
+
+  // Счётчики разделов — с учётом выбранной категории и поиска, чтобы цифра
+  // совпадала с тем, что откроется по нажатию.
+  const matchesCatAndQuery = (p: AdminProductRow) =>
+    (!cat || categoryOf(p)?.slug === cat) &&
+    (words.length === 0 || words.every((w) => normalize(`${p.name} ${p.nickname ?? ""} ${p.slug}`).includes(w)));
+  const narrowed = allProducts.filter(matchesCatAndQuery);
+  const counts = Object.fromEntries(VIEWS.map((v) => [v.id, narrowed.filter((p) => inView(p, v.id)).length])) as Record<ViewId, number>;
+  const products = narrowed.filter((p) => inView(p, view));
+
+  const href = (next: Partial<SearchParams>) => {
+    const merged = { view: view === "all" ? "" : view, cat, q: query, ...next };
+    const qs = new URLSearchParams(Object.entries(merged).filter(([, v]) => v) as [string, string][]).toString();
+    return qs ? `/admin/catalog?${qs}` : "/admin/catalog";
+  };
+  const chip = (active: boolean) =>
+    `inline-flex items-center gap-1.5 rounded-full px-4 py-2 font-body text-sm transition ${
+      active ? "bg-lavender-600 text-white" : "bg-white text-ink/70 ring-1 ring-lavender-100 hover:bg-lavender-50"
+    }`;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
@@ -73,11 +142,63 @@ export default async function AdminCatalogListPage() {
         </Link>
       </div>
 
-      {products.length === 0 ? (
+      {allProducts.length > 0 && (
+        <div className="mb-6 flex flex-col gap-3">
+          <nav aria-label="Разделы каталога" className="flex flex-wrap gap-2">
+            {VIEWS.map((v) => (
+              <Link key={v.id} href={href({ view: v.id === "all" ? "" : v.id })} className={chip(view === v.id)} aria-current={view === v.id ? "page" : undefined}>
+                {v.label}
+                <span className={view === v.id ? "text-white/75" : "text-ink/40"}>{counts[v.id]}</span>
+              </Link>
+            ))}
+          </nav>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={href({ cat: "" })} className={chip(!cat)}>Все категории</Link>
+            {categories.map((c) => (
+              <Link key={c.slug} href={href({ cat: c.slug })} className={chip(cat === c.slug)}>{c.name}</Link>
+            ))}
+            {/* Поиск — обычная форма: работает и без скриптов, а раздел и категория едут скрытыми полями. */}
+            <form action="/admin/catalog" className="ml-auto flex min-w-0 flex-1 basis-56 gap-2">
+              {view !== "all" && <input type="hidden" name="view" value={view} />}
+              {cat && <input type="hidden" name="cat" value={cat} />}
+              <input
+                id="admin-catalog-q"
+                type="search"
+                name="q"
+                defaultValue={query}
+                placeholder="Название, маленькое название или адрес"
+                aria-label="Поиск по каталогу"
+                className="min-w-0 flex-1 rounded-full border border-lavender-100 bg-white px-4 py-2 font-body text-sm text-ink placeholder:text-ink/35 focus:border-lavender-300 focus:outline-none"
+              />
+              <button type="submit" className="rounded-full bg-lavender-600 px-4 py-2 font-body text-sm text-white transition hover:bg-lavender-700">
+                Найти
+              </button>
+            </form>
+          </div>
+          <p className="font-body text-xs text-ink/45">
+            Показано {products.length} из {allProducts.length}
+            {(view !== "all" || cat || query) && (
+              <>
+                {" · "}
+                <Link href="/admin/catalog" className="underline underline-offset-2 hover:text-gold-600">сбросить</Link>
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      {allProducts.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-lavender-200 px-6 py-20 text-center">
           <p className="font-display text-lg font-semibold text-ink">Пока нет ни одного товара</p>
           <p className="mt-1 max-w-sm mx-auto font-body text-sm text-ink/50">
             Нажмите «Добавить букет», чтобы создать первую карточку вручную, или дождитесь синка с Posiflora.
+          </p>
+        </div>
+      ) : products.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-lavender-200 px-6 py-16 text-center">
+          <p className="font-display text-lg font-semibold text-ink">Здесь букетов нет</p>
+          <p className="mt-1 font-body text-sm text-ink/50">
+            Выберите другой раздел или <Link href="/admin/catalog" className="underline underline-offset-2">сбросьте фильтры</Link>.
           </p>
         </div>
       ) : (
