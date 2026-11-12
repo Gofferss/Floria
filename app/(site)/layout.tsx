@@ -3,6 +3,7 @@ import { Footer } from "@/components/layout/Footer";
 import { CartProvider } from "@/components/cart/CartProvider";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { LocalBusinessSchema } from "@/components/seo/LocalBusinessSchema";
+import { DevNoticePopup } from "@/components/info/DevNoticePopup";
 
 /**
  * Обвязка магазина: шапка, подвал, корзина, разметка для поисковиков.
@@ -21,6 +22,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
         <main>{children}</main>
         <Footer />
         <CartDrawer />
+        <DevNoticePopup />
       </CartProvider>
     </>
   );

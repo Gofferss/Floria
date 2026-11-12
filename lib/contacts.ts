@@ -37,6 +37,10 @@ export const CONTACTS = {
   /** Телеграм-канал с каталогом букетов */
   telegram: "https://t.me/floria_simferopol",
 
+  /** Написать студии в Telegram: чат с аккаунтом основного номера.
+   *  Откроется, только если в Telegram этого номера разрешено находить по номеру. */
+  telegramChat: "https://t.me/+79782401777",
+
   /** Бот-напоминальщик (не канал выше!) — там же теперь можно привязать
    *  номер и получать код входа в Telegram вместо СМС. */
   telegramBot: "https://t.me/floria_flowers_crimea_bot",
