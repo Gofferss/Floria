@@ -37,6 +37,9 @@ const GRACE_MS = 60 * 1000;
 // Telegram не отправить триста сообщений подряд и не поймать его лимиты.
 const BATCH = 20;
 
+// С этого момента студии сообщают о каждом заказе, а не только об оплаченных.
+const NOTIFY_EVERY_ORDER_SINCE = "2026-11-12T16:15:00Z";
+
 function isValidSecret(received: string | null, expected: string): boolean {
   if (!received) return false;
   const a = Buffer.from(received);
@@ -51,12 +54,14 @@ async function retryOrders(cutoff: string): Promise<Outcome> {
   const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("orders")
-    .select("id, order_number, customer_name, customer_phone, delivery_date, total_amount, is_pickup")
+    .select("id, order_number, customer_name, customer_phone, delivery_date, total_amount, is_pickup, payment_status, staff_notify_details")
     .is("staff_notified_at", null)
-    // Только оплаченные: при обязательной онлайн-оплате неоплаченный заказ —
-    // брошенная корзина, и досылать о ней уведомления значит спамить студию
-    // каждой недодуманной покупкой.
-    .eq("payment_status", "paid")
+    // С 12.11.2026 студии сообщают о каждом заказе при оформлении, а не
+    // только об оплаченных (см. app/api/orders/route.ts) — значит и
+    // досылаем любые. Заказы до этого момента не трогаем: тогда
+    // неоплаченные намеренно не сообщались, и студия уже разобрала их сама.
+    .gte("created_at", NOTIFY_EVERY_ORDER_SINCE)
+    .not("status", "in", "(cancelled,completed)")
     .lt("created_at", cutoff)
     .order("created_at", { ascending: true })
     .limit(BATCH);
@@ -71,9 +76,11 @@ async function retryOrders(cutoff: string): Promise<Outcome> {
       `⚠️ <b>Заказ ${escapeTelegramHtml(order.order_number)} — сообщаем с опозданием</b>\n\n` +
         `О нём не удалось сообщить сразу при оформлении.\n\n` +
         `Клиент: ${escapeTelegramHtml(order.customer_name ?? "—")}, ${escapeTelegramHtml(order.customer_phone ?? "—")}\n` +
-        `${order.is_pickup ? "🏪 Самовывоз" : "🚚 Доставка"}: ${escapeTelegramHtml(String(order.delivery_date ?? "—"))}\n` +
-        `Сумма: ${order.total_amount} ₽\n\n` +
-        `Полный состав — в админке.`
+        // Подробности собраны при оформлении и уже экранированы.
+        (order.staff_notify_details
+          ? `${order.staff_notify_details}\n`
+          : `${order.is_pickup ? "🏪 Самовывоз" : "🚚 Доставка"}: ${escapeTelegramHtml(String(order.delivery_date ?? "—"))}\nПолный состав — в админке.\n`) +
+        `Сумма: ${order.total_amount} ₽ — ${order.payment_status === "paid" ? "оплачено" : "<b>не оплачено, позвоните клиенту</b>"}`
     );
 
     if (ok) {

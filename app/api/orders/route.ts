@@ -8,6 +8,7 @@ import { toE164RussianPhone } from "@/lib/phone-mask";
 import { notifyN8n, notifyStaffTelegram } from "@/lib/n8n";
 import { escapeTelegramHtml } from "@/lib/telegram/bot";
 import { confirmOrderToCustomer } from "@/lib/telegram/order-notify";
+import { isVtbSandbox } from "@/lib/payments/vtb";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { CARD_TEXT_MAX } from "@/lib/card-message";
@@ -512,6 +513,33 @@ export async function POST(request: Request) {
     .from("orders")
     .update({ staff_notify_details: detailsForStaff })
     .eq("id", order.id);
+
+  // ================================================================
+  // Студии — сразу, при оформлении (с 12.11.2026).
+  //
+  // Раньше студия узнавала о заказе только после онлайн-оплаты. Но оплата
+  // на сайте ещё в тестовом режиме ВТБ, а экран успеха при сбое оплаты
+  // обещает клиенту «мы позвоним». 12.11 так потерялся настоящий заказ:
+  // платёж не создался, клиент ждал, студия не знала, пока он сам не
+  // написал. Теперь о каждом заказе сообщаем сразу, с пометкой об оплате,
+  // а об оплате приходит отдельное короткое сообщение (lib/payments/confirm.ts).
+  // Не дошло — отметки staff_notified_at нет, задача добора дошлёт.
+  // ================================================================
+  const sandbox = isVtbSandbox();
+  const staffNotified = await notifyStaffTelegram(
+    `🆕 <b>Новый заказ ${escapeTelegramHtml(order.order_number)}</b> — ждёт оплаты\n\n` +
+      `Клиент: ${escapeTelegramHtml(payload.customerName)}, ${escapeTelegramHtml(payload.customerPhone)}\n` +
+      detailsForStaff +
+      `\nСумма: ${totalAmount} ₽\n\n` +
+      (sandbox
+        ? "⚠️ Онлайн-оплата на сайте пока в тестовом режиме: настоящих денег не придёт. Позвоните клиенту и договоритесь об оплате."
+        : "Об оплате придёт отдельное сообщение. Если его нет через час — позвоните клиенту.")
+  );
+  if (staffNotified) {
+    await supabaseAdmin.from("orders").update({ staff_notified_at: new Date().toISOString() }).eq("id", order.id);
+  } else {
+    console.error(`[orders] заказ ${order.order_number}: студии не сообщили — дошлёт задача добора`);
+  }
 
   return NextResponse.json({
     orderId: order.id,

@@ -33,7 +33,7 @@ export async function confirmPaidOrder(orderNumber: string, paidAmount: number):
   const { data: order, error } = await supabaseAdmin
     .from("orders")
     .select(
-      "id, order_number, customer_id, customer_name, customer_phone, total_amount, bonus_used, payment_status, delivery_date, is_pickup, staff_notify_details"
+      "id, order_number, customer_id, customer_name, customer_phone, total_amount, bonus_used, payment_status, delivery_date, is_pickup, staff_notify_details, staff_notified_at"
     )
     .eq("order_number", orderNumber)
     .maybeSingle();
@@ -117,14 +117,24 @@ export async function confirmPaidOrder(orderNumber: string, paidAmount: number):
     : "\nСостав и адрес — в админке.";
 
   const sandbox = isVtbSandbox();
-  const staffNotified = await notifyStaffTelegram(
-    (sandbox ? `🧪 <b>ТЕСТОВАЯ ОПЛАТА</b> — ВТБ в тестовом режиме, настоящих денег нет.\nНе выполнять, если это не ваша проверка.\n\n` : "") +
-      `💰 <b>ОПЛАЧЕН заказ ${escapeTelegramHtml(order.order_number)}</b>\n\n` +
-      `Клиент: ${escapeTelegramHtml(order.customer_name ?? "—")}, ` +
-      `${escapeTelegramHtml(order.customer_phone ?? "—")}\n` +
-      details +
-      (sandbox ? `\nСумма: ${expected} ₽ — <b>тестовая оплата, денег нет</b>` : `\nСумма: ${expected} ₽ — <b>оплачено онлайн</b>`)
-  );
+  const testNote = sandbox ? `🧪 <b>ТЕСТОВАЯ ОПЛАТА</b> — ВТБ в тестовом режиме, настоящих денег нет.\n\n` : "";
+  // С 12.11.2026 о самом заказе студия узнаёт при оформлении — тогда здесь
+  // хватает короткой строки, полный состав второй раз не нужен.
+  const staffNotified = order.staff_notified_at
+    ? await notifyStaffTelegram(
+        testNote +
+          `💰 <b>Заказ ${escapeTelegramHtml(order.order_number)} оплачен</b> — ${expected} ₽` +
+          (sandbox ? " (тест, денег нет)" : " онлайн") +
+          `\nКлиент: ${escapeTelegramHtml(order.customer_name ?? "—")}. Состав и адрес — в сообщении о новом заказе и в админке.`
+      )
+    : await notifyStaffTelegram(
+        testNote +
+          `💰 <b>ОПЛАЧЕН заказ ${escapeTelegramHtml(order.order_number)}</b>\n\n` +
+          `Клиент: ${escapeTelegramHtml(order.customer_name ?? "—")}, ` +
+          `${escapeTelegramHtml(order.customer_phone ?? "—")}\n` +
+          details +
+          (sandbox ? `\nСумма: ${expected} ₽ — <b>тестовая оплата, денег нет</b>` : `\nСумма: ${expected} ₽ — <b>оплачено онлайн</b>`)
+      );
 
   if (staffNotified) {
     await supabaseAdmin.from("orders").update({ staff_notified_at: now }).eq("id", order.id);
