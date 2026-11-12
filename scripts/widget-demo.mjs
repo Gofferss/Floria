@@ -27,12 +27,18 @@ function e164(raw) {
 const src = await (await fetch(`https://raw.githubusercontent.com/Gofferss/Floria/${sha}/lib/telegram/order-widget-html.ts`)).text();
 const html = src.slice(src.indexOf("`") + 1, src.lastIndexOf("`"));
 
-const owners = await (await fetch(`${DB}/staff?select=phone&role=eq.owner&is_active=eq.true`, { headers: dbh })).json();
-const phones = owners.map((o) => e164(o.phone)).filter(Boolean);
-if (!phones.length) throw new Error("у владельца в учёте нет телефона");
-const bots = await (await fetch(`${DB}/bot_users?select=chat_id&is_blocked=eq.false&phone=in.(${phones.map(encodeURIComponent).join(",")})`, { headers: dbh })).json();
-if (!bots.length) throw new Error("владелец не подключён к боту");
-const chatId = bots[0].chat_id;
+// Чат владельца: явно (C=<chat_id> — тот, куда Coolify шлёт владельцу тревоги)
+// или по телефону учётной записи с ролью owner.
+async function ownerChat() {
+  if (env.C && /^\d+$/.test(env.C)) return Number(env.C);
+  const owners = await (await fetch(`${DB}/staff?select=phone&role=eq.owner&is_active=eq.true`, { headers: dbh })).json();
+  const phones = owners.map((o) => e164(o.phone)).filter(Boolean);
+  if (!phones.length) throw new Error("у владельца в учёте нет телефона — передайте C=<chat_id>");
+  const bots = await (await fetch(`${DB}/bot_users?select=chat_id&is_blocked=eq.false&phone=in.(${phones.map(encodeURIComponent).join(",")})`, { headers: dbh })).json();
+  if (!bots.length) throw new Error("владелец не подключён к боту");
+  return bots[0].chat_id;
+}
+const chatId = await ownerChat();
 
 const base = {
   n: "FL-ПРИМЕР",
