@@ -38,6 +38,7 @@ export default async function UchetLayout({ children }: { children: React.ReactN
 
   return (
     <AppShell
+      renderedAt={new Date().toISOString()}
       staffName={staff.fullName}
       isOwner={isOwnerRole(staff.role)}
       isCourier={staff.role === "courier"}

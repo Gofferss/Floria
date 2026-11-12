@@ -7,9 +7,12 @@ import { COURIER_NAV, OWNER_NAV, WORK_NAV, type NavItem } from "@/components/uch
 import { ToastProvider } from "@/components/uchet/Toast";
 import { EmployeeSwitcher } from "@/components/uchet/EmployeeSwitcher";
 import { OutboxStatus } from "@/components/uchet/kassa/OutboxStatus";
+import { useOfflineSupport } from "@/components/uchet/useOfflineSupport";
 import type { PickableEmployee } from "@/lib/uchet/people";
 
 type Props = {
+  /** Когда сервер собрал этот экран. Без связи экран может быть сохранённой копией — тогда видно, на какое время данные. */
+  renderedAt: string;
   staffName: string;
   isOwner: boolean;
   isCourier: boolean;
@@ -98,7 +101,7 @@ function RailItem({ item, active }: { item: NavItem; active: boolean }) {
  * флорист должен видеть всегда: режим учёта, смену и наличные в кассе,
  * связь, время и кто работает.
  */
-export function AppShell({ staffName, isOwner, isCourier, isTraining, employee, needsEmployee, pickable, shift, children }: Props) {
+export function AppShell({ renderedAt, staffName, isOwner, isCourier, isTraining, employee, needsEmployee, pickable, shift, children }: Props) {
   const pathname = usePathname();
   const online = useOnline();
   const clock = useClock();
@@ -106,6 +109,8 @@ export function AppShell({ staffName, isOwner, isCourier, isTraining, employee, 
 
   const work = isCourier ? COURIER_NAV : WORK_NAV;
   const items = isOwner ? [...work, ...OWNER_NAV] : work;
+  useOfflineSupport(items.filter((i) => i.ready).map((i) => i.href));
+  const dataTime = timeFmt.format(new Date(renderedAt));
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const current = items.find((i) => isActive(i.href));
 
@@ -174,9 +179,16 @@ export function AppShell({ staffName, isOwner, isCourier, isTraining, employee, 
                 </Link>
               )}
               {!isCourier && <OutboxStatus />}
-              <span className="flex items-center gap-1.5 text-zinc-500" title={online ? "Связь есть" : "Нет связи с сервером"}>
+              <span
+                className={`flex items-center gap-1.5 ${online ? "text-zinc-500" : "rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700"}`}
+                title={
+                  online
+                    ? "Связь есть"
+                    : `Нет связи. Остатки и заказы — на ${dataTime}. Продажи сохраняются на айпаде и уйдут сами, когда связь вернётся.`
+                }
+              >
                 <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-red-500"}`} aria-hidden="true" />
-                <span className="hidden lg:inline">{online ? "на связи" : "нет связи"}</span>
+                {online ? <span className="hidden lg:inline">на связи</span> : <span>нет связи · данные на {dataTime}</span>}
               </span>
               <span className="hidden tabular-nums text-zinc-500 sm:inline">{clock}</span>
               {canSwitch ? (
