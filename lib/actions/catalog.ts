@@ -9,6 +9,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { searchInventoryItems, recomputeProductAvailability, type InventoryItemOption } from "@/lib/posiflora";
 import { parsePricingMode, type AvailabilityMode, type PricingMode, type ProductSize } from "@/lib/products";
 import { normalizeSeasonMonths } from "@/lib/season";
+import { isValidProductSlug } from "@/lib/posiflora/slug";
 
 // ================================================================
 // Server Actions для ручного редактирования каталога в /admin/catalog.
@@ -81,7 +82,7 @@ export type ProductInput = {
 function validateProductInput(input: ProductInput): string | null {
   if (!input.name.trim()) return "Укажите название букета";
   if (!input.slug.trim()) return "Укажите URL-адрес (slug)";
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug.trim())) {
+  if (!isValidProductSlug(input.slug.trim())) {
     return "URL-адрес может содержать только латиницу, цифры и дефисы";
   }
   if (!input.categoryId) return "Выберите категорию";
@@ -193,11 +194,16 @@ export async function updateProduct(
   const validationError = validateProductInput(input);
   if (validationError) return { success: false, error: validationError };
 
-  const { data: oldProduct } = await getSupabaseAdmin()
+  const { data: oldProduct, error: oldError } = await getSupabaseAdmin()
     .from("products")
-    .select("slug")
+    .select("slug, attributes")
     .eq("id", id)
     .maybeSingle();
+  // Без прежних attributes сохранение стёрло бы то, чего нет в форме
+  // (прежние названия для отката, связь с рецептом, источник букета).
+  if (oldError) return { success: false, error: "Не удалось прочитать букет — попробуйте ещё раз" };
+  if (!oldProduct) return { success: false, error: "Букет не найден — возможно, его удалили" };
+  const keptAttributes = (oldProduct.attributes ?? {}) as Record<string, unknown>;
 
   const { data: product, error } = await getSupabaseAdmin()
     .from("products")
@@ -216,7 +222,7 @@ export async function updateProduct(
       season_months: normalizeSeasonMonths(input.seasonMonths),
       nickname: input.nickname.replace(/\s+/g, " ").trim().slice(0, 60) || null,
       images: input.images,
-      attributes: buildAttributes(input),
+      attributes: { ...keptAttributes, ...buildAttributes(input) },
     })
     .eq("id", id)
     .select("id, slug")
@@ -242,7 +248,7 @@ export async function updateProduct(
   revalidatePath("/admin/catalog");
   revalidatePath("/catalog");
   revalidatePath(`/catalog/${product.slug}`);
-  if (oldProduct && oldProduct.slug !== product.slug) revalidatePath(`/catalog/${oldProduct.slug}`);
+  if (oldProduct.slug !== product.slug) revalidatePath(`/catalog/${oldProduct.slug}`);
 
   return { success: true, data: { id: product.id, slug: product.slug } };
 }

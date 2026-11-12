@@ -20,6 +20,7 @@ import { inputClass } from "@/components/ui/input-styles";
 import { ArrowRightIcon, CloseIcon } from "@/components/ui/Icons";
 import { ProductSeasonField } from "@/components/admin/catalog/ProductSeasonField";
 import { normalizeSeasonMonths } from "@/lib/season";
+import { isValidProductSlug } from "@/lib/posiflora/slug";
 
 type Errors = Partial<Record<"name" | "slug" | "categoryId" | "price", string>>;
 
@@ -221,7 +222,7 @@ export function ProductForm({ categories, product }: ProductFormProps) {
     const next: Errors = {};
     if (!name.trim()) next.name = "Укажите название";
     if (!slug.trim()) next.slug = "Укажите URL-адрес";
-    else if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug.trim())) {
+    else if (!isValidProductSlug(slug.trim())) {
       next.slug = "Только латиница, цифры и дефисы";
     }
     if (!categoryId) next.categoryId = "Выберите категорию";
@@ -235,7 +236,12 @@ export function ProductForm({ categories, product }: ProductFormProps) {
 
   async function handleSubmit() {
     if (status === "submitting") return;
-    if (!validate()) return;
+    if (!validate()) {
+      // Поле с ошибкой может быть далеко вверху — без этой строки кнопка
+      // «Сохранить» будто молча не работает.
+      setFormError("Не сохранено: исправьте поля, отмеченные красным");
+      return;
+    }
 
     setStatus("submitting");
     setFormError(null);
@@ -747,6 +753,12 @@ export function ProductForm({ categories, product }: ProductFormProps) {
           {status !== "submitting" && <ArrowRightIcon className="h-4 w-4" />}
         </button>
       </div>
+      {/* Та же ошибка у кнопки: верх формы при сохранении обычно не виден. */}
+      {formError && (
+        <p role="alert" className="text-right font-body text-sm text-red-700">
+          {formError}
+        </p>
+      )}
     </div>
   );
 }

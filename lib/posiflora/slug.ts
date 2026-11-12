@@ -30,12 +30,24 @@ function transliterate(text: string): string {
  * уже расшаренные/проиндексированные ссылки на товар.
  */
 export function generateProductSlug(title: string, posifloraId: string): string {
+  // Обрезка по 60 символам может оставить дефис на конце — убираем его
+  // после обрезки, иначе с суффиксом выходит «…-pionovidnoy--636».
   const base = transliterate(title)
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
+    .slice(0, 60)
+    .replace(/^-+|-+$/g, "");
 
   const suffix = posifloraId.replace(/-/g, "").slice(0, 6);
 
   return `${base || "tovar"}-${suffix}`;
+}
+
+/**
+ * Допустимый адрес букета: латиница, цифры и дефисы, без дефиса по краям.
+ * Двойной дефис разрешён: такие адреса уже есть у букетов из Telegram
+ * («…-pionovidnoy--636»), и строгая проверка не давала сохранить в них
+ * ни одной правки. Менять сами адреса нельзя — сломаются ссылки.
+ */
+export function isValidProductSlug(slug: string): boolean {
+  return /^[a-z0-9]+(?:-+[a-z0-9]+)*$/.test(slug);
 }
