@@ -31,7 +31,8 @@
 // Posiflora точнее моей оценки по суммам движений, поэтому берём её.
 //
 // Переменные окружения:
-//   POSIFLORA_API_URL, POSIFLORA_USERNAME, POSIFLORA_PASSWORD
+//   POSIFLORA_API_URL и POSIFLORA_API_KEY (ключ интеграции, заголовок X-Api-Key);
+//   без ключа — по-старому POSIFLORA_USERNAME, POSIFLORA_PASSWORD
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 //
 // Запуск:
@@ -67,8 +68,10 @@ const SHOP_STORE_ID = "5be91e82-40fd-4a86-9ea0-67aa17be54f0";
 // ---------------------------------------------------------------
 
 let token = null;
+const API_KEY = (process.env.POSIFLORA_API_KEY || "").trim();
 
 async function login() {
+  if (API_KEY) return; // ключ интеграции: входить не нужно
   const r = await fetch(`${POSI}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/vnd.api+json" },
@@ -88,8 +91,9 @@ async function login() {
 async function posi(path) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const r = await fetch(`${POSI}${path}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.api+json" },
+      headers: { ...(API_KEY ? { "X-Api-Key": API_KEY } : { Authorization: `Bearer ${token}` }), Accept: "application/vnd.api+json" },
     });
+    if (r.status === 401 && API_KEY) throw new Error("Posiflora не приняла ключ API (401) — проверьте POSIFLORA_API_KEY");
     if (r.status === 401 && attempt === 0) {
       await login();
       continue;
