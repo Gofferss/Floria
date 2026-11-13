@@ -1,5 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { isVtbSandbox } from "@/lib/payments/vtb";
+import { onlinePaymentEnabled } from "@/lib/payments/online";
+import { telegramLinkedPhones } from "@/lib/telegram/bot-link";
 
 // ================================================================
 // Заказы для учёта: что собрать и отвезти — по дням.
@@ -54,6 +56,11 @@ export type WorkOrder = {
   closedAt: string | null;
   /** Почему отменён — у заказов магазина. */
   cancelReason: string | null;
+  /**
+   * Клиент подключил Telegram-бота: фото букета и этапы заказа уйдут ему в бот.
+   * null — не удалось узнать.
+   */
+  telegram: boolean | null;
 };
 
 const ACTIVE: WorkOrderStatus[] = ["new", "confirmed", "assembling", "ready", "delivering"];
@@ -79,6 +86,8 @@ type Row = {
   order_number: string;
   status: WorkOrderStatus;
   payment_status: string;
+  /** Пишет только платёжный шлюз: пусто — оплату отметили вручную или её нет. */
+  payment_provider_id: string | null;
   is_pickup: boolean;
   delivery_date: string;
   delivery_time_from: string | null;
@@ -109,7 +118,7 @@ const SELECT =
   "id, order_number, status, payment_status, is_pickup, delivery_date, delivery_time_from, delivery_time_to, delivery_address, " +
   "delivery_apartment, delivery_entrance, delivery_floor, delivery_intercom_code, recipient_name, recipient_phone, customer_name, " +
   "customer_phone, is_recipient_self, card_text, is_anonymous, courier_comment, admin_comment, total_amount, florist_accepted_at, assembled_photos, " +
-  "assembled_photo_sent_at, updated_at, order_items(product_name, quantity)";
+  "assembled_photo_sent_at, updated_at, payment_provider_id, order_items(product_name, quantity)";
 
 function toWorkOrder(r: Row): WorkOrder {
   const extra = [
@@ -127,7 +136,8 @@ function toWorkOrder(r: Row): WorkOrder {
     number: r.order_number,
     status: r.status,
     paid: r.payment_status === "paid",
-    testPayment: r.payment_status === "paid" && isVtbSandbox(),
+    // «Тестовая» — только оплата через песочницу банка; отмеченная вручную — настоящая.
+    testPayment: r.payment_status === "paid" && !!r.payment_provider_id && isVtbSandbox(),
     paidAmount: r.payment_status === "paid" ? total : 0,
     wishes: null,
     channel: "site",
@@ -154,6 +164,7 @@ function toWorkOrder(r: Row): WorkOrder {
     // У заказа сайта отдельной отметки нет — берём последнее изменение.
     closedAt: r.status === "completed" || r.status === "cancelled" ? r.updated_at : null,
     cancelReason: null,
+    telegram: null,
   };
 }
 
@@ -231,7 +242,23 @@ function toShopOrder(r: ShopRow): WorkOrder {
     items: bouquets.map((b) => ({ name: b.title, qty: 1 })),
     closedAt: r.closed_at,
     cancelReason: r.cancel_reason,
+    telegram: null,
   };
+}
+
+/** Отметить, кто из клиентов подключил бота, — одним запросом на весь список. */
+async function withTelegram(list: WorkOrder[]): Promise<WorkOrder[]> {
+  const linked = await telegramLinkedPhones(list.map((o) => o.customerPhone));
+  return list.map((o) => ({ ...o, telegram: linked ? linked.has(o.customerPhone) : null }));
+}
+
+/**
+ * Ждёт ли неоплаченный заказ сайта оплаты, прежде чем его собирать. Только
+ * пока на сайте есть онлайн-оплата: без неё (lib/payments/online.ts) оплату
+ * согласуют по телефону, и неоплаченный заказ — обычная работа.
+ */
+function waitsForOnlinePayment(o: WorkOrder): boolean {
+  return o.source === "site" && !o.paid && onlinePaymentEnabled();
 }
 
 const byTime = (a: WorkOrder, b: WorkOrder) =>
@@ -260,15 +287,17 @@ export async function listWorkOrders(
   ]);
   for (const r of [active, done, shopActive, shopDone]) if (r.error) throw new Error(`Заказы: ${r.error.message}`);
 
-  const site = ((active.data ?? []) as unknown as Row[]).map(toWorkOrder);
-  const shop = ((shopActive.data ?? []) as unknown as ShopRow[]).map(toShopOrder);
+  const site = await withTelegram(((active.data ?? []) as unknown as Row[]).map(toWorkOrder));
+  const shop = await withTelegram(((shopActive.data ?? []) as unknown as ShopRow[]).map(toShopOrder));
   return {
-    work: [...site.filter((o) => o.paid), ...shop].sort(byTime),
-    awaitingPayment: site.filter((o) => !o.paid).sort(byTime),
-    doneToday: [
-      ...((done.data ?? []) as unknown as Row[]).map(toWorkOrder),
-      ...((shopDone.data ?? []) as unknown as ShopRow[]).map(toShopOrder),
-    ].sort(byTime),
+    work: [...site.filter((o) => !waitsForOnlinePayment(o)), ...shop].sort(byTime),
+    awaitingPayment: site.filter(waitsForOnlinePayment).sort(byTime),
+    doneToday: (
+      await withTelegram([
+        ...((done.data ?? []) as unknown as Row[]).map(toWorkOrder),
+        ...((shopDone.data ?? []) as unknown as ShopRow[]).map(toShopOrder),
+      ])
+    ).sort(byTime),
   };
 }
 
@@ -276,25 +305,31 @@ export async function listWorkOrders(
 export async function getShopOrder(id: string): Promise<WorkOrder | null> {
   const { data, error } = await getSupabaseAdmin().from("pos_orders").select(SHOP_SELECT).eq("id", id).maybeSingle();
   if (error) throw new Error(`Заказ: ${error.message}`);
-  return data ? toShopOrder(data as unknown as ShopRow) : null;
+  return data ? (await withTelegram([toShopOrder(data as unknown as ShopRow)]))[0] : null;
 }
 
 /**
- * Доставки курьеру. С сайта — только оплаченные: брошенную корзину не
- * везут. Из магазина — все: остаток курьер может взять при получении.
+ * Доставки курьеру. С сайта — только оплаченные, пока на сайте есть
+ * онлайн-оплата: брошенную корзину не везут. Без онлайн-оплаты оплату
+ * согласуют по телефону — везут все. Из магазина — все: остаток курьер
+ * может взять при получении.
  */
 export async function listDeliveries(days: string[], locationId: string): Promise<WorkOrder[]> {
   const admin = getSupabaseAdmin();
+  let siteQuery = admin.from("orders").select(SELECT).eq("is_pickup", false).in("status", ACTIVE).in("delivery_date", days);
+  if (onlinePaymentEnabled()) siteQuery = siteQuery.eq("payment_status", "paid");
   const [site, shop] = await Promise.all([
-    admin.from("orders").select(SELECT).eq("is_pickup", false).eq("payment_status", "paid").in("status", ACTIVE).in("delivery_date", days),
+    siteQuery,
     admin.from("pos_orders").select(SHOP_SELECT).eq("location_id", locationId).eq("is_pickup", false).in("status", ACTIVE).in("delivery_date", days),
   ]);
   if (site.error) throw new Error(`Доставки: ${site.error.message}`);
   if (shop.error) throw new Error(`Доставки: ${shop.error.message}`);
-  return [
-    ...((site.data ?? []) as unknown as Row[]).map(toWorkOrder),
-    ...((shop.data ?? []) as unknown as ShopRow[]).map(toShopOrder),
-  ].sort(byTime);
+  return (
+    await withTelegram([
+      ...((site.data ?? []) as unknown as Row[]).map(toWorkOrder),
+      ...((shop.data ?? []) as unknown as ShopRow[]).map(toShopOrder),
+    ])
+  ).sort(byTime);
 }
 
 // ---------------------------------------------------------------

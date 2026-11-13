@@ -7,6 +7,8 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { OrderStatusControl } from "@/components/admin/orders/OrderStatusControl";
 import { FloristAcceptedCheckbox } from "@/components/admin/orders/FloristAcceptedCheckbox";
 import { AssembledPhoto } from "@/components/admin/orders/AssembledPhoto";
+import { MarkOrderPaid } from "@/components/admin/orders/MarkOrderPaid";
+import { isTelegramLinked } from "@/lib/telegram/bot-link";
 import type { OrderStatus } from "@/lib/actions/orders";
 
 export const metadata: Metadata = {
@@ -24,6 +26,10 @@ type OrderDetail = {
   assembled_photos: string[] | null;
   assembled_photo_sent_at: string | null;
   payment_status: string;
+  payment_method: string | null;
+  payment_provider_id: string | null;
+  paid_at: string | null;
+  customer_widget_message_id: number | null;
   customer_name: string;
   customer_phone: string;
   recipient_name: string;
@@ -99,6 +105,16 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
 
   const detail = order as OrderDetail;
   const orderItems = (items ?? []) as OrderItemRow[];
+  // Подключён ли заказчик к боту — от этого зависит, дойдут ли фото и этапы.
+  const telegram = await isTelegramLinked(detail.customer_phone);
+  const paidHow =
+    detail.payment_status !== "paid"
+      ? null
+      : detail.payment_provider_id
+        ? "онлайн на сайте"
+        : detail.payment_method === "cash"
+          ? "наличными (отметили вручную)"
+          : "переводом / по СБП (отметили вручную)";
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
@@ -130,6 +146,16 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
           <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-ink/50">Клиент</h2>
           <p className="mt-3 font-body text-sm text-ink">{detail.customer_name}</p>
           <p className="font-body text-sm text-ink/60">{detail.customer_phone}</p>
+          {telegram === true && (
+            <p className="mt-2 inline-flex rounded-full bg-emerald-50 px-3 py-1 font-body text-xs font-semibold text-emerald-800">
+              Telegram-бот подключён{detail.customer_widget_message_id ? " · живая карточка заказа у клиента" : ""}
+            </p>
+          )}
+          {telegram === false && (
+            <p className="mt-2 inline-flex rounded-full bg-amber-50 px-3 py-1 font-body text-xs font-semibold text-amber-900">
+              Telegram-бот не подключён — фото и этапы через бот не дойдут
+            </p>
+          )}
 
           {!detail.is_recipient_self && (
             <>
@@ -182,6 +208,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
         orderId={detail.id}
         photoUrls={detail.assembled_photos ?? []}
         sentAt={detail.assembled_photo_sent_at ?? null}
+        telegram={telegram}
       />
 
       <section className="mt-6 rounded-3xl border border-lavender-100 bg-white p-6">
@@ -221,6 +248,18 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
           <div className="flex justify-between font-display text-base font-semibold text-ink">
             <span>Итого</span>
             <span>{currency.format(detail.total_amount)}</span>
+          </div>
+          <div className="mt-2 flex flex-col gap-2">
+            {paidHow ? (
+              <p className="font-body text-sm font-semibold text-emerald-700">Оплачено {paidHow}</p>
+            ) : detail.status === "cancelled" ? (
+              <p className="font-body text-sm text-ink/50">Не оплачен, заказ отменён</p>
+            ) : (
+              <>
+                <p className="font-body text-sm font-semibold text-red-700">Не оплачено — отметьте, когда клиент заплатит</p>
+                <MarkOrderPaid orderId={detail.id} total={Number(detail.total_amount)} />
+              </>
+            )}
           </div>
         </div>
       </section>

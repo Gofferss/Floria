@@ -13,6 +13,8 @@ type Props = {
   orderId: string;
   photoUrls: string[];
   sentAt: string | null;
+  /** Клиент подключил Telegram-бота (true), нет (false), не удалось узнать (null). */
+  telegram?: boolean | null;
 };
 
 const sentFormatter = new Intl.DateTimeFormat("ru-RU", {
@@ -47,7 +49,7 @@ function photoCount(n: number): string {
  * действий Next есть потолок на размер тела (8 МБ), и три фотографии с
  * телефона его перебьют. Поштучно это ещё и видно по счётчику.
  */
-export function AssembledPhoto({ orderId, photoUrls, sentAt }: Props) {
+export function AssembledPhoto({ orderId, photoUrls, sentAt, telegram = null }: Props) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
@@ -142,6 +144,18 @@ export function AssembledPhoto({ orderId, photoUrls, sentAt }: Props) {
         сразу несколько файлов.
       </p>
 
+      {telegram === true && (
+        <p className="mt-3 inline-flex rounded-xl bg-emerald-50 px-3 py-2 font-body text-sm text-emerald-800">
+          Клиент подключил Telegram-бота — фото и этапы заказа придут ему туда.
+        </p>
+      )}
+      {telegram === false && (
+        <p className="mt-3 max-w-prose rounded-xl bg-amber-50 px-3 py-2 font-body text-sm text-amber-900">
+          Клиент не подключил Telegram-бота — отправить фото через бот некуда. Позвоните клиенту или
+          пришлите фото сами в мессенджер по его номеру. Загрузить фото всё равно можно: оно останется в заказе.
+        </p>
+      )}
+
       <div className="mt-5 flex flex-wrap gap-3">
         {photoUrls.map((url, i) => (
           <div key={url} className="relative">
@@ -194,13 +208,15 @@ export function AssembledPhoto({ orderId, photoUrls, sentAt }: Props) {
             <button
               type="button"
               onClick={handleSend}
-              disabled={working || !!sentAt}
+              disabled={working || !!sentAt || telegram === false}
               className="rounded-full bg-gold-500 px-5 py-2.5 font-display text-sm font-semibold text-white transition hover:bg-gold-600 disabled:opacity-50"
             >
               {busy === "send"
                 ? "Отправляем…"
                 : sentAt
                   ? "Уже отправлено"
+                  : telegram === false
+                    ? "Некуда отправить — нет Telegram"
                   : photoUrls.length > 1
                     ? `Отправить клиенту (${photoUrls.length})`
                     : "Отправить клиенту"}

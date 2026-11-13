@@ -5,6 +5,7 @@ import { canUseSiteOrders } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import type { OrderStatus } from "@/lib/actions/orders";
 import { FloristAcceptedCheckbox } from "@/components/admin/orders/FloristAcceptedCheckbox";
+import { telegramLinkedPhones } from "@/lib/telegram/bot-link";
 
 export const metadata: Metadata = {
   title: "Заказы — Админка Floria",
@@ -24,6 +25,7 @@ type AdminOrderRow = {
   delivery_date: string;
   created_at: string;
   florist_accepted_at: string | null;
+  payment_status: string;
 };
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -60,13 +62,15 @@ export default async function AdminOrdersListPage() {
   const { data, error } = await getSupabaseAdmin()
     .from("orders")
     .select(
-      "id, order_number, customer_name, customer_phone, status, total_amount, delivery_date, created_at, florist_accepted_at"
+      "id, order_number, customer_name, customer_phone, status, total_amount, delivery_date, created_at, florist_accepted_at, payment_status"
     )
     .order("created_at", { ascending: false });
 
   if (error) console.error("[AdminOrdersListPage]", error.message);
 
   const orders = (data ?? []) as AdminOrderRow[];
+  // Кто из заказчиков подключил Telegram-бота — одним запросом на весь список.
+  const linked = await telegramLinkedPhones(orders.map((o) => o.customer_phone));
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
@@ -126,6 +130,18 @@ export default async function AdminOrdersListPage() {
                     <td className="px-5 py-4">
                       <span className="block font-body text-sm text-ink/70">{order.customer_name}</span>
                       <span className="block font-body text-xs text-ink/40">{order.customer_phone}</span>
+                      <span className="mt-1 flex flex-wrap gap-1">
+                        {linked && (
+                          <span
+                            className={`rounded-full px-2 py-0.5 font-body text-[11px] font-semibold ${linked.has(order.customer_phone) ? "bg-sky-50 text-sky-800" : "bg-lavender-50 text-ink/45"}`}
+                          >
+                            {linked.has(order.customer_phone) ? "в Telegram" : "без Telegram"}
+                          </span>
+                        )}
+                        {order.payment_status !== "paid" && order.status !== "cancelled" && (
+                          <span className="rounded-full bg-red-50 px-2 py-0.5 font-body text-[11px] font-semibold text-red-700">не оплачен</span>
+                        )}
+                      </span>
                     </td>
                     <td className="px-5 py-4 font-body text-sm text-ink/60">
                       {dateFormatter.format(new Date(order.delivery_date))}

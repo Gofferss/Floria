@@ -10,6 +10,7 @@ import { ui } from "@/components/uchet/ui";
 import { useToast } from "@/components/uchet/Toast";
 import { CloseButton, Panel } from "@/components/uchet/Overlay";
 import { AssembledPhoto } from "@/components/admin/orders/AssembledPhoto";
+import { MarkOrderPaid } from "@/components/admin/orders/MarkOrderPaid";
 import type { PaymentMethodOption } from "@/lib/uchet/pos-queries";
 import { ShopOrderPanel } from "@/components/uchet/zakazy/ShopOrderPanel";
 import { ShopOrderForm } from "@/components/uchet/zakazy/ShopOrderForm";
@@ -113,6 +114,14 @@ function OrderCard({ o, urgent, overdue, onOpen }: { o: WorkOrder; urgent: boole
         <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-500">{o.source === "site" ? "с сайта" : "магазин"}</span>
         {overdue && <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-800">просрочен</span>}
         {o.photos.length > 0 && <span className="rounded-full bg-lavender-50 px-2 py-0.5 text-lavender-700">фото {o.photosSentAt ? "отправлено" : "есть"}</span>}
+        {o.telegram !== null && (
+          <span
+            className={`rounded-full px-2 py-0.5 ${o.telegram ? "bg-sky-50 text-sky-800" : "bg-zinc-100 font-medium text-zinc-500"}`}
+            title={o.telegram ? "Клиент подключил Telegram-бота: фото и этапы придут ему туда" : "Клиент не подключил Telegram-бота: фото и этапы через бот не дойдут"}
+          >
+            {o.telegram ? "в Telegram" : "без Telegram"}
+          </span>
+        )}
       </span>
     </button>
   );
@@ -284,6 +293,8 @@ export function OrderPanel({ order: o, onClose }: { order: WorkOrder; onClose: (
             {o.paid ? `Оплачено ${formatMoney(o.total)} — деньги не брать` : `Не оплачено · ${formatMoney(o.total)}`}
           </p>
         )}
+        {/* Заказ сайта оплатили не через сайт (перевод, наличные) — отметить, чтобы курьер не просил деньги снова. */}
+        {o.source === "site" && !o.paid && o.status !== "cancelled" && <MarkOrderPaid orderId={o.id} total={o.total} />}
 
         <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 text-sm">
           <dt className="text-zinc-500">Получатель</dt>
@@ -304,6 +315,14 @@ export function OrderPanel({ order: o, onClose }: { order: WorkOrder; onClose: (
               </dd>
             </>
           )}
+          <dt className="text-zinc-500">Telegram</dt>
+          <dd className={o.telegram === false ? "text-amber-800" : undefined}>
+            {o.telegram === true
+              ? "подключён — фото и этапы придут клиенту в бот"
+              : o.telegram === false
+                ? "не подключён — фото и новости по заказу сообщайте сами"
+                : "не удалось проверить"}
+          </dd>
           {!o.isPickup && (
             <>
               <dt className="text-zinc-500">Куда</dt>
@@ -383,7 +402,7 @@ export function OrderPanel({ order: o, onClose }: { order: WorkOrder; onClose: (
         {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
 
         <div className="border-t border-zinc-100 pt-4">
-          <AssembledPhoto orderId={o.id} photoUrls={o.photos} sentAt={o.photosSentAt} />
+          <AssembledPhoto orderId={o.id} photoUrls={o.photos} sentAt={o.photosSentAt} telegram={o.telegram} />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 pt-4 text-sm">
