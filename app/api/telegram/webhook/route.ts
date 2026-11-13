@@ -1,3 +1,4 @@
+import { answerPanelQuery, isPanelChat, sendOwnerPanel, type WidgetQuery } from "@/lib/telegram/owner-panel";
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import {
@@ -214,6 +215,8 @@ type TelegramUpdate = {
     message?: { message_id: number; chat: { id: number } };
     data?: string;
   };
+  /** Запрос из живой карточки (виджета) — панель владельца, lib/telegram/owner-panel.ts. */
+  widget_query?: WidgetQuery;
 };
 
 /**
@@ -595,6 +598,17 @@ async function handleMessage(message: NonNullable<TelegramUpdate["message"]>): P
     return;
   }
 
+  // Панель владельца: заново прислать только в чат, который уже записан как
+  // чат владельца (bot_users тут ни при чём — /panel не выдаёт данные чужим).
+  if (text === "/panel" || text.startsWith("/panel@")) {
+    if (await isPanelChat(chatId)) {
+      await sendOwnerPanel(chatId);
+    } else {
+      await sendMessage(chatId, "Эта команда — для владельца студии.");
+    }
+    return;
+  }
+
   if (text.startsWith("/start")) {
     // /start тоже отвечает на текст пользователя — тот же приём: убрать
     // старое рабочее сообщение (если было) и прислать новое рядом с текущим.
@@ -905,6 +919,8 @@ export async function POST(request: Request) {
       await handleMessage(update.message);
     } else if (update.callback_query) {
       await handleCallbackQuery(update.callback_query);
+    } else if (update.widget_query) {
+      await answerPanelQuery(update.widget_query);
     }
   } catch (error) {
     console.error("[telegram webhook]", error);

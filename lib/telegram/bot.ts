@@ -135,6 +135,8 @@ export async function sendWidget(params: {
   chatData: string;
   caption?: string;
   disableNotification?: boolean;
+  /** Разрешить карточке спрашивать бота (TelegramWidget.request → widget_query). */
+  allowQueries?: boolean;
 }): Promise<{ message_id: number }> {
   return callTelegramApi("sendWidget", {
     chat_id: params.chatId,
@@ -144,7 +146,22 @@ export async function sendWidget(params: {
     parse_mode: params.caption ? "HTML" : undefined,
     protect_content: true,
     disable_notification: params.disableNotification,
+    allow_queries: params.allowQueries,
   });
+}
+
+/** Ответ на запрос карточки (до 1024 байт). Telegram ждёт его не дольше 15 секунд. */
+export async function answerWidgetQuery(queryId: string, data: string): Promise<void> {
+  await callTelegramApi("answerWidgetQuery", { widget_query_id: queryId, data });
+}
+
+/** Закрепить сообщение в чате (без звука). */
+export async function pinChatMessage(chatId: number, messageId: number): Promise<void> {
+  await callTelegramApi("pinChatMessage", { chat_id: chatId, message_id: messageId, disable_notification: true });
+}
+
+export async function unpinChatMessage(chatId: number, messageId: number): Promise<void> {
+  await callTelegramApi("unpinChatMessage", { chat_id: chatId, message_id: messageId });
 }
 
 /** Новые данные карточки — Telegram перерисует её молча, без нового сообщения. */
