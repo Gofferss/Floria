@@ -8,6 +8,7 @@ import { IMAGE_TYPE_ERROR, imageExtension } from "@/lib/image-upload";
 import { canUseSiteOrders } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { reverseSiteOrderBonuses } from "@/lib/bonuses";
+import { refreshOrderWidget } from "@/lib/telegram/order-widget";
 
 // ================================================================
 // Управление статусом заказа из /admin/orders. Заказы с сайта пока не
@@ -269,5 +270,46 @@ export async function sendAssembledPhoto(orderId: string): Promise<ActionResult>
     .eq("id", orderId);
 
   revalidatePath(`/admin/orders/${orderId}`);
+  return { success: true };
+}
+
+/**
+ * Оплату получили не через сайт: наличными или переводом/по СБП на номер.
+ *
+ * Пока на сайте нет онлайн-оплаты (lib/payments/online.ts), заказ с сайта
+ * оплачивают по договорённости — и без отметки курьер видел бы «не оплачено»
+ * и мог попросить деньги второй раз. Ставится только на неоплаченный заказ;
+ * отличить от оплаты через банк можно по пустому payment_provider_id (его
+ * пишет только шлюз). Бонусы Учёта здесь не двигаем — они начисляются при
+ * оплате через сайт и в кассе.
+ */
+export async function markOrderPaid(orderId: string, method: "cash" | "sbp"): Promise<ActionResult> {
+  const staff = await requireStaff();
+  if (method !== "cash" && method !== "sbp") return { success: false, error: "Неизвестный способ оплаты" };
+
+  const now = new Date().toISOString();
+  const { data, error } = await getSupabaseAdmin()
+    .from("orders")
+    .update({ payment_status: "paid", paid_at: now, payment_checked_at: now, payment_method: method })
+    .eq("id", orderId)
+    .eq("payment_status", "pending")
+    .neq("status", "cancelled")
+    .select("order_number");
+  if (error) {
+    console.error("[markOrderPaid]", error.message);
+    return { success: false, error: "Не удалось отметить оплату — попробуйте ещё раз" };
+  }
+  if (!data || data.length === 0) {
+    return { success: false, error: "Заказ уже оплачен или отменён — обновите страницу" };
+  }
+  console.log(`[markOrderPaid] заказ ${data[0].order_number}: оплата ${method} отмечена (${staff.fullName})`);
+
+  // Живая карточка у клиента — «оплачен».
+  await refreshOrderWidget(orderId);
+
+  revalidatePath("/admin/orders");
+  revalidatePath(`/admin/orders/${orderId}`);
+  revalidatePath("/uchet/zakazy");
+  revalidatePath("/uchet/dostavki");
   return { success: true };
 }

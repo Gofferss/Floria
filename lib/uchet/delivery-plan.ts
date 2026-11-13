@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { isVtbSandbox } from "@/lib/payments/vtb";
+import { onlinePaymentEnabled } from "@/lib/payments/online";
 import { CONTACTS } from "@/lib/contacts";
 import { geocode, hasDadataKey } from "@/lib/geo/dadata";
 import type { Point } from "@/lib/uchet/route";
@@ -61,7 +62,7 @@ export async function listCouriers(): Promise<Courier[]> {
 const SITE_SELECT =
   "id, order_number, status, payment_status, delivery_date, delivery_time_from, delivery_time_to, delivery_city, delivery_address, " +
   "delivery_apartment, delivery_entrance, delivery_floor, delivery_intercom_code, recipient_name, recipient_phone, courier_comment, card_text, " +
-  "is_anonymous, delivery_lat, delivery_lon, geo_quality, courier_staff_id, route_seq, total_amount";
+  "is_anonymous, delivery_lat, delivery_lon, geo_quality, courier_staff_id, route_seq, total_amount, payment_provider_id";
 
 const SHOP_SELECT =
   "id, order_no, status, delivery_date, time_from, time_to, delivery_address, delivery_details, recipient_name, recipient_phone, customer_name, " +
@@ -69,6 +70,10 @@ const SHOP_SELECT =
   "pos_sale_lines(amount, pos_sales(status))";
 
 type SiteRow = {
+  /** Пишет только платёжный шлюз: пусто — оплату отметили вручную или её нет. */
+  payment_provider_id: string | null;
+  payment_status: string;
+  total_amount: number | string;
   id: string;
   order_number: string;
   status: string;
@@ -133,8 +138,11 @@ export function withCity(address: string, city: string | null): string {
  */
 export async function loadDayStops(day: string, locationId: string): Promise<PlanStop[]> {
   const admin = getSupabaseAdmin();
+  // Без онлайн-оплаты на сайте оплату согласуют по телефону — в план идут все заказы сайта.
+  let siteQuery = admin.from("orders").select(SITE_SELECT).eq("is_pickup", false).eq("delivery_date", day).neq("status", "cancelled");
+  if (onlinePaymentEnabled()) siteQuery = siteQuery.eq("payment_status", "paid");
   const [site, shop] = await Promise.all([
-    admin.from("orders").select(SITE_SELECT).eq("is_pickup", false).eq("payment_status", "paid").eq("delivery_date", day).neq("status", "cancelled"),
+    siteQuery,
     admin.from("pos_orders").select(SHOP_SELECT).eq("location_id", locationId).eq("is_pickup", false).eq("delivery_date", day).neq("status", "cancelled"),
   ]);
   if (site.error) throw new Error(`Доставки сайта: ${site.error.message}`);
@@ -170,8 +178,10 @@ export async function loadDayStops(day: string, locationId: string): Promise<Pla
       courierComment: r.courier_comment,
       cardText: r.card_text,
       isAnonymous: r.is_anonymous === true,
-      due: 0,
-      testPayment: isVtbSandbox(),
+      // Без онлайн-оплаты заказ сайта может быть не оплачен — тогда курьер берёт всю сумму.
+      due: r.payment_status === "paid" ? 0 : Number(r.total_amount) || 0,
+      // «Тестовая» — только оплата через песочницу банка, не отмеченная вручную.
+      testPayment: r.payment_status === "paid" && !!r.payment_provider_id && isVtbSandbox(),
     });
   }
   for (const r of (shop.data ?? []) as unknown as ShopRow[]) {

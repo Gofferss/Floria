@@ -206,6 +206,8 @@ async function siteOnline(from: string, to: string) {
     .from("orders")
     .select("total_amount")
     .eq("payment_status", "paid")
+    // Только через банк: оплату, отмеченную вручную (наличные, перевод), сюда не считаем.
+    .not("payment_provider_id", "is", null)
     .gte("paid_at", dayStart(from))
     .lt("paid_at", dayStart(addDays(to, 1)))
     .limit(20000);
