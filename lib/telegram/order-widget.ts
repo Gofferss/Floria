@@ -16,8 +16,8 @@ import { ORDER_WIDGET_HTML } from "@/lib/telegram/order-widget-html";
 // уходят как раньше. Поэтому ошибки только пишутся в журнал.
 // ================================================================
 
-/** Включается после того, как владелец посмотрит карточку (12.11.2026). */
-const LAUNCHED = false;
+/** Владелец посмотрел пример и включил (14.11.2026). */
+const LAUNCHED = true;
 /** Аварийный выключатель без выкладки кода: TELEGRAM_ORDER_WIDGETS=off в Coolify. */
 export const ORDER_WIDGETS_ENABLED = LAUNCHED && process.env.TELEGRAM_ORDER_WIDGETS !== "off";
 
