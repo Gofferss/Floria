@@ -8,7 +8,7 @@ import { toE164RussianPhone } from "@/lib/phone-mask";
 import { notifyN8n, notifyStaffTelegram } from "@/lib/n8n";
 import { escapeTelegramHtml } from "@/lib/telegram/bot";
 import { confirmOrderToCustomer } from "@/lib/telegram/order-notify";
-import { isVtbSandbox } from "@/lib/payments/vtb";
+import { onlinePaymentEnabled } from "@/lib/payments/online";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { CARD_TEXT_MAX } from "@/lib/card-message";
@@ -525,15 +525,15 @@ export async function POST(request: Request) {
   // а об оплате приходит отдельное короткое сообщение (lib/payments/confirm.ts).
   // Не дошло — отметки staff_notified_at нет, задача добора дошлёт.
   // ================================================================
-  const sandbox = isVtbSandbox();
+  const online = onlinePaymentEnabled();
   const staffNotified = await notifyStaffTelegram(
     `🆕 <b>Новый заказ ${escapeTelegramHtml(order.order_number)}</b> — ждёт оплаты\n\n` +
       `Клиент: ${escapeTelegramHtml(payload.customerName)}, ${escapeTelegramHtml(payload.customerPhone)}\n` +
       detailsForStaff +
       `\nСумма: ${totalAmount} ₽\n\n` +
-      (sandbox
-        ? "⚠️ Онлайн-оплата на сайте пока в тестовом режиме: настоящих денег не придёт. Позвоните клиенту и договоритесь об оплате."
-        : "Об оплате придёт отдельное сообщение. Если его нет через час — позвоните клиенту.")
+      (online
+        ? "Об оплате придёт отдельное сообщение. Если его нет через час — позвоните клиенту."
+        : "💳 Онлайн-оплаты на сайте пока нет: позвоните клиенту или напишите в Telegram, подтвердите заказ и договоритесь об оплате.")
   );
   if (staffNotified) {
     await supabaseAdmin.from("orders").update({ staff_notified_at: new Date().toISOString() }).eq("id", order.id);

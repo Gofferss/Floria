@@ -42,7 +42,12 @@ type FormErrors = Partial<
   >
 >;
 
-export function CheckoutView() {
+/**
+ * onlinePayment — принимает ли сайт оплату онлайн (lib/payments/online.ts).
+ * Нет — заказ оформляется без перехода в банк, студия звонит или пишет в
+ * Telegram и договаривается об оплате.
+ */
+export function CheckoutView({ onlinePayment }: { onlinePayment: boolean }) {
   const { items, subtotal, clear } = useCart();
 
   const [customerName, setCustomerName] = useState("");
@@ -252,7 +257,7 @@ export function CheckoutView() {
     if (!consentGiven) return;
     if (!validate()) return;
 
-    trackEvent("button_click", "Перейти к оплате");
+    trackEvent("button_click", onlinePayment ? "Перейти к оплате" : "Оформить заказ");
     setStatus("submitting");
     setSubmitError(null);
 
@@ -311,6 +316,12 @@ export function CheckoutView() {
       // ================================================================
       clear();
 
+      // Онлайн-оплаты пока нет — заказ принят, дальше студия на связи сама.
+      if (!onlinePayment) {
+        setStatus("success");
+        return;
+      }
+
       const payResponse = await fetch("/api/payments/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -354,6 +365,11 @@ export function CheckoutView() {
             Заказ сохранён, но открыть оплату не получилось. Мы позвоним вам на{" "}
             {customerPhone} и поможем оплатить — или наберите нас сами, номер внизу
             страницы.
+          </p>
+        ) : !onlinePayment ? (
+          <p className="mt-3 font-body text-base leading-relaxed text-ink/60">
+            Скоро позвоним на {customerPhone} или напишем в Telegram, чтобы подтвердить
+            заказ и договориться об оплате. Спасибо, что выбрали Floria!
           </p>
         ) : (
           <p className="mt-3 font-body text-base leading-relaxed text-ink/60">
@@ -511,6 +527,7 @@ export function CheckoutView() {
             isLoggedIn={isLoggedIn}
             total={total}
             onSubmit={handleSubmit}
+            onlinePayment={onlinePayment}
             isSubmitting={status === "submitting"}
             consentGiven={consentGiven}
             onConsentChange={setConsentGiven}

@@ -28,6 +28,8 @@ type OrderSummaryPanelProps = {
   isLoggedIn: boolean;
   total: number;
   onSubmit: () => void;
+  /** Есть онлайн-оплата — кнопка ведёт к ней; нет — просто оформляет заказ. */
+  onlinePayment: boolean;
   isSubmitting: boolean;
   consentGiven: boolean;
   onConsentChange: (value: boolean) => void;
@@ -52,6 +54,7 @@ export function OrderSummaryPanel({
   isLoggedIn,
   total,
   onSubmit,
+  onlinePayment,
   isSubmitting,
   consentGiven,
   onConsentChange,
@@ -233,12 +236,14 @@ export function OrderSummaryPanel({
         disabled={isSubmitting || !consentGiven}
         className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-gold-500 px-6 py-4 font-display text-sm font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-gold-600 disabled:cursor-not-allowed disabled:opacity-70"
       >
-        {isSubmitting ? "Оформляем..." : "Перейти к оплате"}
+        {isSubmitting ? "Оформляем..." : onlinePayment ? "Перейти к оплате" : "Оформить заказ"}
         {!isSubmitting && <ArrowRightIcon className="h-4 w-4" />}
       </button>
 
       <p className="mt-3 text-center font-body text-xs text-ink/40">
-        Оплата картой, Т-Pay или через СБП на следующем шаге
+        {onlinePayment
+          ? "Оплата картой, Т-Pay или через СБП на следующем шаге"
+          : "Оплата — после подтверждения: позвоним или напишем в Telegram"}
       </p>
     </div>
   );

@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { createPaymentOrder } from "@/lib/payments/vtb";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { CONTACTS } from "@/lib/contacts";
+import { onlinePaymentEnabled } from "@/lib/payments/online";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,15 @@ const START_LIMIT = 10;
 const START_WINDOW_MS = 10 * 60 * 1000;
 
 export async function POST(request: Request) {
+  // Пока у сайта нет боевых ключей ВТБ, платёж не создаём вовсе: тестовая
+  // «оплата» без денег могла бы убедить покупателя, что он заплатил.
+  if (!onlinePaymentEnabled()) {
+    return NextResponse.json(
+      { error: "Онлайн-оплата пока не подключена — мы позвоним или напишем в Telegram и договоримся об оплате." },
+      { status: 409 }
+    );
+  }
+
   const limit = rateLimit(`pay-start:${clientIp(request)}`, START_LIMIT, START_WINDOW_MS);
   if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
 

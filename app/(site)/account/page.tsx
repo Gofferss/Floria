@@ -1,3 +1,4 @@
+import { onlinePaymentEnabled } from "@/lib/payments/online";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -209,7 +210,7 @@ export default async function AccountPage() {
           <div>
             <h2 className="font-display text-lg font-semibold text-ink">Мои заказы</h2>
             <div className="mt-4">
-              <OrderHistoryList orders={orders} />
+              <OrderHistoryList orders={orders} onlinePayment={onlinePaymentEnabled()} />
             </div>
           </div>
 

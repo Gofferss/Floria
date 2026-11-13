@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/info/PageHeader";
 import { CardIcon, QrIcon, CheckIcon, PhoneIcon } from "@/components/ui/Icons";
 import { CONTACTS } from "@/lib/contacts";
+import { onlinePaymentEnabled } from "@/lib/payments/online";
 
 export const metadata: Metadata = {
   title: "Оплата и безопасность платежей — студия цветов Floria",
@@ -27,6 +28,9 @@ export const metadata: Metadata = {
 
 const PAYMENT_SYSTEMS = ["МИР", "VISA", "Mastercard"];
 
+// Пометка «оплата подключается» зависит от ключей банка на сервере — считаем на каждый заход.
+export const dynamic = "force-dynamic";
+
 export default function PaymentPage() {
   return (
     <>
@@ -37,6 +41,14 @@ export default function PaymentPage() {
       />
 
       <div className="mx-auto max-w-3xl px-4 pb-20 sm:px-6 lg:px-8">
+        {!onlinePaymentEnabled() && (
+          <p className="mb-10 rounded-2xl border border-gold-400/40 bg-gold-300/20 px-5 py-4 font-body text-sm leading-relaxed text-ink/80">
+            Онлайн-оплату на сайте сейчас подключаем. Пока оформите заказ как обычно — мы позвоним
+            или напишем в Telegram, подтвердим заказ и договоримся об оплате: переводом, по СБП или
+            наличными при получении.
+          </p>
+        )}
+
         {/* ---------- Способы оплаты ---------- */}
         <section className="mb-12">
           <h2 className="font-display text-xl font-bold text-ink sm:text-2xl">Способы оплаты</h2>

@@ -57,7 +57,8 @@ function toNumber(value: number | string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export function OrderHistoryList({ orders }: { orders: AccountOrder[] }) {
+/** onlinePayment — есть ли онлайн-оплата; нет — вместо «Оплатить» подсказка, что оплату согласуем. */
+export function OrderHistoryList({ orders, onlinePayment }: { orders: AccountOrder[]; onlinePayment: boolean }) {
   if (orders.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 rounded-3xl border border-dashed border-lavender-200 px-6 py-16 text-center">
@@ -120,7 +121,11 @@ export function OrderHistoryList({ orders }: { orders: AccountOrder[] }) {
                 сначала надо довести до конца этот. Поэтому кнопки
                 взаимоисключающие, а не стоят рядом. */}
             {order.payment_status === "pending" && order.status !== "cancelled" ? (
-              <PayOrderButton orderId={order.id} />
+              onlinePayment ? (
+                <PayOrderButton orderId={order.id} />
+              ) : (
+                <p className="font-body text-xs text-ink/50">Оплату согласуем при подтверждении — позвоним или напишем в Telegram</p>
+              )
             ) : (
               /* Самая дешёвая продажа — повторная: тот же получатель, тот же
                  повод, тот же букет. Одно нажатие вместо трёх минут. */
