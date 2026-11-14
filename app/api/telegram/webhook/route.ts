@@ -1,4 +1,4 @@
-import { answerPanelQuery, isPanelChat, sendOwnerPanel, type WidgetQuery } from "@/lib/telegram/owner-panel";
+import { answerPanelQuery, handlePanelCallback, isPanelChat, sendOwnerPanel, type WidgetQuery } from "@/lib/telegram/owner-panel";
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import {
@@ -754,6 +754,12 @@ async function handleCallbackQuery(
 
   if (!chatId || !messageId) {
     await answerCallbackQuery(callbackQuery.id);
+    return;
+  }
+
+  // Кнопки панели владельца (пока Telegram не пускает к виджетам) — свой обработчик.
+  if (data.startsWith("panel:")) {
+    await handlePanelCallback({ id: callbackQuery.id, data, chatId, messageId });
     return;
   }
 

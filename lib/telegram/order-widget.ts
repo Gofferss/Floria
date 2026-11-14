@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { editMessageWidgetData, sendWidget } from "@/lib/telegram/bot";
 import { ORDER_WIDGET_HTML } from "@/lib/telegram/order-widget-html";
+import { noteWidgetFailure, widgetsLikelyAllowed } from "@/lib/telegram/widget-availability";
 
 // ================================================================
 // Живая карточка заказа у клиента в Telegram.
@@ -101,7 +102,7 @@ async function loadOrder(orderId: string): Promise<WidgetOrder | null> {
  * отправить не вышло — тогда вызывающий шлёт обычный текст.
  */
 export async function sendOrderWidget(orderId: string, chatId: number, caption: string): Promise<boolean> {
-  if (!ORDER_WIDGETS_ENABLED) return false;
+  if (!ORDER_WIDGETS_ENABLED || !widgetsLikelyAllowed()) return false;
   try {
     const order = await loadOrder(orderId);
     if (!order) return false;
@@ -114,6 +115,7 @@ export async function sendOrderWidget(orderId: string, chatId: number, caption: 
     if (error) console.error(`[order-widget] заказ ${order.order_number}: не записал, куда отправлена карточка:`, error.message);
     return true;
   } catch (error) {
+    noteWidgetFailure(error);
     console.error(`[order-widget] заказ ${orderId}: карточка не отправилась:`, error);
     return false;
   }

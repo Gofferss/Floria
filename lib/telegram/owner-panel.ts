@@ -1,8 +1,19 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { dayStart, studioDate } from "@/lib/uchet/order-queries";
 import { loadSummary, resolvePeriod, type SourceBlock, type Summary } from "@/lib/uchet/summary";
-import { answerWidgetQuery, pinChatMessage, sendWidget, unpinChatMessage } from "@/lib/telegram/bot";
+import {
+  answerCallbackQuery,
+  answerWidgetQuery,
+  editMessageText,
+  escapeTelegramHtml as esc,
+  pinChatMessage,
+  sendMessage,
+  sendWidget,
+  unpinChatMessage,
+  type InlineKeyboardMarkup,
+} from "@/lib/telegram/bot";
 import { OWNER_PANEL_HTML } from "@/lib/telegram/owner-panel-html";
+import { noteWidgetFailure, widgetsLikelyAllowed } from "@/lib/telegram/widget-availability";
 
 // ================================================================
 // Панель владельца в Telegram: «Сегодня / Заказы / Деньги».
@@ -104,16 +115,19 @@ async function today(): Promise<string> {
   });
 }
 
-async function orders(): Promise<string> {
+type OrderRow = [string, string, string, string, string, number];
+
+/** Ближайшие активные заказы: [когда, №, имя, этап, сумма, оплачен]. */
+async function orderRows(limit: number): Promise<{ rows: OrderRow[]; total: number }> {
   const { data, error } = await getSupabaseAdmin()
     .from("orders")
     .select("order_number, status, payment_status, delivery_date, delivery_time_from, customer_name, total_amount")
     .in("status", ACTIVE)
     .order("delivery_date", { ascending: true })
     .order("delivery_time_from", { ascending: true, nullsFirst: false })
-    .limit(40);
+    .limit(60);
   if (error) throw new Error(error.message);
-  const all = (data ?? []).map((o) => [
+  const all = (data ?? []).map((o): OrderRow => [
     `${dayLabel(o.delivery_date as string)}${o.delivery_time_from ? ` ${(o.delivery_time_from as string).slice(0, 5)}` : ""}`,
     `№…${(o.order_number as string).slice(-5)}`,
     ((o.customer_name as string | null) ?? "—").trim().split(/\s+/)[0].slice(0, 20),
@@ -121,9 +135,14 @@ async function orders(): Promise<string> {
     rub(Number(o.total_amount)),
     o.payment_status === "paid" ? 1 : 0,
   ]);
-  let shown = Math.min(all.length, 6);
+  return { rows: all.slice(0, limit), total: all.length };
+}
+
+async function orders(): Promise<string> {
+  const { rows, total } = await orderRows(6);
+  let shown = rows.length;
   return fit(
-    () => ({ t: "orders", at: now(), o: all.slice(0, shown), m: all.length - shown }),
+    () => ({ t: "orders", at: now(), o: rows.slice(0, shown), m: total - shown }),
     () => --shown > 0
   );
 }
@@ -178,32 +197,152 @@ async function money(): Promise<string> {
 const BUILD: Record<Tab, () => Promise<string>> = { today, orders, money };
 
 // ---------------------------------------------------------------
+// Панель сообщением с кнопками — пока Telegram не пускает бота к виджетам
+// (widget-availability.ts). Те же вкладки и данные; нажатие на кнопку
+// переписывает это же сообщение.
+// ---------------------------------------------------------------
+
+const TAB_LABEL: Record<Tab, string> = { today: "Сегодня", orders: "Заказы", money: "Деньги" };
+const TODAY_ICON = ["🆕", "🌸", "🚗", "❗️"];
+
+function keyboard(tab: Tab): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      TABS.map((t) => ({ text: t === tab ? `· ${TAB_LABEL[t]} ·` : TAB_LABEL[t], callback_data: `panel:${t}` })),
+      [{ text: "🔄 Обновить", callback_data: `panel:${tab}` }],
+    ],
+  };
+}
+
+function header(title: string, at: string | undefined): string {
+  return `<b>${esc(title)}</b>${at ? `  <i>на ${esc(at)}</i>` : ""}`;
+}
+
+function bar(percent: number): string {
+  const full = Math.max(0, Math.min(10, Math.round(percent / 10)));
+  return "▰".repeat(full) + "▱".repeat(10 - full);
+}
+
+type TodayData = { at: string; k: [string, number, number][]; l: string[] };
+type MoneyData = { at: string; r?: [string, string, string][]; th?: { p: number; a: string; f: string } | null; err?: string };
+
+function todayText(d: TodayData): string {
+  return [
+    header("Флория · сегодня", d.at),
+    "",
+    ...d.k.map(([label, n], i) => `${i === 3 && n === 0 ? "✅" : TODAY_ICON[i]} ${esc(label)}: <b>${n}</b>`),
+    "",
+    ...d.l.map(esc),
+  ].join("\n");
+}
+
+function ordersText(rows: OrderRow[], total: number): string {
+  if (!rows.length) return `${header("Ближайшие заказы", now())}\n\nАктивных заказов нет.`;
+  return [
+    header("Ближайшие заказы", now()),
+    "",
+    ...rows.map(
+      ([when, num, name, stage, sum, paid]) =>
+        `• <b>${esc(when)}</b> — ${esc(name)} · ${esc(stage)} · ${esc(sum)}${paid ? "" : " · <b>не оплачен</b>"} <i>${esc(num)}</i>`
+    ),
+    ...(total > rows.length ? ["", `и ещё ${total - rows.length}`] : []),
+  ].join("\n");
+}
+
+function moneyText(d: MoneyData): string {
+  if (!d.r) return `${header("Деньги", d.at)}\n\n⚠️ ${esc(d.err ?? "Нет данных")}`;
+  const lines = [header("Деньги", d.at), "", ...d.r.map(([label, value, note]) => `${esc(label)}: <b>${esc(value)}</b>${note ? ` · ${esc(note)}` : ""}`)];
+  if (d.th) lines.push("", `<b>Порог 20 млн:</b> ${esc(d.th.a)} (${d.th.p}%)`, bar(d.th.p), esc(d.th.f));
+  if (d.err) lines.push("", `⚠️ ${esc(d.err)}`);
+  return lines.join("\n");
+}
+
+async function panelText(tab: Tab): Promise<string> {
+  try {
+    if (tab === "orders") {
+      const { rows, total } = await orderRows(15);
+      return ordersText(rows, total);
+    }
+    const data = JSON.parse(await BUILD[tab]());
+    return tab === "today" ? todayText(data as TodayData) : moneyText(data as MoneyData);
+  } catch (e) {
+    console.error(`[owner-panel] вкладка ${tab}:`, e);
+    return `${header(TAB_LABEL[tab], now())}\n\n⚠️ Не удалось получить данные — нажмите «Обновить».`;
+  }
+}
+
+// ---------------------------------------------------------------
 // Отправка и ответы
 // ---------------------------------------------------------------
 
-/** Прислать панель в чат и закрепить; прежняя панель этого чата открепляется и перестаёт отвечать. */
-export async function sendOwnerPanel(chatId: number): Promise<{ messageId: number }> {
+/**
+ * Прислать панель в чат и закрепить; прежняя панель этого чата открепляется
+ * и перестаёт отвечать. Сначала пробуем живую карточку (виджет); Telegram не
+ * пустил — сообщение с кнопками.
+ */
+export async function sendOwnerPanel(chatId: number): Promise<{ messageId: number; kind: "widget" | "text" }> {
   const admin = getSupabaseAdmin();
   const { data: old } = await admin.from("bot_panels").select("message_id").eq("chat_id", chatId).maybeSingle();
-  const msg = await sendWidget({
-    chatId,
-    html: OWNER_PANEL_HTML,
-    chatData: await today(),
-    caption: "Панель студии: сегодня, заказы, деньги. Обновляется, когда открываете. Прислать заново — /panel",
-    disableNotification: true,
-    allowQueries: true,
-  });
+
+  let sent: { messageId: number; kind: "widget" | "text" } | null = null;
+  if (widgetsLikelyAllowed()) {
+    try {
+      const msg = await sendWidget({
+        chatId,
+        html: OWNER_PANEL_HTML,
+        chatData: await today(),
+        caption: "Панель студии: сегодня, заказы, деньги. Обновляется, когда открываете. Прислать заново — /panel",
+        disableNotification: true,
+        allowQueries: true,
+      });
+      sent = { messageId: msg.message_id, kind: "widget" };
+    } catch (e) {
+      noteWidgetFailure(e);
+      console.warn("[owner-panel] Telegram не принял виджет — присылаю сообщение с кнопками:", e);
+    }
+  }
+  if (!sent) {
+    const msg = await sendMessage(chatId, await panelText("today"), keyboard("today"));
+    sent = { messageId: msg.message_id, kind: "text" };
+  }
+
   const { error } = await admin
     .from("bot_panels")
-    .upsert({ chat_id: chatId, message_id: msg.message_id }, { onConflict: "chat_id" });
+    .upsert({ chat_id: chatId, message_id: sent.messageId }, { onConflict: "chat_id" });
   if (error) throw new Error(`панель отправлена, но не записана — отвечать ей не смогу: ${error.message}`);
   try {
-    await pinChatMessage(chatId, msg.message_id);
+    await pinChatMessage(chatId, sent.messageId);
     if (old?.message_id) await unpinChatMessage(chatId, Number(old.message_id));
   } catch (e) {
     console.error("[owner-panel] не закрепилась:", e);
   }
-  return { messageId: msg.message_id };
+  return sent;
+}
+
+/** Нажатие кнопки панели («panel:today» и т.п.). Только на записанной панели этого чата. */
+export async function handlePanelCallback(cb: { id: string; data: string; chatId: number; messageId: number }): Promise<void> {
+  const { data: panel, error } = await getSupabaseAdmin()
+    .from("bot_panels")
+    .select("message_id")
+    .eq("chat_id", cb.chatId)
+    .maybeSingle();
+  if (error) {
+    await answerCallbackQuery(cb.id, "Не удалось проверить доступ — нажмите ещё раз");
+    return;
+  }
+  if (!panel || Number(panel.message_id) !== cb.messageId) {
+    await answerCallbackQuery(cb.id, "Эта панель устарела — напишите /panel");
+    return;
+  }
+  const asked = cb.data.slice("panel:".length);
+  const tab: Tab = (TABS as string[]).includes(asked) ? (asked as Tab) : "today";
+  // Ответ на нажатие — сразу (иначе крутится часик), считаем после.
+  await answerCallbackQuery(cb.id, tab === "money" ? "Считаю…" : undefined);
+  try {
+    await editMessageText(cb.chatId, cb.messageId, await panelText(tab), keyboard(tab));
+  } catch (e) {
+    if (!/not modified/i.test(e instanceof Error ? e.message : String(e))) throw e;
+  }
 }
 
 /** Записан ли чат как чат владельца (для команды /panel). */
